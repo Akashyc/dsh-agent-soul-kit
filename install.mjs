@@ -14,7 +14,8 @@
 //   node install.mjs --update               更新到最新版
 //   node install.mjs --backup               打一个迁移用的备份包（放在本文件夹的 backups/）
 //   node install.mjs --restore [备份包]      在新电脑上：装好并放回备份里的数据（不写包名就用 backups/ 里最新的）
-//   node install.mjs --kit-iterate          对比上游，准备四流程迭代报告，交给 Agent 修正 kit
+//   node install.mjs --kit-update           检查并安全同步 kit 自身仓库；不能快进时输出合入材料
+//   node install.mjs --kit-iterate          先检查 kit 自身更新，再对比插件上游并准备四流程报告
 //   node install.mjs --kit-accept <报告目录>  校验 Agent 的完成记录，保存新的 kit 迭代基线
 //
 // 可选参数：
@@ -32,9 +33,13 @@
 //   --skip-part <目录名,…>       不装某个可选零件（例如 mcp-hub）；更新时用它拒掉的，以后也不再补
 //   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
 //   --heartbeat-time HH:MM       心跳时间（仅安装；默认按方案）
-//   --out <目录>                 备份或 kit 报告父目录，默认 backups/ 或 logs/kit-iterations/
+//   --out <目录>                 备份或 kit 报告父目录，默认 backups/、logs/kit-updates/ 或 logs/kit-iterations/
 //   --base-ref <提交>             kit 迭代的对比基线，默认上次完成迭代的提交或 VERIFIED
 //   --base-source <目录|.tar.gz>   kit 迭代的本地基线，和 --source 配合可离线检查
+//   --kit-repo <owner/repo>       kit 自身 GitHub 仓库，默认 Akashyc/dsh-agent-soul-kit
+//   --kit-ref <分支|标签|提交>    kit 自身目标，默认 main；不影响插件上游的 --ref
+//   --kit-source <Git 目录>      kit 自身的离线更新源，默认读取该目录 HEAD
+//   --skip-kit-update           本轮跳过 kit 自身检查；离线上游检查未给 --kit-source 时自动跳过
 //   --force                      新电脑上已经有灵魂数据时仍然恢复（原有的先整份备份）
 //
 // 原则：先备份再动手；重复跑安全；任何一步失败就停下。输出同时存进本文件夹的 logs/。
@@ -58,7 +63,7 @@ import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_A
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.4'
+const KIT_VERSION = '2.5'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -103,8 +108,9 @@ const RESTORE = flag('--restore')
 const RESTORE_FILE = opt('--restore')
 const KIT_ITERATE = flag('--kit-iterate')
 const KIT_ACCEPT = flag('--kit-accept')
+const KIT_UPDATE = flag('--kit-update')
 const FORCE = flag('--force')
-const MODE = KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : 'install'
+const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : 'install'
 let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
 const PROXY_OPT = opt('--proxy')
@@ -120,11 +126,11 @@ const SETUP_OPT = opt('--setup')
 const QUESTIONS_MODE = flag('--questions')
 const TTY = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flag('--no-input')
 let SKIP_PARTS = String(opt('--skip-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
-if ([UPDATE, BACKUP, RESTORE, KIT_ITERATE, KIT_ACCEPT].filter(Boolean).length > 1) {
-  console.log('--update、--backup、--restore、--kit-iterate、--kit-accept 一次只能用一个')
+if ([UPDATE, BACKUP, RESTORE, KIT_ITERATE, KIT_ACCEPT, KIT_UPDATE].filter(Boolean).length > 1) {
+  console.log('--update、--backup、--restore、--kit-iterate、--kit-accept、--kit-update 一次只能用一个')
   process.exit(2)
 }
-if ((KIT_ITERATE || KIT_ACCEPT) && QUESTIONS_MODE) {
+if ((KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) && QUESTIONS_MODE) {
   console.log('kit 迭代不能和 --questions 一起使用')
   process.exit(2)
 }
@@ -143,6 +149,25 @@ if (KIT_ITERATE) {
       process.exit(2)
     }
   }
+}
+for (const key of ['--kit-repo', '--kit-ref', '--kit-source', '--skip-kit-update']) {
+  if (flag(key) && !KIT_ITERATE && !KIT_UPDATE) {
+    console.log(`${key} 只用于 --kit-iterate 或 --kit-update`)
+    process.exit(2)
+  }
+  if (flag(key) && key !== '--skip-kit-update' && !opt(key)) {
+    console.log(`${key} 需要给出参数值`)
+    process.exit(2)
+  }
+}
+if ((KIT_UPDATE && (flag('--skip-kit-update') || flag('--source') || flag('--ref'))) ||
+    (flag('--skip-kit-update') && ['--kit-source', '--kit-repo', '--kit-ref'].some(flag))) {
+  console.log('kit 自身更新参数冲突：使用 --kit-source/--kit-ref，且不能同时要求跳过自身检查')
+  process.exit(2)
+}
+if (KIT_UPDATE && flag('--out') && !opt('--out')) {
+  console.log('--out 需要给出参数值')
+  process.exit(2)
 }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
@@ -164,7 +189,7 @@ const TMP_DIRS = []
 let LOG_FILE = null
 process.on('exit', () => {
   for (const d of TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }) } catch { /* 清不掉就算了 */ } }
-  if (QUESTIONS_MODE || KIT_ITERATE || KIT_ACCEPT) return // kit 模式自行保存报告，不写安装日志
+  if (QUESTIONS_MODE || KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) return // kit 模式自行保存报告，不写安装日志
   try {
     fs.mkdirSync(path.join(KIT, 'logs'), { recursive: true })
     LOG_FILE = path.join(KIT, 'logs', `${MODE}${DRY ? '-dry' : ''}-${TS}.log`)
@@ -1463,14 +1488,35 @@ function detectNode(o = {}) {
 }
 
 // kit 迭代只操作当前工具包与报告，在读取 DSH profile、检查宿主进程之前分流。
-if (KIT_ITERATE || KIT_ACCEPT) {
+if (KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) {
   try {
+    let kitUpdate = null
+    if (KIT_ITERATE || KIT_UPDATE) {
+      if (KIT_ITERATE && SOURCE && !opt('--base-source')) {
+        throw new Error('使用 --source 离线迭代时，请同时提供 --base-source，避免隐式联网获取基线')
+      }
+      const offline = Boolean(SOURCE || opt('--base-source')) && !opt('--kit-source')
+      if (flag('--skip-kit-update') || offline) {
+        kitUpdate = { status: 'skipped', reason: offline ? '离线上游检查未提供 --kit-source' : '显式使用 --skip-kit-update' }
+        console.log(`kit 自身检查已跳过：${kitUpdate.reason}；不代表本地 kit 已是最新。`)
+      } else {
+        const { updateKit } = await import('./lib/kit-update.mjs')
+        kitUpdate = updateKit({
+          kit: KIT, repo: opt('--kit-repo') || undefined, ref: opt('--kit-ref'), source: opt('--kit-source'),
+          dryRun: DRY, output: opt('--out'), proxy: resolveProxy()
+        })
+        console.log(kitUpdate.message)
+        if (KIT_UPDATE || !kitUpdate.ready) {
+          process.exit(0)
+        }
+      }
+    }
     const { prepareIteration, acceptIteration } = await import('./lib/kit-iterate.mjs')
     if (KIT_ITERATE) {
       const result = await prepareIteration({
         kit: KIT, repo: REPO, version: KIT_VERSION, verified: VERIFIED,
         ref: REF, source: SOURCE, baseRef: opt('--base-ref'), baseSource: opt('--base-source'),
-        output: opt('--out'), dryRun: DRY,
+        output: opt('--out'), dryRun: DRY, kitUpdate,
         contract: { requiredFiles: REQUIRED_SOURCE_FILES, partNames: PART_NAMES, optionalSource: OPTIONAL_SRC },
         helpers: { getSource, hashDir, diffMaps, patchList }
       })

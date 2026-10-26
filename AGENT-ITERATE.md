@@ -1,40 +1,71 @@
 # 给 Agent 的手册：kit 自我迭代
 
-用户要求“迭代 kit”时，按本手册完成：收集上游变化 → 分析安装、更新、备份、迁移四流程 → 修正 kit → 验证 → 登记完成基线。交付包括实际修正和验证结论，不能停在一份更新摘要。
+用户要求“迭代 kit”时，按本手册完成：检查并同步 kit 自身仓库 → 收集插件上游变化 → 分析安装、更新、备份、迁移四流程 → 修正 kit → 验证 → 登记完成基线。交付包括实际修正和验证结论，不能停在一份更新摘要。
 
 本流程维护当前工具包源码。`install.mjs --update` 维护的是已经安装到 DSH 的插件，两者分别执行。用户提出 kit 迭代已授权这条流程中的源码修改、报告和隔离验证，无须每个阶段重复请求确认；真实 DSH 安装、重启、覆盖用户数据以及 Git 提交/推送按用户另行给出的范围执行。
 
-## 1. 获取本次上游证据
+## 1. 先同步 kit 自身，再获取插件上游证据
 
 先检查 `git status --short --branch`，识别并保留用户已有修改，再读当前 `README.md`、`AGENT-INSTALL.md`、`install.mjs`。源码结构或上游契约变化时，优先以实际源码为依据。
 
-在 kit 根目录运行：
+两个仓库分别检查，不混用提交号和版本参数：
+
+| 来源 | 默认仓库 | 目标参数 | 作用 |
+|---|---|---|---|
+| kit 自身 | `Akashyc/dsh-agent-soul-kit` | `--kit-repo`、`--kit-ref`，默认 `main` | 获取工具包已有修正，按需要更新当前目录 |
+| 插件上游 | `cyanwell/dsh-agent-soul` | `--ref`，默认 `main` | 检查上游变化是否需要继续适配 kit 四流程 |
+
+在 kit 根目录运行（需要 Git）：
 
 ```bash
 node install.mjs --kit-iterate
 ```
 
-默认基线是 `kit-iteration.json` 中上次完成代码审查的提交；首次使用则取 `install.mjs` 的 `VERIFIED.sha`。目标默认是上游 `main`，报告同时记录下载得到的完整提交号，后续验证使用该提交或报告的快照，避免分析过程中目标漂移。
+命令先在临时目录读取 kit 自身仓库并固定目标提交，再根据实际状态处理：
+
+- 本地已包含目标提交：保留本地额外提交和修改，继续生成插件上游报告。
+- 同源、位于目标发布分支、工作区干净且可以快进：保存新版快照和差异清单后快进更新。**旧进程到此结束；Agent 必须重新读取更新后的 `AGENT-ITERATE.md`，再运行一次 `--kit-iterate` 完成后续流程。** 不要把这次退出当成本轮迭代已经完成。
+- 有本地修改、未跟踪文件、历史分叉、不同 origin、非目标分支或没有 `.git` 的下载版：保留本地源码，在 `logs/kit-updates/`（或 `--out`）生成 `report.json`、`report.md` 和 `target/` 新版快照。Agent 对照实际差异，合入需要的功能与修正、保留本地方案并验证，不要求用户先清空工作区。
+
+需要合入时，结合本地 Git 历史和报告的固定提交判断每项修改；不要整目录覆盖，不执行 `reset --hard`、自动 stash、自动提交或推送。不把本地独有文件仅因新版不存在就删除。已有 `kit-iteration.json` 包含本轮之外的历史时保留其证据，不能用远端同名文件直接覆盖本地审查记录。若存在无法判断取舍的实际业务冲突，再向用户说明具体冲突。
+
+手工合入并验证后，尚未提交的目录或下载版不能凭 Git 提交关系证明已同步。记录已审查的 kit 仓库、固定提交、合入/不适用理由、实际验证及证据目录；本轮用 `--skip-kit-update` 继续插件上游分析，并把这些证据写入 `result.json` 的 `summary` 和 `checks`。这个参数仅跳过重复检查，不能用于隐瞒未完成的 kit 更新。
+
+kit 自身检查或下载失败会明确失败，不按“已经最新”继续。干跑只在临时目录读取，不修改本地 kit、Git 元数据或生成报告；查到需要同步时先返回自身更新计划，真正同步后再检查插件上游。kit 快进与上游审查基线登记是两件事，`--kit-accept` 不会自动同步 kit。
+
+插件上游默认基线是 `kit-iteration.json` 中上次完成代码审查的提交；首次使用则取 `install.mjs` 的 `VERIFIED.sha`。报告记录下载得到的完整提交号，后续验证使用该提交或报告的快照，避免分析过程中目标漂移。
 
 常用选项：
 
 ```bash
-# 指定对比范围
+# 只检查并同步 kit 自身，不检查插件上游
+node install.mjs --kit-update
+
+# 指定 kit 发布源（例如自己的 fork）；与插件上游参数独立
+node install.mjs --kit-iterate --kit-repo <owner/repo> --kit-ref <发布分支>
+
+# 指定插件上游对比范围
 node install.mjs --kit-iterate --base-ref <基线提交> --ref <目标提交>
 
-# 离线：两边都提供源码目录或 tar.gz
+# 离线：插件上游两边都提供源码；默认跳过 kit 联网检查并如实记录
 node install.mjs --kit-iterate --base-source <旧源码> --source <新源码>
+
+# 同时离线检查 kit：其来源必须是干净的 Git 仓库，默认取 HEAD
+node install.mjs --kit-iterate --kit-source <kit仓库目录> --base-source <旧源码> --source <新源码>
+
+# 本轮已人工合入并验证 kit 后，跳过重复检查继续生成上游报告
+node install.mjs --kit-iterate --skip-kit-update
 
 # 只看初步检查结果，不保存报告和完成基线
 node install.mjs --kit-iterate --dry-run
 ```
 
-`--proxy` 沿用安装器的下载设置；`--out <目录>` 指定报告父目录，每次创建独立子目录。默认输出到 `logs/kit-iterations/`，包含：
+`--proxy` 沿用安装器的下载设置，也用于 kit 的 Git HTTPS 请求；`--out <目录>` 指定报告父目录，每次创建独立子目录。插件上游报告默认输出到 `logs/kit-iterations/`，包含：
 
 | 文件 | 用途 |
 |---|---|
 | `report.md` | 四流程检查方向、契约提示、全部变化文件和上游比较链接 |
-| `report.json` | 基线/目标身份、源码指纹、文件变化及待处理项 |
+| `report.json` | kit 自身检查状态，以及插件上游基线/目标身份、源码指纹、文件变化及待处理项 |
 | `base/`、`target/` | 保留下来的两份源码，安装器退出后仍可读取 |
 | `upstream.diff` | Git 可用时生成的完整差异；不可用时按两份快照逐文件对照 |
 | `result.json` | Agent 填写的四流程结论、修正情况、检查证据和未验证范围 |
@@ -73,11 +104,12 @@ node install.mjs --kit-iterate --dry-run
 ```bash
 node --check install.mjs
 node --check lib/kit-iterate.mjs
+node --check lib/kit-update.mjs
 node --test tests/*.test.mjs
 git diff --check
 ```
 
-`tests/kit-iterate.test.mjs` 验证的是迭代入口、报告与完成登记协议；它本身不证明四个生产流程已经正常。行为修改应建立临时 profile 和数据，在隔离目录里补充对应验证：
+`tests/kit-update.test.mjs` 使用临时 Git 仓库验证自身更新、干跑、本地改动保护及入口分流；`tests/kit-iterate.test.mjs` 验证迭代报告与完成登记协议。它们不证明四个生产流程已经正常。行为修改应建立临时 profile 和数据，在隔离目录里补充对应验证：
 
 | 流程 | 验证内容 |
 |---|---|
@@ -123,4 +155,4 @@ node install.mjs --kit-accept <本次报告目录>
 
 成功后，根目录 `kit-iteration.json` 保存新基线及历次完成证据，下轮从该基线继续对比。该记录应与本轮 kit 修改一起交付。失败或中断时保留报告和当前修改，继续补齐，不推进基线。
 
-`VERIFIED` 仍表示最后经过端到端验证的上游版本；代码审查完成不能自动更新它。只有具备对应完整验收证据时才修改。交付时说明上游范围、四流程各自结论、改了哪些文件、验证结果和剩余限制。
+`VERIFIED` 仍表示最后经过端到端验证的上游版本；代码审查完成不能自动更新它。只有具备对应完整验收证据时才修改。交付时分别说明 kit 自身仓库的检查/同步结果、插件上游范围、四流程各自结论、改了哪些文件、验证结果和剩余限制；自身检查被跳过时明确写出，不能声称两个来源都已最新。
