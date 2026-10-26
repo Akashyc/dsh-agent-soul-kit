@@ -10,7 +10,7 @@
 - 作者在 GitHub 上更新后升级；
 - 把 agent 连同账本、对话一起搬到另一台电脑；
 - 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定。
-- 迭代 kit 自身：检查上游变化，分析并修正安装、更新、备份、迁移四个流程。
+- 迭代 kit 自身：先检查并同步 kit GitHub 仓库的更新，再检查插件上游变化，分析并修正安装、更新、备份、迁移四个流程。
 
 插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。
 
@@ -78,10 +78,12 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 **迭代 kit 自身**：
 
 ```text
-请读 AGENT-ITERATE.md，检查上游作者仓库相对上次 kit 迭代基线的变化，逐项分析安装、更新、备份、迁移四个流程，完成需要的 kit 修正和验证，再登记本轮迭代结果。告诉我完成了什么、还有什么未验证。
+请读 AGENT-ITERATE.md，先检查 kit 自身 GitHub 仓库的更新，有必要则拉取并合入本地 kit，保留本地修改和方案；再检查插件上游作者仓库相对上次 kit 迭代基线的变化，逐项分析安装、更新、备份、迁移四个流程，完成需要的 kit 修正和验证，再登记本轮迭代结果。分别告诉我两个仓库的检查结果、完成了什么、还有什么未验证。
 ```
 
-这条流程由 Agent 完成代码分析、修改和验证。`node install.mjs --kit-iterate` 负责准备上游差异、源码快照与四流程报告；Agent 完成后用 `--kit-accept <报告目录>` 登记新基线。仅生成报告不会标记为完成，也不会更新本机已安装的插件。
+这条流程由 Agent 完成代码分析、修改和验证。`node install.mjs --kit-iterate` 先检查 `Akashyc/dsh-agent-soul-kit`：本地干净且可快进时更新；有本地修改、分叉或使用下载版时，保存新版快照与差异，由 Agent 合入。同步后 Agent 重新读取新版手册、重跑入口，再比较插件上游 `cyanwell/dsh-agent-soul` 并准备四流程报告。完成后用 `--kit-accept <报告目录>` 登记插件上游审查基线。仅生成报告或同步 kit 不会标记四流程迭代完成，也不会更新本机已安装的插件。
+
+自身检查需要 Git。`--kit-update` 可单独检查并同步 kit；`--kit-repo`、`--kit-ref` 指定 kit 发布源，和插件上游的 `--ref` 独立。`--dry-run` 只检查，发现 kit 更新时先返回更新计划。离线提供 `--base-source`、`--source` 时默认跳过 kit 联网检查；可用 `--kit-source <干净的Git目录>` 同时离线检查 kit。已人工合入并验证后可用 `--skip-kit-update` 继续本轮；跳过会写进报告，不代表 kit 已最新。
 
 常用命令（都可以加 `--dry-run` 先看会改什么）：
 
@@ -90,7 +92,8 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 "$NODE" install.mjs --update             # 更新（先 Cmd+Q 退出 DSH）
 "$NODE" install.mjs --backup             # 打迁移用的备份包，放在 backups/
 "$NODE" install.mjs --restore            # 在新电脑上：装好并放回 backups/ 里最新的备份
-node install.mjs --kit-iterate           # 收集 kit 迭代证据，接着交给 Agent 完成修正
+node install.mjs --kit-update            # 单独检查并同步 kit 自身仓库
+node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游证据，由 Agent 完成修正
 ```
 
 ## 装出来是什么
@@ -108,9 +111,10 @@ node install.mjs --kit-iterate           # 收集 kit 迭代证据，接着交�
 | 文件 | 用途 |
 |---|---|
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
-| `AGENT-ITERATE.md` | 给 Agent 的 kit 自我迭代流程：上游对比、四流程分析、修正、验证、完成登记 |
+| `AGENT-ITERATE.md` | 给 Agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
 | `install.mjs` | 安装 / 更新 / 备份 / 恢复脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
+| `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
 | `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |

@@ -107,6 +107,8 @@ test('离线报告保留完整增删改证据，覆盖四流程且不操作 DSH'
   assert.equal(fs.readFileSync(path.join(directory, 'target/kit/echo/new-store.mjs'), 'utf8'), 'new')
   assert.equal(fs.existsSync(f.dsh), false)
   assert.equal(fs.existsSync(path.join(f.kit, 'kit-iteration.json')), false)
+  assert.equal(report.kitUpdate.status, 'skipped')
+  assert.match(report.kitUpdate.reason, /离线上游检查/)
 })
 
 test('新零件、未知包名、包契约变化、失效补丁和缺失文件都进入报告', (t) => {

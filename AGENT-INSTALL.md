@@ -5,7 +5,7 @@
 > 安装包只带方案、模板和脚本，插件本体由 `install.mjs` 从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**。作者还在持续更新，所以不锁死版本。
 > 适用：macOS、Windows；DSH 桌面版（DSH NEXT），profile 名为 `desktop`。
 
-> 用户要求检查上游变化并修正 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。该流程通过 `--kit-iterate` 准备证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
+> 用户要求更新或迭代 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。`--kit-update` 单独检查并同步 kit 的 GitHub 仓库；`--kit-iterate` 先处理 kit 自身更新，再准备插件上游证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
 
 ## 一、规矩（动手前先读）
 
