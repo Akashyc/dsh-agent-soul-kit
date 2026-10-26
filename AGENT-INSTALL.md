@@ -21,9 +21,9 @@
 |---|---|
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板，包名 dsh-yanqing-echo）。按上游零件清单标 ✓ 的定，不能跳过 |
-| 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板，包名 dsh-yanqing-huanqi-panel，要和 huanqi 一起装）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）。装哪些按方案；大肥鱼方案全装 |
+| 可选零件 | Ⅰ/Ⅱ 层：mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板，包名 dsh-yanqing-huanqi-panel，要和 huanqi 一起装）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门）。装哪些按方案；大肥鱼方案装前五个，后五个默认不勾 |
 | Soul preset | 「PTC · Soul 模式」（官方 PTC 原样，只换压缩和裁剪）和「PTC · Soul · Flash 模式」（更省 token 的精简版），生成哪几个、默认用哪个按方案。大肥鱼方案两个都生成，默认 Flash |
-| 刻意不装 | model-statusbar、yantai、mobile-adapt、splash、riji。上游以后新增的零件，脚本只列出来，不会自动装 |
+| 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
 | 自我层 | `memory/hub/SELF.src.md`：agent 的身份、硬线、说话方式、门 |
@@ -114,7 +114,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
    - **硬线**：从五条内置硬线里勾（把每条的规则念给用户听），再问要不要自己加；
    - **人设**：不设 / 写几句说话风格 / 再附一份完整人设文件；
    - **运行**：多会话、上下文窗口、生成哪几个 Soul preset、默认用哪个、心跳开不开、几点；
-   - **零件**：必装的四个直接告诉用户；可选的五个逐个问，每个都把「装了有什么、不装会怎样」说清楚；
+   - **零件**：必装的四个直接告诉用户；可选的十个逐个问（分一组两次也行），每个都把「装了有什么、不装会怎样」说清楚。后五个是面板件，默认值是不勾；model-statusbar 要先确认用户本机有没有本地模型服务，riji / yantai 的数据源（日记目录、账本、memq）由安装流程自己接好；
    - **保存**：方案名（默认和 agent 名字一样）。
 3. 把回答写成一个 JSON 文件（建议放在 `logs/answers-<名字>.json`），键名就是题目的 `id`。用户没表态的题可以不写，脚本按默认值处理。完整人设文件写它的路径（`personaFile`），脚本会原样拷进方案和书房。
 
@@ -140,7 +140,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 | 2 | 下载并检查上游源码（缺文件、零件改成不认识的名字就停）；按方案生成 Soul preset 并校验 | 源码不对就停 |
 | 3 | 备份 `package.json`、`cordis.patch.yml` 为 `*.bak-<时间>-pre-soul-kit` | 出问题能还原 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频） | 桌面版只能这样装 |
-| 5 | 本机补丁：mnemon-probe 的默认路径改成真实的热记忆目录；clock 面板的定位；mcp-hub 找清单的默认目录；echo、huanqi-panel 的 `cordis.patch.yml` 里加载名改成和包名一致（没装的零件跳过） | 见第十一节 3、4、16、17 |
+| 5 | 本机补丁：mnemon-probe 的默认路径改成真实的热记忆目录；clock 面板的定位；mcp-hub 找清单的默认目录；yantai 的账本 / 记忆中枢路径、riji 的日记目录（都要指向本机书房，桌面端不传环境变量）；echo、huanqi-panel 的 `cordis.patch.yml` 里加载名改成和包名一致（没装的零件跳过） | 见第十一节 3、4、16、17、22 |
 | 6 | 生成 `node_modules/dsh-soul-preset`：从本机 DSH 自带的官方 PTC、和 Flash 精简·PTC v3 派生方案里要的 Soul 版，只把 `compaction-basic`、`tool-result-pruner` 的实现换成我们的两个零件 | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath`、`statePath`、`maxBytes: 12288`；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`）；已有就不动 | 记忆检索走常驻服务 |

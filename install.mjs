@@ -33,7 +33,8 @@
 // 原则：先备份再动手；重复跑安全；任何一步失败就停下。输出同时存进本文件夹的 logs/。
 // 更新只换代码，不碰书房、账本、SELF.src.md、权威源册、人设、主配置和心跳。
 // 备份只带 dsh-agent-soul 自己的东西：书房、记忆中枢、会话原文、换气账本、本架构插件的设置；不带 dsh-mnemon 等别的插件。
-// 必装零件：compaction、pruner、memory、echo；可选：mnemon-probe（要有 dsh-mnemon）、clock、huanqi、huanqi-panel（要有 huanqi）、mcp-hub。
+// 必装零件：compaction、pruner、memory、echo；可选：mnemon-probe（要有 dsh-mnemon）、clock、huanqi、huanqi-panel（要有 huanqi）、mcp-hub、model-statusbar（要有本地模型服务）、mobile-adapt、riji、splash、yantai。
+// 后 5 个是面板件：能装、默认不勾；数据源没配时它们会空着（第四种坏法），所以装完要说清楚。
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -49,20 +50,22 @@ import { createInterface } from 'node:readline/promises'
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.2'
+const KIT_VERSION = '2.3'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
 // 零件：上游 plugins/ 下的目录名，顺序就是装配顺序
-const PARTS = ['compaction', 'pruner', 'memory', 'mnemon-probe', 'echo', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub']
+const PARTS = ['compaction', 'pruner', 'memory', 'mnemon-probe', 'echo', 'clock', 'model-statusbar', 'huanqi', 'huanqi-panel', 'mobile-adapt', 'mcp-hub', 'riji', 'splash', 'yantai']
 // 每个零件认得的包名：第一个是现在的，后面是上游用过的旧名（更新时自动迁移）
 const PART_NAMES = {
   compaction: ['dsh-agent-compaction'], pruner: ['dsh-agent-pruner'], memory: ['dsh-agent-memory'], 'mnemon-probe': ['dsh-agent-mnemon-probe'],
   echo: ['dsh-yanqing-echo', 'dsh-agent-echo'], clock: ['dsh-agent-clock'], huanqi: ['dsh-huanqi'],
   'huanqi-panel': ['dsh-yanqing-huanqi-panel', 'dsh-agent-huanqi-panel'], 'mcp-hub': ['dsh-mcp-hub'],
+  'model-statusbar': ['dsh-agent-model-statusbar'], 'mobile-adapt': ['dsh-agent-mobile-adapt'],
+  riji: ['dsh-agent-riji'], splash: ['dsh-agent-splash'], yantai: ['dsh-agent-yantai'],
 }
 // 安装包后来才加的零件：更新时本机没有也会补装（不想要就加 --skip-part <目录名>）
-const ADDED_PARTS = { 'mcp-hub': '2.1' }
+const ADDED_PARTS = { 'mcp-hub': '2.1', 'model-statusbar': '2.3', 'mobile-adapt': '2.3', riji: '2.3', splash: '2.3', yantai: '2.3' }
 // 上游旧版本里还没有的零件（用 --ref 装旧版时不算错）
 const OPTIONAL_SRC = ['mcp-hub']
 // 中枢同步时不碰的：安装器自己、带写死日志名的测试脚本
@@ -483,6 +486,24 @@ function patchList(runtime, names, dshHome) {
       new: `return process.env.DSH_HOME || ${JSON.stringify(posix(dshHome))} // 本机改：DSH 家目录不一定在环境变量里，默认值指向本机`,
       any: /return process\.env\.DSH_HOME \|\| [^\n]*本机改[^\n]*/,
     },
+    {
+      key: 'yantai-soul', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 账本 / 书房路径', needed: true,
+      old: "const SOUL = ENV('YANTAI_SOUL')",
+      new: "const SOUL = ENV('YANTAI_SOUL') || " + JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'soul'))) + " // 本机改：DSH 不传环境变量，默认指向本机书房",
+      any: /const SOUL = ENV\('YANTAI_SOUL'\) \|\| [^\n]*本机改[^\n]*/,
+    },
+    {
+      key: 'yantai-memory', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 记忆中枢路径', needed: true,
+      old: "const MEMORY_DIR = ENV('YANTAI_MEMORY')",
+      new: "const MEMORY_DIR = ENV('YANTAI_MEMORY') || " + JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'memory'))) + " // 本机改：指向本机记忆中枢（memq 在它下面）",
+      any: /const MEMORY_DIR = ENV\('YANTAI_MEMORY'\) \|\| [^\n]*本机改[^\n]*/,
+    },
+    {
+      key: 'riji-diary', pkg: 'dsh-agent-riji', file: 'index.js', label: 'riji 日记目录', needed: true,
+      old: "DSH_HOME ? join(DSH_HOME, 'diary') : '',",
+      new: JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'soul', '50-日记'))) + ",  // 本机改：日记目录跟着书房走",
+      any: /50-日记[^\n]*本机改[^\n]*/,
+    },
   ]
   for (const part of ['echo', 'huanqi-panel']) {
     const pkg = names[part]
@@ -768,7 +789,9 @@ function planCordis(text, { hub, defaultPreset }) {
 const SETUPS = path.join(KIT, 'setups')
 const TPL = path.join(ASSETS, 'templates')
 const REQUIRED_PARTS = ['compaction', 'pruner', 'memory', 'echo']
-const OPTIONAL_PARTS = ['mnemon-probe', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub']
+const OPTIONAL_PARTS = ['mnemon-probe', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub', 'model-statusbar', 'mobile-adapt', 'riji', 'splash', 'yantai']
+// 默认勾选的还是原来那 5 个；新加的 5 个面板件默认不勾（没配数据源就是空面板）
+const DEFAULT_PARTS = ['mnemon-probe', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub']
 const PART_INFO = {
   compaction: { what: '压缩摘要带门牌，压掉的内容能按门牌取回原文' },
   pruner: { what: '被裁掉的工具输出标出原文在哪' },
@@ -779,6 +802,11 @@ const PART_INFO = {
   huanqi: { what: '换气：思考陷入循环、一轮只想不说时自动打断并清理', without: '偶尔会有一轮把预算全烧在思考里，什么都没输出' },
   'huanqi-panel': { what: '换气面板：看触发次数、误伤记录，改参数', without: '换气照常工作，只是看不到它做了什么', needs: 'huanqi' },
   'mcp-hub': { what: 'MCP 服务总入口，接上常驻的记忆检索', without: '记忆检索走命令行，慢一个数量级（约 650 毫秒对 46 毫秒）' },
+  'model-statusbar': { what: '本地模型服务的状态条：进程 / 接口 / 显存 / 空闲静息', without: '不知道模型服务还占不占显存，等想干别的活才发现腾不出来', needsService: '本地模型服务（ComfyUI 一类，默认 127.0.0.1:8188）' },
+  'mobile-adapt': { what: '手机竖屏适配：同一个地址在手机上收成 App 形态', without: '手机上界面挤成一团、按钮点不到；PC 端不受影响' },
+  riji: { what: '日记入口：顶栏一格，直接列一手 markdown 原文', without: '日记写得再好也没人看得见，只能自己开编辑器翻' },
+  splash: { what: '启动一屏：换动画、淡入淡出、选择显示项', without: '每次启动都是默认画面' },
+  yantai: { what: '工作台面板：上下文水位、未结的活、最近账本、几扇门', without: '状态散在四个地方，想先看一眼的成本高到不会做' },
 }
 const PRESET_LABEL = { 'ptc-soul': 'PTC · Soul 模式', 'ptc-soul-flash': 'PTC · Soul · Flash 模式' }
 const PRESET_INFO = { 'ptc-soul': '官方 PTC + 带门牌的压缩和裁剪，上下文到 80% 才压', 'ptc-soul-flash': '更省 token：精简行事规则，上下文到 25% 就压，只留最近约 2 万 token 原文' }
@@ -814,7 +842,7 @@ const QUESTIONS = [
   { id: 'defaultPreset', group: '运行', type: 'choice', ask: '新会话默认用哪个？', hint: '只能从上一题选中的里挑。', optionsFrom: 'presets', default: 'ptc-soul-flash' },
   { id: 'heartbeat', group: '运行', type: 'bool', ask: '要不要每天定时自检（心跳）？', hint: '每天一次：重建索引、刷新自我层、跑体检。', default: true },
   { id: 'heartbeatTime', group: '运行', type: 'time', askIf: 'heartbeat 为 true', ask: '心跳每天几点跑？（HH:MM）', default: '12:00' },
-  { id: 'parts', group: '零件', type: 'multi', ask: `可选零件装哪些？（必装的 ${REQUIRED_PARTS.join('、')} 不用选）`, hint: 'mnemon-probe 只有装了 dsh-mnemon 才能选；huanqi-panel 要和 huanqi 一起装。', options: OPTIONAL_PARTS.map((p) => ({ value: p, desc: `${PART_INFO[p].what}；不装：${PART_INFO[p].without}` })), default: OPTIONAL_PARTS, defaultNote: '没装 dsh-mnemon 时默认不含 mnemon-probe' },
+  { id: 'parts', group: '零件', type: 'multi', ask: `可选零件装哪些？（必装的 ${REQUIRED_PARTS.join('、')} 不用选）`, hint: 'mnemon-probe 只有装了 dsh-mnemon 才能选；huanqi-panel 要和 huanqi 一起装。新加的 5 个（model-statusbar、mobile-adapt、riji、splash、yantai）是面板件，默认不勾；model-statusbar 要有本机模型服务才有读数。', options: OPTIONAL_PARTS.map((p) => ({ value: p, desc: `${PART_INFO[p].what}；不装：${PART_INFO[p].without}` })), default: DEFAULT_PARTS, defaultNote: '新加的 5 个面板件默认不勾；没装 dsh-mnemon 时默认不含 mnemon-probe' },
   { id: 'setupName', group: '保存', type: 'text', ask: '这套设定存成方案叫什么？', hint: '存到安装包的 setups/<方案名>/，别的电脑用 --setup <方案名> 直接装，不用再填。', default: '和 agent 名字一样' },
 ]
 const CN_NUM = ['零', '一', '两', '三', '四', '五', '六', '七', '八', '九', '十']
@@ -881,7 +909,7 @@ function normalizeAnswers(raw, ctx) {
   const ht = str('heartbeatTime') || '12:00'
   if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(ht)) e.push(`heartbeatTime：要是 HH:MM，现在是 ${ht}`)
   s.heartbeat = { enabled: hb !== false, time: ht.padStart(5, '0') }
-  const defParts = OPTIONAL_PARTS.filter((p) => !PART_INFO[p].needsMnemon || ctx.mnemon)
+  const defParts = DEFAULT_PARTS.filter((p) => !PART_INFO[p].needsMnemon || ctx.mnemon)
   const parts = raw.parts === undefined ? defParts : listOf(raw.parts).filter((p) => !REQUIRED_PARTS.includes(p))
   for (const p of parts) if (!OPTIONAL_PARTS.includes(p)) e.push(`parts：不认识零件 ${p}（可选：${OPTIONAL_PARTS.join('、')}）`)
   if (parts.includes('mnemon-probe') && !ctx.mnemon) e.push('parts：这台电脑没装 dsh-mnemon，mnemon-probe 装了也没东西可测；先在插件市场装 dsh-mnemon，或者不选它')
@@ -1368,7 +1396,7 @@ ok(`上游源码：${SRC.from}`)
 const srcVer = (readJson(path.join(SRC.dir, 'package.json')) || {}).version
 ok(`版本：提交 ${short(SRC.sha)}${srcVer ? `（v${srcVer}）` : ''}${SRC.sha === VERIFIED.sha ? '，就是安装包验证过的版本' : `，安装包验证过的是 ${VERIFIED.sha.slice(0, 7)}（${VERIFIED.date}）`}`)
 const src = checkSource(SRC.dir)
-if (src.extra.length) info(`上游另有零件 ${src.extra.join('、')}：这份安装包不装`)
+if (src.extra.length) warn(`上游又有安装包不认识的零件：${src.extra.join('、')}。这份安装包该更新了；想先稳住就加 --ref ${VERIFIED.sha.slice(0, 7)} 装验证过的版本`)
 if (src.absent.length) info(`这个版本的上游还没有 ${src.absent.join('、')}，跳过`)
 if (SKIP_PARTS.length) info(`${UPDATE ? '按之前的选择不装' : '这次不装'}的零件：${SKIP_PARTS.join('、')}`)
 // AP：这次要处理的零件（目录名）；PKGS：它们现在的包名；INST：本机已装的目录名（可能是旧名）
@@ -1690,7 +1718,7 @@ let finalDefault = null
     const stale = RENAMES.filter((r) => new RegExp(`name: ['"]?${reEsc(r.from)}['"]?`).test(cfgText))
     if (stale.length) warn(`cordis.patch.yml 里还有用旧包名加载的条目（${stale.map((r) => r.from).join('、')}），没动它；请核对`)
   }
-  const c = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET })
+  const c = planCordis(exists(cfgPath) ? readText(cfgPath) : '', { hub: HUB, defaultPreset: DEFAULT_PRESET })
   for (const n of c.notes) ok(n)
   if (c.memoryNote) warn(c.memoryNote)
   if (c.changed) write(cfgPath, c.text, 'cordis.patch.yml')

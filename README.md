@@ -29,7 +29,14 @@
   - clock；
   - huanqi；
   - huanqi-panel：要和 huanqi 一起装；
-  - mcp-hub。
+  - mcp-hub；
+  - model-statusbar：要有本地模型服务（ComfyUI 一类）才有读数；
+  - mobile-adapt：手机竖屏适配；
+  - riji：日记入口，读的是本机日记目录；
+  - splash：启动一屏；
+  - yantai：工作台面板（水位 / 未结 / 账本 / 门）。
+
+  后五个是面板件，默认不勾：装完没有数据源就是空面板，想用再选。
 
 ## 怎么用
 
