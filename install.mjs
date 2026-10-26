@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// dsh-agent-soul 安装包：安装 / 更新 / 备份迁移
+// dsh-agent-soul 安装包：安装 / 更新 / 备份迁移 / 卸载
 //
 // 默认从 GitHub 拉 cyanwell/dsh-agent-soul 的最新版（main）。装成什么样的 agent 由「方案」决定：
 // 用现成方案（setups/ 下的，例如 大肥鱼），或者全新安装（按引导填设定，填完存成新方案再装）。
@@ -14,6 +14,7 @@
 //   node install.mjs --update               更新到最新版
 //   node install.mjs --backup               打一个迁移用的备份包（放在本文件夹的 backups/）
 //   node install.mjs --restore [备份包]      在新电脑上：装好并放回备份里的数据（不写包名就用 backups/ 里最新的）
+//   node install.mjs --uninstall --dry-run  卸载：先用 kit 打备份包，再卸掉本体、零件、Soul preset、配置和书房
 //   node install.mjs --kit-update           检查并安全同步 kit 自身仓库；不能快进时输出合入材料
 //   node install.mjs --kit-iterate          先检查 kit 自身更新，再对比插件上游并准备四流程报告
 //   node install.mjs --kit-accept <报告目录>  校验 Agent 的完成记录，保存新的 kit 迭代基线
@@ -41,6 +42,9 @@
 //   --kit-source <Git 目录>      kit 自身的离线更新源，默认读取该目录 HEAD
 //   --skip-kit-update           本轮跳过 kit 自身检查；离线上游检查未给 --kit-source 时自动跳过
 //   --force                      新电脑上已经有灵魂数据时仍然恢复（原有的先整份备份）
+//   --old-sessions <shell|rewrite|keep>  卸载时怎么处理用 Soul preset 建的旧会话：shell 留空壳 preset（id 不变、换回官方压缩）、
+//                                rewrite 把会话开头的 preset 改成对应的官方 preset、keep 不管（旧会话可能打不开）；终端里不给就问
+//   --keep-data                  卸载时保留书房和记忆中枢（DSH 家目录下的 dsh-soul/）；默认一起删，备份包里有
 //
 // 原则：先备份再动手；重复跑安全；任何一步失败就停下。输出同时存进本文件夹的 logs/。
 // 更新只换代码，不碰书房、账本、SELF.src.md、权威源册、人设、主配置和心跳。
@@ -61,12 +65,13 @@ import { createInterface } from 'node:readline/promises'
 import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
 import { personaRulesMissing, dedupeLines } from './lib/persona.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle } from './lib/soul-presets.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle } from './lib/soul-presets.mjs'
+import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.6'
+const KIT_VERSION = '2.7'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -107,11 +112,14 @@ const UPDATE = flag('--update')
 const BACKUP = flag('--backup')
 const RESTORE = flag('--restore')
 const RESTORE_FILE = opt('--restore')
+const UNINSTALL = flag('--uninstall')
+const OLD_SESSIONS = opt('--old-sessions')
+const KEEP_DATA = flag('--keep-data')
 const KIT_ITERATE = flag('--kit-iterate')
 const KIT_ACCEPT = flag('--kit-accept')
 const KIT_UPDATE = flag('--kit-update')
 const FORCE = flag('--force')
-const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : 'install'
+const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : UNINSTALL ? 'uninstall' : 'install'
 let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
 const PROXY_OPT = opt('--proxy')
@@ -127,8 +135,8 @@ const SETUP_OPT = opt('--setup')
 const QUESTIONS_MODE = flag('--questions')
 const TTY = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flag('--no-input')
 let SKIP_PARTS = String(opt('--skip-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
-if ([UPDATE, BACKUP, RESTORE, KIT_ITERATE, KIT_ACCEPT, KIT_UPDATE].filter(Boolean).length > 1) {
-  console.log('--update、--backup、--restore、--kit-iterate、--kit-accept、--kit-update 一次只能用一个')
+if ([UPDATE, BACKUP, RESTORE, UNINSTALL, KIT_ITERATE, KIT_ACCEPT, KIT_UPDATE].filter(Boolean).length > 1) {
+  console.log('--update、--backup、--restore、--uninstall、--kit-iterate、--kit-accept、--kit-update 一次只能用一个')
   process.exit(2)
 }
 if ((KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) && QUESTIONS_MODE) {
@@ -170,9 +178,11 @@ if (KIT_UPDATE && flag('--out') && !opt('--out')) {
   console.log('--out 需要给出参数值')
   process.exit(2)
 }
+if ((flag('--old-sessions') || KEEP_DATA) && !UNINSTALL) { console.log('--old-sessions、--keep-data 只用于 --uninstall'); process.exit(2) }
+if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSIONS)) { console.log(`--old-sessions 只能是 ${Object.keys(OLD_SESSION_MODES).join(' / ')}：\n${Object.entries(OLD_SESSION_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
-if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复不需要选方案'); process.exit(2) }
+if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复、卸载不需要选方案'); process.exit(2) }
 if (FRESH && SETUP_OPT) { console.log('--setup（用现成方案）和 --fresh（全新安装）只能选一个'); process.exit(2) }
 if (opt('--heartbeat-time') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(opt('--heartbeat-time'))) { console.log(`--heartbeat-time 格式不对：${opt('--heartbeat-time')}，要 HH:MM`); process.exit(2) }
 
@@ -206,6 +216,24 @@ function die(m) {
 }
 
 // ── 小工具 ────────────────────────────────────────────────────────────
+// 干跑时 DSH 开着（多半是 DSH 里的 agent 在跑）：它自己没法在 DSH 退出后真跑，把现成的终端命令给用户
+function printTerminalHint(extra = []) {
+  const q = (a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `"${a.replace(/(["\\$`])/g, '\\$1')}"`)
+  // 命令先 cd 到安装包，所以带路径的参数要换成绝对路径；--proxy 里的账号密码不进日志
+  const PATH_OPTS = ['--source', '--base-source', '--kit-source', '--app-asar', '--answers', '--restore', '--runtime', '--data-dir', '--dsh-home', '--node', '--out']
+  let masked = false
+  const args = [...argv.filter((a) => a !== '--dry-run'), ...extra].map((a, i, all) => {
+    const prev = all[i - 1]
+    if (PATH_OPTS.includes(prev) && !a.startsWith('--')) return path.resolve(a)
+    if (prev === '--proxy' && /\/\/[^/@\s]*@/.test(a)) { masked = true; return a.replace(/\/\/[^/@\s]*@/, '//***@') }
+    return a
+  })
+  const cmd = process.platform === 'win32'
+    ? `cd "${KIT}"; & "${process.execPath}" .\\install.mjs ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`
+    : `cd ${q(posix(KIT))} && ${q(posix(process.execPath))} install.mjs ${args.map(q).join(' ')}`
+  out(`\n真跑：先完全退出 DSH${process.platform === 'darwin' ? '（Cmd+Q）' : process.platform === 'win32' ? '（托盘图标也要退出），再在 PowerShell 里跑' : ''}${process.platform === 'win32' ? '' : '，再在终端里跑'}：\n  ${cmd.replace(/ +$/, '')}`)
+  if (masked) out('（--proxy 里的账号密码没有照抄进来，跑之前把 *** 换回原来的）')
+}
 const posix = (p) => p.replace(/\\/g, '/')
 const exists = (p) => fs.existsSync(p)
 const readText = (p) => fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')
@@ -1464,7 +1492,7 @@ if (QUESTIONS_MODE) {
   }, null, 2))
   process.exit(0)
 }
-out(`dsh-agent-soul 安装包 · ${{ install: '安装', update: '更新', backup: '备份', restore: '迁移恢复' }[MODE]}（${KIT_VERSION}）${DRY ? '（干跑：只报计划，不改任何文件）' : ''}`)
+out(`dsh-agent-soul 安装包 · ${{ install: '安装', update: '更新', backup: '备份', restore: '迁移恢复', uninstall: '卸载' }[MODE]}（${KIT_VERSION}）${DRY ? '（干跑：只报计划，不改任何文件）' : ''}`)
 out(`参数：${argv.length ? argv.join(' ').replace(/\/\/[^/@\s]*@/g, '//***@') : '（无）'}`)
 step('预检')
 // 当前 node 不够版本：找一个够的，用它把自己重新跑一遍（同一套参数，不丢任何状态）
@@ -1496,7 +1524,7 @@ if (dshNode) {
   NODE_FOR_CONFIG = dshNode.bin
   const same = path.resolve(dshNode.bin) === path.resolve(process.execPath)
   ok(same ? 'DSH 自带的 node 就是当前进程，写进配置用它' : `DSH 自带的 node ${dshNode.version}：${posix(dshNode.bin)}（写进配置用它）`)
-} else {
+} else if (!UNINSTALL) {
   warn('没找到 DSH 自带的 node，写进配置用当前进程的 node（DSH 升级后可能要重跑一次安装）')
 }
 for (const f of ['templates/00-authority.md.tpl', 'templates/SELF.src.md.tpl', 'templates/heartbeat.mjs.tpl', 'presets/ptc.patch.yml', 'presets/flash-lean-ptc-v3.patch.yml']) if (!exists(path.join(ASSETS, f))) die(`安装包不完整：assets/${f} 不存在`)
@@ -1511,7 +1539,7 @@ ok(`profile：${PROF}`)
 const arPath = path.join(DSH_HOME, 'logs', 'active-run.json')
 let running = null
 try { const ar = JSON.parse(readText(arPath)); running = Boolean(ar.started && !ar.ended) } catch { /* 文件不存在或格式不认识 */ }
-if (running === true) { if (DRY) warn(MODE === 'install' || MODE === 'restore' ? 'DSH 正在运行：干跑没关系，真跑前必须完全退出 DSH，在终端里跑（命令见最后）。如果这次是 DSH 里的 agent 在跑：重开 DSH 后，验收和后面几步要在新建的会话里做，装之前开的会话不会换成 Soul preset' : 'DSH 正在运行：干跑没关系，真跑前必须完全退出'); else die('DSH 正在运行。请先完全退出（macOS 按 Cmd+Q；Windows 连托盘图标也要退出），再重跑。') }
+if (running === true) { if (DRY) warn(MODE === 'install' || MODE === 'restore' ? 'DSH 正在运行：干跑没关系，真跑前必须完全退出 DSH，在终端里跑（命令见最后）。如果这次是 DSH 里的 agent 在跑：重开 DSH 后，验收和后面几步要在新建的会话里做，装之前开的会话不会换成 Soul preset' : MODE === 'uninstall' ? 'DSH 正在运行：干跑没关系，真跑前必须完全退出 DSH，在终端里跑（命令见最后）；DSH 里的 agent 自己卸不了自己' : 'DSH 正在运行：干跑没关系，真跑前必须完全退出'); else die('DSH 正在运行。请先完全退出（macOS 按 Cmd+Q；Windows 连托盘图标也要退出），再重跑。') }
 else if (running === false) ok('DSH 已退出')
 else if (flag('--confirm-quit')) ok('DSH 已退出（由使用者确认）')
 else if (!DRY && TTY) {
@@ -1546,7 +1574,7 @@ if (RUNTIME) {
   ok(`mnemon 热记忆目录 ${RX}（来源：${MNE.source}）`)
   if (MNE.soft) warn('这个目录里没有 memories.json + MEMORY.md，像还没初始化：先按它配，确认一下是不是你要的那个')
 }
-if (!RUNTIME && !UPDATE) {
+if (!RUNTIME && !UPDATE && !UNINSTALL) {
   warn('没找到 mnemon 热记忆目录：这一层先空着，不往任何默认路径写东西')
   const tried = MNE.tried.slice(0, 10)
   if (tried.length) console.log(`    试过的位置：\n${tried.map((x) => `      ${x.level === 'none' ? '—' : '·'} ${x.dir}  [${x.source}]${x.level === 'none' ? '' : ` (${x.level})`}`).join('\n')}`)
@@ -1561,7 +1589,7 @@ const MNEMON_ENABLED = bundles0.includes('dsh-mnemon')
 if (UPDATE) {
   if (!installed) die('这台电脑上还没装 dsh-agent-soul（profile 的 node_modules 里没有）。全新安装请去掉 --update。')
   ok(`已装：${state0 && state0.upstream ? `提交 ${short(state0.upstream.sha)}（${state0.updatedAt || state0.installedAt}）` : '没有安装记录（旧版安装包或手工装的），按 node_modules 里现有文件比对'}`)
-} else {
+} else if (!UNINSTALL) {
   if (!MNEMON_INSTALLED && !MNEMON_ENABLED) warn('还没装 dsh-mnemon：建议先在 DSH 插件市场装上它，否则「可复用结论」那一层是空的')
   else if (MNEMON_INSTALLED && !MNEMON_ENABLED) warn('dsh-mnemon 装了但没启用（profile 的 bundles 里没有它）：它不会跑，「可复用结论」那一层仍然是空的')
   for (const p of PREDECESSORS) if (bundles0.includes(p)) warn(`检测到 ${p}：它是换气（huanqi）的前身，两套一起跑会让一轮被续成两轮，建议先卸掉`)
@@ -1571,10 +1599,11 @@ ok(`记忆中枢 ${MEM}`)
 
 // ═══ 备份（--backup）：只带 dsh-agent-soul 自己的东西 ═══════════════════
 const SOUL_IDS_FALLBACK = ['dsh-agent-soul', 'dsh-agent-compaction', 'dsh-agent-pruner', 'dsh-agent-memory', 'dsh-agent-mnemon-probe', 'dsh-agent-echo', 'dsh-agent-clock', 'huanqi', 'dsh-agent-huanqi-panel', 'dsh-mcp-hub', 'preset-ptc-soul', 'preset-ptc-soul-flash', 'preset-standard-soul', 'preset-minimal-soul', 'preset-cordis-soul']
-const STATE_FILES = ['dsh-huanqi.json', 'huanqi-turns.jsonl']
-if (BACKUP) {
-  if (!installed) die('这台电脑上还没装 dsh-agent-soul，没什么可备份的。')
-  if (!exists(SOUL) || !exists(MEM)) die(`找不到书房或记忆中枢：${posix(SOUL)}、${posix(MEM)}`)
+// 换气的账本，连同它自己留的备份和日志（state/ 下的 dsh-huanqi.json*、huanqi-*）
+const STATE_RE = /^(dsh-huanqi\.json.*|huanqi-.+)$/
+// 打备份包：--backup 和 --uninstall 共用。干跑只清点、不写；suffix 加在文件名最后（例如 pre-uninstall）
+async function makeBackup({ suffix = '', soul = SOUL, mem = MEM } = {}) {
+  if (!exists(soul) || !exists(mem)) die(`找不到书房或记忆中枢：${posix(soul)}、${posix(mem)}`)
   step('清点要备份的东西')
   const parse = yamlParser(PROF)
   const entries = [], files = {}, counts = {}
@@ -1592,11 +1621,12 @@ if (BACKUP) {
     for (const f of t.files) addFile(`${prefix}/${f}`, path.join(root, ...f.split('/')))
     return (counts[prefix] = t.files.length)
   }
-  addTree(SOUL, 'soul')
-  addTree(MEM, 'memory', (r) => r === 'hub/index') // 索引是衍生品，恢复时重建
+  addTree(soul, 'soul')
+  addTree(mem, 'memory', (r) => r === 'hub/index') // 索引是衍生品，恢复时重建
   addTree(SESSIONS, 'sessions', (r) => /(^|\/)session\.lock$/.test(r))
   counts.state = 0
-  for (const f of STATE_FILES) { const full = path.join(DSH_HOME, 'state', f); if (exists(full)) { addFile(`state/${f}`, full); counts.state++ } }
+  const stateDir = path.join(DSH_HOME, 'state')
+  for (const f of exists(stateDir) ? fs.readdirSync(stateDir).filter((x) => STATE_RE.test(x)).sort() : []) { const full = path.join(stateDir, f); if (fs.statSync(full).isFile()) { addFile(`state/${f}`, full); counts.state++ } }
   // 本架构插件的设置
   const pkgDirs = ['dsh-agent-soul', PRESET_PKG, ...Object.values(PART_NAMES).flat()].filter((d) => exists(path.join(NM, d, 'package.json')))
   const ids = parse ? soulEntryIds(NM, pkgDirs, parse) : new Set(SOUL_IDS_FALLBACK)
@@ -1614,7 +1644,7 @@ if (BACKUP) {
     host: os.hostname(), platform: process.platform,
     upstream: state0 && state0.upstream ? state0.upstream : null,
     parts: (state0 && state0.parts) || Object.values(PART_NAMES).flat().filter((d) => exists(path.join(NM, d, 'package.json'))),
-    paths: { dshHome: posix(DSH_HOME), soul: posix(SOUL), memory: posix(MEM), hub: posix(HUB), sessions: posix(SESSIONS), runtime: RX },
+    paths: { dshHome: posix(DSH_HOME), soul: posix(soul), memory: posix(mem), hub: posix(path.join(mem, 'hub')), sessions: posix(SESSIONS), runtime: RX },
     counts, bytes, files,
   }
   entries.unshift({ name: `${BK_ROOT}`, dir: true }, { name: `${BK_ROOT}/manifest.json`, data: JSON.stringify(manifest, null, 2) })
@@ -1627,9 +1657,9 @@ if (BACKUP) {
   info(`不带：dsh-mnemon 的数据和设置、其他插件、skills、表情包、附件、DSH 本身的设置（按约定）`)
   ok(`合计 ${Object.keys(files).length} 个文件，${mb(bytes)}（压缩前）`)
   const outDir = opt('--out') ? path.resolve(opt('--out')) : path.join(KIT, 'backups')
-  const outFile = path.join(outDir, `dsh-soul-backup-${os.hostname().replace(/[^\w.-]+/g, '_')}-${TS}.tar.gz`)
+  const outFile = path.join(outDir, `dsh-soul-backup-${os.hostname().replace(/[^\w.-]+/g, '_')}-${TS}${suffix ? '-' + suffix : ''}.tar.gz`)
   step('打包并核对')
-  if (DRY) { info(`[干跑] 将写入 ${posix(outFile)}`); out('\n干跑结束：以上是计划，没有写任何文件。'); process.exit(0) }
+  if (DRY) { info(`[干跑] 将写入 ${posix(outFile)}`); return { outFile, dry: true, n: Object.keys(files).length } }
   fs.mkdirSync(outDir, { recursive: true })
   await writeTarGz(outFile, entries)
   const tmpV = path.join(os.tmpdir(), `dsh-soul-verify-${TS}`); TMP_DIRS.push(tmpV)
@@ -1638,12 +1668,356 @@ if (BACKUP) {
   for (const [k, m] of Object.entries(files)) { const f = path.join(v.dir, ...k.split('/')); if (!exists(f) || sha1(fs.readFileSync(f)) !== m.sha1) bad++ }
   if (bad) die(`备份包核对没过：${bad} 个文件对不上。包留在 ${posix(outFile)}，别用它。`)
   ok(`已写入 ${posix(outFile)}（${mb(fs.statSync(outFile).size)}），${Object.keys(files).length} 个文件逐个核对过`)
+  return { outFile, n: Object.keys(files).length }
+}
+if (BACKUP) {
+  if (!installed) die('这台电脑上还没装 dsh-agent-soul，没什么可备份的。')
+  const r = await makeBackup()
+  if (r.dry) { out('\n干跑结束：以上是计划，没有写任何文件。'); process.exit(0) }
   out(`
 ${'─'.repeat(60)}
 备份完成。迁移到新电脑：
   1. 把整个安装包文件夹（含 backups/）拷过去；新电脑上装好 DSH、打开过一次
   2. 退出 DSH，在安装包文件夹里跑：node install.mjs --restore --dry-run，看过计划再去掉 --dry-run
   3. 详见 AGENT-INSTALL.md「迁移」一节`)
+  process.exit(0)
+}
+
+// ═══ 卸载（--uninstall）：先用 kit 打备份包，再把安装碰过的东西收回来 ═══════════════
+// 顺序按「出错时损失最小」排：备份 → 停心跳 → 旧会话 → profile 配置和锁文件 → 本体和零件 → 家目录里的东西 → 书房。
+// 每改一个配置文件都在原地留一份 .bak-<时间>-pre-uninstall；书房、中枢、会话、换气账本、插件设置都在备份包里。
+if (UNINSTALL) {
+  const parse = yamlParser(PROF)
+  const OUR_PKGS = ['dsh-agent-soul', ...new Set(Object.values(PART_NAMES).flat()), PRESET_PKG]
+  const deps0 = Object.keys({ ...(pkg0.dependencies || {}), ...(pkg0.devDependencies || {}), ...(pkg0.optionalDependencies || {}) })
+  const deselected0 = (pkg0.dsh && pkg0.dsh.desktopNextDeselectedBundles) || []
+  const present = OUR_PKGS.filter((n) => exists(path.join(NM, n)) || deps0.includes(n) || bundles0.includes(n) || deselected0.includes(n))
+  const presetPj = readJson(path.join(NM, PRESET_PKG, 'package.json'))
+  const wasShell = Boolean(presetPj && presetPj.dshSoulShell)
+  // 更新、重新生成 preset 时在 node_modules 里留下的整份拷贝（<包>.bak-…）
+  const bakDirs = exists(NM) ? fs.readdirSync(NM).filter((d) => OUR_PKGS.some((n) => d.startsWith(n + '.bak-'))) : []
+  const LOCK_FILES = [
+    ['pnpm-lock.yaml', path.join(PROF, 'pnpm-lock.yaml'), removeLockEntries],
+    ['node_modules/.pnpm/lock.yaml', path.join(NM, '.pnpm', 'lock.yaml'), removeLockEntries],
+    ['node_modules/.modules.yaml', path.join(NM, '.modules.yaml'), removeModulesEntries],
+    ['node_modules/.package-map.json', path.join(NM, '.package-map.json'), removePackageMapEntries],
+  ].filter(([, f]) => exists(f))
+  const PTR = path.join(DSH_HOME, 'hub', 'echo.config.json')
+  const ptrOurs = (() => {
+    try {
+      const st = fs.lstatSync(PTR)
+      if (st.isSymbolicLink()) return true
+      const j = readJson(PTR)
+      return Boolean(j && (j.memory || j.soul))
+    } catch { return false }
+  })()
+  const SERVERS = path.join(DSH_HOME, 'mcp-hub', 'servers.json')
+  const stateDir = path.join(DSH_HOME, 'state')
+  const stateFiles = exists(stateDir) ? fs.readdirSync(stateDir).filter((f) => STATE_RE.test(f)) : []
+  const inHome = (p) => { const r = path.relative(DSH_HOME, p); return r && !r.startsWith('..') && !path.isAbsolute(r) }
+  // 书房、中枢一般都在 dsh-soul/ 里面：只列最外面那层（删它就连里面一起删了）
+  const under = (d, o) => { const r = path.relative(o, d); return r && !r.startsWith('..') && !path.isAbsolute(r) }
+  const dataDirs = [...new Set([SOUL_ROOT, SOUL, MEM].filter((d) => exists(d)))].filter((d, _, all) => !all.some((o) => o !== d && under(d, o)))
+  const flashInstalled = exists(path.join(NM, 'dsh-flash-presets', 'package.json'))
+  const missingBefore = bundles0.filter((b) => !b.startsWith('@deepseek-ai/') && !exists(path.join(NM, ...b.split('/'), 'package.json')))
+
+  // 心跳：macOS 的 launchd、Windows 的计划任务；Linux 只能提醒（cron 是用户自己加的）
+  const HB_LABEL = 'com.dsh-soul.heartbeat'
+  const heartbeats = []
+  if (process.platform === 'darwin') {
+    const dir = path.join(os.homedir(), 'Library', 'LaunchAgents')
+    for (const f of exists(dir) ? fs.readdirSync(dir).filter((x) => x.endsWith('.plist')) : []) {
+      const full = path.join(dir, f)
+      let t = ''; try { t = readText(full) } catch { continue }
+      if (isSoulHeartbeatPlist(t, { label: HB_LABEL, soulRoot: posix(SOUL_ROOT) })) heartbeats.push({ kind: 'launchd', file: full, label: (t.match(/<key>Label<\/key>\s*<string>([^<]+)<\/string>/) || [])[1] || HB_LABEL })
+    }
+  } else if (process.platform === 'win32') {
+    const r = spawnSync('schtasks', ['/Query', '/TN', 'dsh-soul-heartbeat'], { encoding: 'utf8', windowsHide: true })
+    if (r.status === 0) heartbeats.push({ kind: 'schtasks', name: 'dsh-soul-heartbeat' })
+  }
+
+  // 旧会话：会话文件第一行记着建会话时的 preset。数一数有多少用的是 Soul preset
+  const zstdOk = typeof zlib.zstdDecompressSync === 'function' && typeof zlib.zstdCompressSync === 'function'
+  const sessionFiles = []
+  const walkSessions = (d, depth) => {
+    if (depth > 4 || !exists(d)) return
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name)
+      if (e.isDirectory()) walkSessions(full, depth + 1)
+      else if (/^session\.v\d+\.jsonl(\.zstd)?$/.test(e.name)) sessionFiles.push(full)
+    }
+  }
+  walkSessions(SESSIONS, 0)
+  const needZstd = sessionFiles.some((f) => f.endsWith('.zstd'))
+  if (needZstd && !zstdOk && process.env.DSH_SOUL_ZSTD_REEXEC !== '1') {
+    // 会话是 zstd 压缩的，这个 node 解不开：换一个能解的（DSH 自带的 node 一般可以）把自己重跑一遍
+    const cands = [detectNode({ dshOnly: true }), detectNode()].filter(Boolean)
+    const good = cands.find((c) => spawnSync(c.bin, ['-e', "process.exit(typeof require('zlib').zstdDecompressSync === 'function' ? 0 : 1)"], { windowsHide: true }).status === 0)
+    if (good && path.resolve(good.bin) !== path.resolve(process.execPath)) {
+      warn(`当前 node ${process.versions.node} 解不开 zstd 压缩的会话文件，改用 ${posix(good.bin)}（${good.version}）继续`)
+      const r = spawnSync(good.bin, [process.argv[1], ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, DSH_SOUL_ZSTD_REEXEC: '1', DSH_SOUL_NODE_REEXEC: '1' }, windowsHide: true })
+      process.exit(r.status === null ? 1 : r.status)
+    }
+  }
+  const readSession = (f) => { const b = fs.readFileSync(f); return f.endsWith('.zstd') ? (zstdOk ? zlib.zstdDecompressSync(b).toString('utf8') : null) : b.toString('utf8') }
+  const sessions = sessionFiles.map((f) => { let t = null; try { t = readSession(f) } catch { t = null } return { file: f, text: t, preset: t === null ? undefined : sessionPreset(t) } })
+  const unreadable = sessions.filter((x) => x.text === null)
+  const soulSessions = sessions.filter((x) => x.preset && SOUL_PRESET_IDS.includes(x.preset))
+  const byPreset = {}
+  for (const x of soulSessions) byPreset[x.preset] = (byPreset[x.preset] || 0) + 1
+  const PRESET_MAP = Object.fromEntries(SOUL_PRESET_IDS.map((id) => [id, officialPresetFor(id, { flashInstalled })]))
+  if (!present.length && !heartbeats.length && !dataDirs.length && !ptrOurs && !stateFiles.length) {
+    out('\n这台电脑上没有 dsh-agent-soul 的东西，不用卸。')
+    if (soulSessions.length) out(`还有 ${soulSessions.length} 个会话记着已经删掉的 Soul preset（${Object.keys(byPreset).join('、')}），多半打不开。想救它们：先用备份包 --restore 装回来，再 --uninstall --old-sessions rewrite。`)
+    process.exit(0)
+  }
+
+  step('清点要卸的东西')
+  ok(`本体和零件 ${present.length} 个：${present.join('、') || '（没有）'}${wasShell ? `（${PRESET_PKG} 已经是上次卸载留下的空壳）` : ''}`)
+  if (bakDirs.length) ok(`node_modules 里的旧拷贝 ${bakDirs.length} 个：${bakDirs.join('、')}`)
+  ok(`心跳：${heartbeats.length ? heartbeats.map((h) => (h.kind === 'launchd' ? `launchd ${h.label}（${posix(h.file)}）` : `计划任务 ${h.name}`)).join('、') : process.platform === 'linux' ? '这个系统上脚本没注册过定时任务；自己加过 cron 的话，卸完手动删掉那一行' : '没找到'}`)
+  ok(`书房和记忆中枢：${dataDirs.length ? dataDirs.map(posix).join('、') + (KEEP_DATA ? '——按 --keep-data 保留' : '——备份后删除') : '（没有）'}`)
+  if (stateFiles.length) ok(`换气账本和它的备份、日志 ${stateFiles.length} 个（state/）`)
+  if (ptrOurs) ok(`指针 ${posix(PTR)}`)
+  if (!sessions.length) ok('会话：没有')
+  else {
+    ok(`会话 ${sessions.length} 个，其中用 Soul preset 建的 ${soulSessions.length} 个${soulSessions.length ? `：${Object.entries(byPreset).map(([k, n]) => `${PRESET_LABEL[k] || k} ${n} 个`).join('、')}` : ''}`)
+    if (unreadable.length) warn(`有 ${unreadable.length} 个会话文件读不出来（${zstdOk ? '可能损坏了' : '这个 node 解不开 zstd'}），没算进去`)
+  }
+
+  // 旧会话怎么处理：没有受影响的会话就不用选；空壳要从已装的 Soul preset 反推，没装就做不了
+  const shellPossible = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml'))
+  const MODES = Object.fromEntries(Object.entries(OLD_SESSION_MODES).filter(([k]) => k !== 'shell' || shellPossible))
+  if (OLD_SESSIONS === 'shell' && !shellPossible) die(`node_modules 里没有 ${PRESET_PKG}，做不出空壳 preset；换成 --old-sessions rewrite 或 keep`)
+  let OLD = OLD_SESSIONS
+  if (!soulSessions.length && !unreadable.length) { OLD = OLD || 'keep'; info('没有用 Soul preset 建的会话，Soul preset 直接删掉') }
+  else if (!OLD && TTY) {
+    out(`\n用 Soul preset 建的 ${soulSessions.length} 个旧会话，开头记着 preset 的 id；preset 删了，这些会话多半打不开。怎么处理？`)
+    const keys = Object.keys(MODES)
+    keys.forEach((k, i) => out(`  ${i + 1}. ${MODES[k]}${i === 0 ? '（默认）' : ''}`))
+    const v = await askLine('> 编号（回车用 1）：')
+    OLD = keys[(Number(v) || 1) - 1]
+    if (!OLD) die('没有这个编号。')
+  }
+  if (OLD === 'rewrite' && soulSessions.length && unreadable.length && !zstdOk) die('这个 node 解不开 zstd 压缩的会话文件，改写不了旧会话。用 DSH 自带的 node（24 以上）跑，或者加 --node <路径> 指定一个。')
+
+  step('打算怎么做')
+  const remove = OLD === 'shell' ? present.filter((n) => n !== PRESET_PKG) : present
+  const pjPlan = planPackageJsonRemoval(readText(pkgPath), remove)
+  ok(`package.json：bundles 去掉 ${pjPlan.removed.bundles.length} 个、dependencies 去掉 ${pjPlan.removed.dependencies.length} 个${pjPlan.removed.deselected.length ? `、desktopNextDeselectedBundles 去掉 ${pjPlan.removed.deselected.length} 个` : ''}${OLD === 'shell' ? `；${PRESET_PKG} 留着（空壳）` : ''}`)
+  const pkgDirsForIds = present.filter((d) => exists(path.join(NM, d, 'package.json')))
+  const ids = [...new Set([...(parse ? soulEntryIds(NM, pkgDirsForIds, parse) : []), ...SOUL_IDS_FALLBACK, 'huanqi'])]
+  const cfgText0 = exists(cfgPath) ? readText(cfgPath) : ''
+  const cfgPlan = planCordisRemoval(cfgText0, { ids, flashInstalled })
+  ok(`cordis.patch.yml：${cfgPlan.removed.length ? `去掉 ${cfgPlan.removed.join('、')} 的配置` : '没有本架构插件的配置'}${cfgPlan.defaultTo ? `；新会话默认 preset ${cfgPlan.defaultFrom} → ${cfgPlan.defaultTo}` : ''}`)
+  const lockPlans = LOCK_FILES.map(([label, f, fn]) => { try { return { label, f, ...fn(readText(f), remove) } } catch (e) { return { label, f, error: e.message } } })
+  for (const lp of lockPlans) {
+    if (lp.error) warn(`${lp.label} 解析不了（${lp.error}），没动它；下次在插件市场装东西前，最好在 DSH 里重装一次插件让 pnpm 重写它`)
+    else ok(`${lp.label}：${lp.removed.length ? `去掉 ${lp.removed.length} 条` : '不用改'}`)
+  }
+  let shell = null, rewrites = []
+  if (OLD === 'shell') {
+    const curYml = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) ? readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) : ''
+    try { shell = buildShellBundle(curYml, { pkgName: PRESET_PKG }) } catch (e) { die(`做不出空壳 preset：${e.message}。换成 --old-sessions rewrite 或 keep 再跑`) }
+    const miss = Object.keys(byPreset).filter((k) => !shell.ids.includes(k))
+    ok(`${PRESET_PKG} 换成空壳：${shell.ids.join('、')} 的 id 不变、名字后面标「（已卸载）」，压缩和裁剪换回官方原版`)
+    if (miss.length) warn(`有旧会话用的 preset 不在已装的 Soul preset 里（${miss.join('、')}），空壳救不了它们；想救就改用 --old-sessions rewrite`)
+  } else if (OLD === 'rewrite') {
+    rewrites = soulSessions.map((x) => ({ ...x, r: rewriteSessionHeader(x.text, PRESET_MAP) }))
+    const bad = rewrites.filter((x) => !x.r)
+    if (bad.length) die(`有 ${bad.length} 个会话的开头认不出来，改写不了（例如 ${posix(bad[0].file)}）；换成 --old-sessions shell 或 keep 再跑`)
+    ok(`改写 ${rewrites.length} 个旧会话开头的 preset：${Object.keys(byPreset).map((k) => `${k} → ${PRESET_MAP[k]}`).join('、')}`)
+  }
+  else if (OLD === 'keep' && soulSessions.length) warn(`用 Soul preset 建的 ${soulSessions.length} 个旧会话不处理，preset 删掉后它们可能打不开；要看时用 --restore 把 dsh-agent-soul 装回来`)
+  else if (!OLD) {
+    info(`用 Soul preset 建的 ${soulSessions.length} 个旧会话还没定怎么处理，真跑要加 --old-sessions：`)
+    for (const [k, v] of Object.entries(MODES)) info(`  ${k}：${v}`)
+  }
+  let srvPlan = null
+  if (exists(SERVERS)) {
+    const doc = readJson(SERVERS)
+    if (!doc) warn(`${posix(SERVERS)} 解析失败，没动它；里面要是有指向记忆中枢的 echo，在 mcp-hub 面板里删掉`)
+    else {
+      srvPlan = planServersRemoval(doc)
+      const hubGone = remove.includes('dsh-mcp-hub')
+      srvPlan.dropDir = hubGone && !srvPlan.others.length
+      ok(`mcp-hub 清单：${srvPlan.removed ? '去掉 echo' : '没有 echo'}${srvPlan.others.length ? `；留着 ${srvPlan.others.join('、')}` : ''}${srvPlan.dropDir ? '；清单空了，mcp-hub/ 目录一起删' : ''}`)
+    }
+  }
+  const outside = dataDirs.filter((d) => !inHome(d))
+  if (!KEEP_DATA && outside.length) warn(`书房 / 记忆中枢不在 DSH 家目录里，不删它们，只提醒：${outside.map(posix).join('、')}（备份包里有一份）`)
+  info('不碰：dsh-mnemon（含热记忆）、其他插件、skills、表情包、附件、DSH 本身的设置、sessions/ 会话记录、安装包文件夹')
+
+  // 备份用的书房 / 中枢：以本体配置里写的为准；那里不存在（比如 profile 是别的电脑带过来的）就看 dsh-soul/ 下面默认的位置
+  const bkSoul = exists(SOUL) ? SOUL : path.join(SOUL_ROOT, 'soul'), bkMem = exists(MEM) ? MEM : path.join(SOUL_ROOT, 'memory')
+  const canBackup = exists(bkSoul) && exists(bkMem)
+  if (!canBackup && (exists(bkSoul) || exists(bkMem)) && !KEEP_DATA) die(`书房和记忆中枢只剩一个（${[bkSoul, bkMem].filter(exists).map(posix).join('')}），备份包打不了。先自己备份一份，或者加 --keep-data 只卸代码和配置。`)
+  if (!DRY && TTY) {
+    if (!parseBool(await askLine('\n先打备份包，再按上面卸载？(y/N) '), false)) die('没确认，什么都没动。')
+  }
+  if (!DRY && !OLD) die(`用 Soul preset 建的 ${soulSessions.length} 个旧会话还没定怎么处理。加 --old-sessions 重跑：\n${Object.entries(MODES).map(([k, v]) => `      ${k}：${v}`).join('\n')}`)
+
+  // ── 1. 备份 ──
+  let BK = null
+  if (canBackup) BK = await makeBackup({ suffix: 'pre-uninstall', soul: bkSoul, mem: bkMem })
+  else {
+    warn('没有书房和记忆中枢（多半是上次卸载时删了），这次打不了完整备份包；改的配置文件都在原地留 .bak')
+    if (rewrites.length) {
+      // 要改写的会话至少单独打一个包，改坏了能放回去
+      step('备份要改写的会话')
+      const outDir = opt('--out') ? path.resolve(opt('--out')) : path.join(KIT, 'backups')
+      const outFile = path.join(outDir, `dsh-soul-sessions-${os.hostname().replace(/[^\w.-]+/g, '_')}-${TS}-pre-rewrite.tar.gz`)
+      if (DRY) info(`[干跑] 将把要改写的 ${rewrites.length} 个会话打包到 ${posix(outFile)}`)
+      else {
+        fs.mkdirSync(outDir, { recursive: true })
+        const rel = (f) => posix(path.relative(SESSIONS, f))
+        const dirs = [...new Set(rewrites.flatMap((x) => { const parts = rel(x.file).split('/').slice(0, -1); return parts.map((_, i) => parts.slice(0, i + 1).join('/')) }))]
+        await writeTarGz(outFile, [{ name: 'sessions', dir: true }, ...dirs.map((d) => ({ name: `sessions/${d}`, dir: true })), ...rewrites.map((x) => ({ name: `sessions/${rel(x.file)}`, path: x.file }))])
+        const tmpV = path.join(os.tmpdir(), `dsh-soul-verify-${TS}`); TMP_DIRS.push(tmpV)
+        const v = extractTarGz(outFile, tmpV)
+        const badN = rewrites.filter((x) => { const f = path.join(v.dir, ...rel(x.file).split('/')); return !exists(f) || sha1(fs.readFileSync(f)) !== sha1(fs.readFileSync(x.file)) }).length
+        if (badN) die(`会话备份包核对没过：${badN} 个文件对不上，什么都没改。包留在 ${posix(outFile)}`)
+        ok(`要改写的 ${rewrites.length} 个会话已打包：${posix(outFile)}（逐个核对过；放回去就是把里面的 sessions/ 解到 ${posix(SESSIONS)} 覆盖）`)
+      }
+    }
+  }
+  if (!DRY) TOUCHED = true
+  const bak = (f) => backup(f, 'pre-uninstall')
+  const rm = (p, label) => { if (DRY) { info(`[干跑] 将删除 ${label || posix(p)}`); return } fs.rmSync(p, { recursive: true, force: true }) }
+
+  // ── 2. 心跳 ──
+  step('停掉心跳')
+  if (!heartbeats.length) ok('没有要停的')
+  for (const h of heartbeats) {
+    if (h.kind === 'launchd') {
+      if (DRY) { info(`[干跑] 将停掉 launchd ${h.label} 并删除 ${posix(h.file)}`); continue }
+      spawnSync('launchctl', ['bootout', `gui/${os.userInfo().uid}/${h.label}`], { encoding: 'utf8' })
+      fs.rmSync(h.file, { force: true })
+      ok(`launchd ${h.label} 已停掉，plist 已删`)
+    } else {
+      if (DRY) { info(`[干跑] 将注销计划任务 ${h.name}`); continue }
+      const r = spawnSync('schtasks', ['/Delete', '/TN', h.name, '/F'], { encoding: 'utf8', windowsHide: true })
+      if (r.status === 0) ok(`计划任务 ${h.name} 已注销`)
+      else warn(`计划任务 ${h.name} 注销失败：${String(r.stderr || r.stdout || '').trim().slice(0, 200)}；可以在 PowerShell 里跑 Unregister-ScheduledTask -TaskName ${h.name} -Confirm:$false`)
+    }
+  }
+
+  // ── 3. 旧会话 ──
+  if (rewrites.length) {
+    step('改写旧会话开头的 preset')
+    let n = 0
+    for (const x of rewrites) {
+      const r = x.r
+      if (DRY) { n++; continue }
+      const st = fs.statSync(x.file)
+      const buf = x.file.endsWith('.zstd') ? zlib.zstdCompressSync(Buffer.from(r.text, 'utf8')) : Buffer.from(r.text, 'utf8')
+      const tmp = x.file + '.tmp-uninstall'
+      fs.writeFileSync(tmp, buf)
+      const back = x.file.endsWith('.zstd') ? zlib.zstdDecompressSync(fs.readFileSync(tmp)).toString('utf8') : readText(tmp)
+      if (back !== r.text) { fs.rmSync(tmp, { force: true }); die(`改写 ${posix(x.file)} 后读回来对不上，停下了；已改的会话原样在备份包里`) }
+      fs.renameSync(tmp, x.file)
+      try { fs.utimesSync(x.file, st.atime, st.mtime) } catch { /* 改不了时间不影响内容 */ }
+      n++
+    }
+    ;(DRY ? info : ok)(`${DRY ? '[干跑] 将改写' : '已改写'} ${n} 个会话（原样都在备份包里）`)
+  }
+
+  // ── 4. profile 配置和锁文件 ──
+  step('profile 配置和锁文件')
+  if (pjPlan.changed) { JSON.parse(pjPlan.text); bak(pkgPath); write(pkgPath, pjPlan.text, 'package.json'); if (!DRY) ok('package.json 已改（原文件留了 .bak）') } else ok('package.json 不用改')
+  if (cfgPlan.changed) { bak(cfgPath); write(cfgPath, cfgPlan.text, 'cordis.patch.yml'); if (!DRY) ok('cordis.patch.yml 已改（原文件留了 .bak）') } else ok('cordis.patch.yml 不用改')
+  for (const lp of lockPlans) {
+    if (lp.error || !lp.changed) continue
+    bak(lp.f); write(lp.f, lp.text, lp.label)
+    if (!DRY) ok(`${lp.label} 已改`)
+    if (lp.leftover && lp.leftover.length) warn(`${lp.label} 里还有 ${lp.leftover.length} 行提到这些包（可能是别的包依赖它们），没硬删：${lp.leftover.slice(0, 3).map((l) => l.trim()).join(' / ')}`)
+  }
+
+  // ── 5. 本体和零件 ──
+  step(OLD === 'shell' ? `本体和零件（${PRESET_PKG} 换成空壳）` : '本体和零件')
+  for (const n of remove) if (exists(path.join(NM, n))) { rm(path.join(NM, n), `node_modules/${n}`); if (!DRY) ok(`node_modules/${n} 已删`) }
+  for (const d of bakDirs) { rm(path.join(NM, d), `node_modules/${d}`); if (!DRY) ok(`node_modules/${d} 已删`) }
+  if (shell) {
+    const dir = path.join(NM, PRESET_PKG)
+    if (!wasShell || Object.entries(shell.files).some(([f, t]) => !exists(path.join(NM, PRESET_PKG, f)) || readText(path.join(NM, PRESET_PKG, f)) !== t)) {
+      if (!DRY && exists(dir)) { for (const f of fs.readdirSync(dir)) if (!shell.files[f]) fs.rmSync(path.join(dir, f), { recursive: true, force: true }) }
+      for (const [f, t] of Object.entries(shell.files)) write(path.join(dir, f), t, `${PRESET_PKG}/${f}（空壳）`)
+      if (!DRY) ok(`${PRESET_PKG} 已换成空壳：${shell.ids.map((id) => `${PRESET_LABEL[id] || id}（已卸载）`).join('、')}`)
+    } else ok(`${PRESET_PKG} 已经是空壳，不用改`)
+  }
+
+  // ── 6. DSH 家目录里的东西 ──
+  step('DSH 家目录里本架构的东西')
+  if (srvPlan && (srvPlan.removed || srvPlan.dropDir)) {
+    if (srvPlan.dropDir) { rm(path.dirname(SERVERS), 'mcp-hub/（清单里只有 echo，mcp-hub 也卸了）'); if (!DRY) ok('mcp-hub/ 已删（清单原文在备份包里）') }
+    else { bak(SERVERS); write(SERVERS, JSON.stringify(srvPlan.doc, null, 2), 'mcp-hub/servers.json（去掉 echo）'); if (!DRY) ok(`mcp-hub 清单去掉了 echo，留着 ${srvPlan.others.join('、')}`) }
+  }
+  if (ptrOurs) {
+    rm(PTR, 'hub/echo.config.json（指针）')
+    const hubDir = path.dirname(PTR)
+    if (!DRY) { ok('指针 hub/echo.config.json 已删'); try { if (!fs.readdirSync(hubDir).filter((x) => x !== '.DS_Store').length) { fs.rmSync(hubDir, { recursive: true, force: true }); ok('hub/ 空了，一起删') } } catch { /* 删不了就留着 */ } }
+  }
+  for (const f of stateFiles) rm(path.join(stateDir, f), `state/${f}`)
+  if (stateFiles.length && !DRY) ok(`换气账本等 ${stateFiles.length} 个文件已删（state/）`)
+
+  // ── 7. 书房和记忆中枢 ──
+  step('书房和记忆中枢')
+  if (KEEP_DATA) {
+    if (exists(STATE_PATH)) {
+      const st = { ...(readJson(STATE_PATH) || {}), uninstalledAt: new Date().toISOString(), uninstallBackup: BK && !BK.dry ? posix(BK.outFile) : null, oldSessions: OLD }
+      write(STATE_PATH, JSON.stringify(st, null, 2), '.install-state.json（记下已卸载）')
+    }
+    ok(`按 --keep-data 保留：${dataDirs.map(posix).join('、') || '（没有）'}`)
+  } else {
+    for (const d of dataDirs.filter(inHome).sort((a, b) => b.length - a.length)) { if (exists(d) || DRY) { rm(d, posix(d)); if (!DRY) ok(`${posix(d)} 已删`) } }
+  }
+
+  // ── 8. 校验 ──
+  step('校验')
+  if (DRY) info('[干跑] 真跑时会校验：package.json、cordis.patch.yml、锁文件都能解析，里面没有残留的包名，剩下的包要加载的插件都找得到，默认 preset 存在')
+  else {
+    const pj = readJson(pkgPath)
+    if (!pj) die('package.json 改完解析不了，用同目录的 .bak-…-pre-uninstall 还原')
+    ok('package.json 是合法 JSON')
+    if (parse) { try { parse(readText(cfgPath)); ok('cordis.patch.yml 解析通过') } catch (e) { die(`cordis.patch.yml 改完解析不了：${e.message}；用同目录的 .bak-…-pre-uninstall 还原`) } }
+    for (const lp of lockPlans) {
+      if (lp.error || !lp.changed) continue
+      try { lp.f.endsWith('.json') ? JSON.parse(readText(lp.f)) : parse && parse(readText(lp.f)) } catch (e) { die(`${lp.label} 改完解析不了：${e.message}；用同目录的 .bak-…-pre-uninstall 还原`) }
+    }
+    ok('锁文件都能解析')
+    const pjText = readText(pkgPath)
+    const left = remove.filter((n) => new RegExp(`"${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(pjText))
+    if (left.length) warn(`package.json 里还提到 ${left.join('、')}`)
+    const bl = (pj.dsh && pj.dsh.profile && pj.dsh.profile.bundles) || []
+    const missing = bl.filter((b) => !b.startsWith('@deepseek-ai/') && !exists(path.join(NM, ...b.split('/'), 'package.json')))
+    const newly = missing.filter((b) => !missingBefore.includes(b))
+    if (newly.length) warn(`bundles 里这些包在 node_modules 里找不到：${newly.join('、')}；DSH 启动时会加载失败，用 package.json 旁边的 .bak-…-pre-uninstall 还原后再查`)
+    if (missing.length > newly.length) info(`bundles 里 ${missing.filter((b) => missingBefore.includes(b)).join('、')} 在 node_modules 里找不到，卸载前就这样，不是本架构的包，没动`)
+    if (!missing.length) ok(`bundles 剩 ${bl.length} 项，都找得到`)
+    const bad = parse ? patchNamesMissing(NM, bl.filter((b) => exists(path.join(NM, ...b.split('/'), 'package.json'))), parse) : []
+    if (bad.length) warn(`有包要加载的插件找不到：${bad.slice(0, 5).join('；')}`)
+    else if (parse) ok('剩下的每个包要加载的插件都找得到')
+    const sel = (readText(cfgPath).match(/^ {4}selectedDefault: ['"]?([\w-]+)['"]?\s*$/m) || [])[1]
+    if (sel && SOUL_PRESET_IDS.includes(sel) && OLD !== 'shell') warn(`新会话默认 preset 还是 ${sel}，它已经删了；在 DSH 里选一个官方 preset`)
+    else ok(`新会话默认 preset：${sel || '（没设，用 DSH 默认的）'}`)
+  }
+
+  out('\n' + '─'.repeat(60))
+  if (DRY) {
+    out('干跑结束：以上是计划，没有改任何文件。确认无误后去掉 --dry-run 再跑。')
+    if (running === true) {
+      printTerminalHint(!OLD_SESSIONS && OLD && soulSessions.length ? ['--old-sessions', OLD] : [])
+      if (!OLD) out(`（命令里还要加上 --old-sessions ${Object.keys(MODES).join('、')} 里的一个，见上面「打算怎么做」）`)
+    }
+  } else out('卸载完成。')
+  if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
+  if (!DRY) out(`
+接下来：
+  1. 启动 DSH。插件市场里不会再有 dsh-agent-soul 的本体和零件${OLD === 'shell' ? `；preset 列表里的 Soul preset 名字后面带「（已卸载）」，压缩和裁剪已是官方原版` : ''}。
+  2. 新建会话，顶部选官方 preset${cfgPlan.defaultTo ? `（默认已改成 ${cfgPlan.defaultTo}）` : ''}。${OLD === 'rewrite' && soulSessions.length ? `\n  3. 以前用 Soul preset 建的 ${soulSessions.length} 个会话已改成对应的官方 preset，照常打开。` : OLD === 'keep' && soulSessions.length ? `\n  3. 以前用 Soul preset 建的 ${soulSessions.length} 个会话可能打不开；要看它们，用备份包装回来。` : ''}
+备份包：${BK && !BK.dry ? posix(BK.outFile) : '（没打）'}
+想装回来（先退出 DSH）：node install.mjs --restore${BK && !BK.dry ? ` "${posix(BK.outFile)}"` : ' <备份包>'}
+没删的：dsh-mnemon、其他插件、会话记录、安装包文件夹${KEEP_DATA ? '、书房和记忆中枢' : ''}；profile 里改过的文件旁边各有一份 .bak-${TS}-pre-uninstall。`)
   process.exit(0)
 }
 
@@ -2397,22 +2771,7 @@ const presetName = () => PRESET_LABEL[finalDefault] || finalDefault
 out('\n' + '─'.repeat(60))
 out(DRY ? '干跑结束：以上是计划，没有改任何文件。确认无误后去掉 --dry-run 再跑。' : `${{ install: '文件层面的安装', update: '更新', restore: '迁移恢复' }[MODE]}完成。`)
 if (DRY && running === true && MODE !== 'backup') {
-  // 多半是 DSH 里的 agent 在跑干跑：它自己没法在 DSH 退出后真跑，把现成的终端命令给用户
-  const q = (a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `"${a.replace(/(["\\$`])/g, '\\$1')}"`)
-  // 命令先 cd 到安装包，所以带路径的参数要换成绝对路径；--proxy 里的账号密码不进日志
-  const PATH_OPTS = ['--source', '--base-source', '--kit-source', '--app-asar', '--answers', '--restore', '--runtime', '--data-dir', '--dsh-home', '--node', '--out']
-  let masked = false
-  const args = argv.filter((a) => a !== '--dry-run').map((a, i, all) => {
-    const prev = all[i - 1]
-    if (PATH_OPTS.includes(prev) && !a.startsWith('--')) return path.resolve(a)
-    if (prev === '--proxy' && /\/\/[^/@\s]*@/.test(a)) { masked = true; return a.replace(/\/\/[^/@\s]*@/, '//***@') }
-    return a
-  })
-  const cmd = process.platform === 'win32'
-    ? `cd "${KIT}"; & "${process.execPath}" .\\install.mjs ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`
-    : `cd ${q(posix(KIT))} && ${q(posix(process.execPath))} install.mjs ${args.map(q).join(' ')}`
-  out(`\n真跑：先完全退出 DSH${process.platform === 'darwin' ? '（Cmd+Q）' : process.platform === 'win32' ? '（托盘图标也要退出），再在 PowerShell 里跑' : ''}${process.platform === 'win32' ? '' : '，再在终端里跑'}：\n  ${cmd.replace(/ +$/, '')}`)
-  if (masked) out('（--proxy 里的账号密码没有照抄进来，跑之前把 *** 换回原来的）')
+  printTerminalHint()
   if (MODE === 'install' || MODE === 'restore') out(`装完重开 DSH 后新建一个会话，顶部 preset 应该是「${presetName() || '方案默认的 Soul preset'}」（不是就手动选它），验收和后面几步都在这个新会话里做；真跑结束时会给出要贴进去的话。`)
 }
 if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
