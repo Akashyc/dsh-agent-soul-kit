@@ -104,7 +104,7 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
 - **心跳**：按方案每天定时重建索引、刷新自我层、跑体检。
-- **验收标准**：体检 0 错，`/compact` 的摘要第一块带门牌。
+- **验收标准**：体检 0 错，`/compact` 的摘要第一块带门牌。门牌要在**装完后新建的会话**里测：装之前开的会话不会换成 Soul preset。
 
 ## 文件夹里有什么
 
@@ -113,12 +113,16 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
 | `AGENT-ITERATE.md` | 给 Agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
 | `install.mjs` | 安装 / 更新 / 备份 / 恢复脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
+| `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
+| `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
+| `lib/soul-presets.mjs` | 从官方预设派生 Soul preset |
+| `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
 | `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
-| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、两个 preset 的快照 |
+| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照 |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup` 打出的备份包；迁移时连同整个文件夹一起拷走 |
 
@@ -131,7 +135,7 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 
 上游给零件改名时自动迁移，目录、配置、锁文件一起换。安装包后来新加的零件，更新时会问你装不装；拒掉的会记下来，以后不再问。
 
-本机补丁（锚点写在 `install.mjs` 与 `lib/huanqi-panel-patch.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过。目前有：mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名，以及换气面板「profile 里没有 `- id: huanqi` 时自建一节」。
+本机补丁（锚点写在 `install.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过，早期写死了某台电脑路径的旧补丁换成运行时自动定位的写法。目前有：mnemon-probe 默认路径、memory 的相对路径与上下文水位、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名，以及换气面板「profile 里没有 `- id: huanqi` 时自建一节」。
 
 **不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
 
@@ -169,4 +173,6 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 - **平台**：macOS 实际装过、修过、验过。Windows 是按仓库作者的 Windows 资料写的，**没在 Windows 上实测**。脚本每一步都有校验，出错就停，并且留有备份。
 - **插件市场里的「已停用」**：dsh-agent-compaction、dsh-agent-pruner 显示「已停用」是正常的，它们由 Soul preset 调用。不要打开，也不要卸载。
 - **上游 v2.0.0 的加载名**：回声面板、换气面板改名时漏改了一处加载名，原样装会加载失败。安装包会自动修好，并在收尾时检查每个包要加载的插件都找得到。
+- **路径不带用户名**：memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录，Mac、Windows 同一份。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
+- **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，用 `--backup` / `--restore` 迁移，到了新电脑再任命下一代主导。

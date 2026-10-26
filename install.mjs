@@ -59,12 +59,14 @@ import { createRequire } from 'node:module'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline/promises'
 import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
+import { personaRulesMissing, dedupeLines } from './lib/persona.mjs'
+import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
 import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle } from './lib/soul-presets.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.5'
+const KIT_VERSION = '2.6'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -523,26 +525,46 @@ function checkSource(dir) {
 }
 
 // ── 本机补丁 ──────────────────────────────────────────────────────────
-// ① mnemon-probe 只认环境变量 MNEMON_RUNTIME，而 DSH 桌面版不传自定义环境变量 → 把默认路径改成本机真实位置
+// ① mnemon-probe 只认环境变量 MNEMON_RUNTIME，而 DSH 桌面版不传自定义环境变量 → 默认路径改成 DSH 家目录下的真实位置
 // ② clock 面板的坐标写在了没有定位的外层 div 上，面板会掉出窗口左下角
 // ③ 上游 v2.0.0 把 echo / huanqi-panel 改名成 dsh-yanqing-*，但它们 cordis.patch.yml 里要加载的 name 还是旧名
 //    → DSH 按旧名去 node_modules 找不到包，面板的宿主半加载失败。改成和包名一致
-// ④ mcp-hub 找清单时，环境变量里没有 DSH_HOME 就退到作者机器的 D:\AI\dsh\home → 默认值改成本机 DSH 家目录
+// ④ mcp-hub 找清单时，环境变量里没有 DSH_HOME 就退到作者机器的 D:\AI\dsh\home → 默认值改成 DSH 家目录
 // ⑤ 换气面板只会在「已有的节」上改值，而换气是 bundle 层 insert 进来的、profile 层本来就没有这一节
 //    → 新装的机器第一次保存必然报「没有 `- id: huanqi` 这一节」。改成找不到时自己补一节（lib/huanqi-panel-patch.mjs）
-// any：认得出「已经打过」的写法（包括早期手工打的）；fixed：上游自己已经改好的写法
+// ⑥ memory 的相对路径只认 DSH_HOME 环境变量，没有就退回插件目录 → 改成相对 DSH 家目录，配置里就能写
+//    dsh-soul/memory/hub/SELF.md 这种不带用户名的路径；上下文水位的兜底读法同样补上家目录
+// ⑦ yantai、riji 没配环境变量时找不到书房、记忆中枢、日记 → 默认指向 DSH 家目录下的书房和记忆中枢
+// ①④⑥⑦ 里的「DSH 家目录」都是插件运行时自己找的（DSH_HOME → 插件所在位置 → ~/.dsh，见 lib/home-paths.mjs），
+//   补丁里不写任何一台电脑的绝对路径。
+// any：认得出「已经打过」的写法（包括早期手工打的）；fixed：上游自己已经改好的写法；
+// refresh：打过但不是现在的写法（例如早期写死了路径）时换成现在的写法
 const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function patchList(runtime, names, dshHome) {
   const list = [
+    // 路径类补丁都不写死某台电脑的路径：运行时自己找 DSH 家目录（lib/home-paths.mjs），换电脑、换用户名、挪家目录都不用重打。
+    // refresh：以前写死了绝对路径的旧补丁（或别的电脑带过来的），认出来就换成自动定位的写法。
     // 解析不出热记忆目录时整个条目不加：让 probe 保持上游默认（每轮报读盘失败是诚实的），
     // 绝不能把 null 拼进它的默认路径
-    ...(runtime ? [{
-      key: 'mnemon-probe', pkg: 'dsh-agent-mnemon-probe', file: 'index.js', label: 'mnemon-probe 默认路径',
-      needed: path.resolve(runtime) !== path.resolve(os.homedir(), '.mnemon', 'runtime'),
-      old: "const RUNTIME = process.env.MNEMON_RUNTIME || path.join(os.homedir(), '.mnemon', 'runtime')",
-      new: `const RUNTIME = process.env.MNEMON_RUNTIME || ${JSON.stringify(posix(runtime))} // 本机改：DSH 不传环境变量，默认值指向真实的 mnemon 热记忆目录`,
-      any: /const RUNTIME = process\.env\.MNEMON_RUNTIME \|\| [^\n]*本机改[^\n]*/,
-    }] : []),
+    ...(runtime ? [(() => {
+      const rel = homeRel(runtime, dshHome)
+      const def = rel ? `path.join(${autoHomeExpr()}, ${rel.split('/').map((x) => JSON.stringify(x)).join(', ')})` : JSON.stringify(posix(runtime))
+      return {
+        key: 'mnemon-probe', pkg: 'dsh-agent-mnemon-probe', file: 'index.js', label: 'mnemon-probe 默认路径', refresh: true,
+        needed: path.resolve(runtime) !== path.resolve(os.homedir(), '.mnemon', 'runtime'),
+        old: "const RUNTIME = process.env.MNEMON_RUNTIME || path.join(os.homedir(), '.mnemon', 'runtime')",
+        new: `const RUNTIME = process.env.MNEMON_RUNTIME || ${def} // 本机改：DSH 不传环境变量，默认值指向真实的 mnemon 热记忆目录${rel ? '（运行时按 DSH 家目录定位）' : '（不在 DSH 家目录下，只能写绝对路径）'}`,
+        any: /const RUNTIME = process\.env\.MNEMON_RUNTIME \|\| [^\n]*本机改[^\n]*/,
+      }
+    })()] : []),
+    {
+      key: 'memory-home', pkg: 'dsh-agent-memory', file: 'lib/index.js', label: 'memory 相对路径按 DSH 家目录定位', needed: true, refresh: true,
+      old: MEMORY_OLD, new: memoryNew(), any: MEMORY_ANY,
+    },
+    {
+      key: 'memory-pressure', pkg: 'dsh-agent-memory', file: 'lib/index.js', label: 'memory 上下文水位找 DSH 家目录', needed: true, refresh: true,
+      old: MEMORY_PRESSURE_OLD, new: memoryPressureNew(), any: MEMORY_PRESSURE_ANY,
+    },
     {
       key: 'clock', pkg: 'dsh-agent-clock', file: 'client.js', label: 'clock 面板定位', needed: true,
       old: 'open ? h("div", { style: panelStyle }, h(ClockPanel)) : null);',
@@ -550,28 +572,28 @@ function patchList(runtime, names, dshHome) {
       any: /open \? h\("div", \{ style: Object\.assign\(\{ position: "fixed", zIndex: 300 \}, panelStyle\) \}, h\(ClockPanel\)\) : null\);[^\n]*/,
     },
     {
-      key: 'mcp-hub', pkg: 'dsh-mcp-hub', file: 'index.js', label: 'mcp-hub 清单位置', needed: true,
+      key: 'mcp-hub', pkg: 'dsh-mcp-hub', file: 'index.js', label: 'mcp-hub 清单位置', needed: true, refresh: true,
       old: "return process.env.DSH_HOME || 'D:\\\\AI\\\\dsh\\\\home'",
-      new: `return process.env.DSH_HOME || ${JSON.stringify(posix(dshHome))} // 本机改：DSH 家目录不一定在环境变量里，默认值指向本机`,
+      new: `return process.env.DSH_HOME || ${autoHomeExpr()} // 本机改：DSH 家目录不一定在环境变量里，运行时按插件所在位置找`,
       any: /return process\.env\.DSH_HOME \|\| [^\n]*本机改[^\n]*/,
     },
     {
-      key: 'yantai-soul', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 账本 / 书房路径', needed: true,
+      key: 'yantai-soul', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 账本 / 书房路径', needed: true, refresh: true,
       old: "const SOUL = ENV('YANTAI_SOUL')",
-      new: "const SOUL = ENV('YANTAI_SOUL') || " + JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'soul'))) + " // 本机改：DSH 不传环境变量，默认指向本机书房",
+      new: `const SOUL = ENV('YANTAI_SOUL') || ${homePathExpr('dsh-soul/soul')} // 本机改：DSH 不传环境变量，默认指向 DSH 家目录下的书房`,
       any: /const SOUL = ENV\('YANTAI_SOUL'\) \|\| [^\n]*本机改[^\n]*/,
     },
     {
-      key: 'yantai-memory', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 记忆中枢路径', needed: true,
+      key: 'yantai-memory', pkg: 'dsh-agent-yantai', file: 'index.js', label: 'yantai 记忆中枢路径', needed: true, refresh: true,
       old: "const MEMORY_DIR = ENV('YANTAI_MEMORY')",
-      new: "const MEMORY_DIR = ENV('YANTAI_MEMORY') || " + JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'memory'))) + " // 本机改：指向本机记忆中枢（memq 在它下面）",
+      new: `const MEMORY_DIR = ENV('YANTAI_MEMORY') || ${homePathExpr('dsh-soul/memory')} // 本机改：指向 DSH 家目录下的记忆中枢（memq 在它下面）`,
       any: /const MEMORY_DIR = ENV\('YANTAI_MEMORY'\) \|\| [^\n]*本机改[^\n]*/,
     },
     {
-      key: 'riji-diary', pkg: 'dsh-agent-riji', file: 'index.js', label: 'riji 日记目录', needed: true,
+      key: 'riji-diary', pkg: 'dsh-agent-riji', file: 'index.js', label: 'riji 日记目录', needed: true, refresh: true,
       old: "DSH_HOME ? join(DSH_HOME, 'diary') : '',",
-      new: JSON.stringify(posix(path.join(dshHome, 'dsh-soul', 'soul', '50-日记'))) + ",  // 本机改：日记目录跟着书房走",
-      any: /50-日记[^\n]*本机改[^\n]*/,
+      new: `${homePathExpr('dsh-soul/soul/50-日记')},  // 本机改：日记目录跟着书房走（运行时按 DSH 家目录定位）`,
+      any: /(?<=^[ \t]*)\S[^\n]*50-日记[^\n]*本机改[^\n]*/m,
     },
   ]
   for (const part of ['echo', 'huanqi-panel']) {
@@ -608,16 +630,26 @@ function applyPatch(nm, p, pendingSrc) {
   }
   if (!exists(file)) { if (DRY) { info(`[干跑] 将给 ${p.label} 打补丁`); return 'planned' } warn(`${p.label}：${posix(file)} 不存在，跳过`); return 'missing' }
   const s = readText(file)
-  if (p.any.test(s)) { ok(`${p.label}：已打过`); return 'applied' }
+  if (p.any.test(s)) {
+    if (p.refresh && !s.includes(p.new)) {
+      // 打过，但是旧写法：写死了某台电脑的路径（或者是别的电脑带过来的）→ 换成现在的写法
+      if (DRY) { info(`[干跑] ${p.label}：旧补丁写死了路径，将换成运行时自动定位`); return 'planned' }
+      write(file, s.replace(p.any, p.new), p.label)
+      ok(`${p.label}：旧补丁写死了路径，换成运行时自动定位`)
+      return 'applied'
+    }
+    ok(`${p.label}：已打过`); return 'applied'
+  }
   if (p.fixed && p.fixed.test(s)) { ok(`${p.label}：上游已经改好，不用打`); return 'upstream-fixed' }
   const old = olds.find((o) => s.includes(o))
   if (!old) {
     warn(`${p.label}：原文对不上（上游可能已经修了或改写了这段），没打补丁；验收时请核对 ${posix(file)}`)
     return 'anchor-missing'
   }
+  if (DRY) { info(`[干跑] 将打补丁：${p.label}`); return 'planned' }
   write(file, s.replace(old, p.new), p.label)
-  if (!DRY) ok(`${p.label}：已打`)
-  return DRY ? 'planned' : 'applied'
+  ok(`${p.label}：已打`)
+  return 'applied'
 }
 // 每个包的 cordis.patch.yml 里要加载的 name，都必须真能在 node_modules 里找到（@deepseek-ai/*、cordis:* 是 DSH 自带的）
 // 找不到 = DSH 启动时 import 失败。这次上游改名漏改的就是这一类
@@ -692,7 +724,7 @@ function renameInLocks(locks, renames) {
   }
   return done
 }
-function planCordis(text, { hub, defaultPreset }) {
+function planCordis(text, { hub, defaultPreset, dshHome, memRelative }) {
   let y = text.replace(/\r\n/g, '\n')
   const notes = []
   // 旧版安装包写的根层禁用：只对根层生效，会话用的 preset 里照旧是内置的，留着反而有风险 → 去掉
@@ -700,15 +732,13 @@ function planCordis(text, { hub, defaultPreset }) {
   y = y.replace(/^- id: ['"]?(compaction-basic|tool-result-pruner)['"]?\n  disabled: true\n/gm, '')
        .replace(/^- \{ ?id: ['"]?(compaction-basic|tool-result-pruner)['"]?, ?disabled: true ?\}\n/gm, '')
   if (y !== before) notes.push('去掉旧版安装包写在根层的 compaction-basic / tool-result-pruner 禁用（对会话不起作用）')
-  // memory 插件：自我层路径和上限
-  const esc = (id) => id.replace(/[-]/g, '\\-')
-  const has = (id) => new RegExp(`^- id: ['"]?${esc(id)}['"]?\\s*$`, 'm').test(y) || new RegExp(`^- \\{\\s*id: ['"]?${esc(id)}['"]?\\s*,`, 'm').test(y)
-  let memoryNote = null
-  if (!has('dsh-agent-memory')) {
-    if (y.length && !y.endsWith('\n')) y += '\n'
-    y += ['- id: dsh-agent-memory', '  name: dsh-agent-memory', '  config:', `    selfPath: '${posix(path.join(hub, 'SELF.md'))}'`, `    statePath: '${posix(path.join(hub, 'state.json'))}'`, '    maxBytes: 12288'].join('\n') + '\n'
-    notes.push('写入 dsh-agent-memory 的 selfPath、statePath、maxBytes: 12288')
-  } else if (!/maxBytes:\s*12288/.test(y)) memoryNote = 'cordis.patch.yml 里已有 dsh-agent-memory 的设置但没有 maxBytes: 12288，没动它；自我层可能被截断，请核对'
+  // memory 插件：自我层路径和上限。能用相对写法（记忆中枢在 DSH 家目录下、memory 补丁打得上）就写
+  // dsh-soul/memory/hub/SELF.md 这样不带用户名的路径；已有的设置核对一遍，别的电脑带过来的路径改成这台的
+  const mem = planMemoryConfig(y, { hub, dshHome, relative: memRelative, exists })
+  y = mem.text
+  notes.push(...mem.notes)
+  let memoryNote = mem.warns.length ? mem.warns.join('；') : null
+  if (!mem.paths.relative && memRelative !== undefined) notes.push(memRelative ? `记忆中枢不在 DSH 家目录下，memory 只能写绝对路径：${mem.paths.selfPath}` : `memory 的相对路径补丁没打上，这次仍写绝对路径：${mem.paths.selfPath}（换电脑后重跑安装或 --update 会改成这台的）`)
   // 默认 preset
   let current = null
   const reg = y.match(/^- id: ['"]?agent-preset-registry['"]?\n(?: {2}.*(?:\n|$))*/m)
@@ -781,7 +811,7 @@ const QUESTIONS = [
   { id: 'hardLines', group: '硬线', type: 'multi', ask: '要哪几条硬线？', hint: '硬线是「必须先问你」级别的规矩，agent 不许自己评估、不许绕。至少一条。', options: BUILTIN_LINES.map((l) => ({ value: l.name, desc: fillUser(l.rule, '你') })), default: DEFAULT_LINES },
   { id: 'customHardLines', group: '硬线', type: 'pairs', ask: '还要自己加硬线吗？（可空）', hint: '每条一个短名加一句规则，例：删除 —— 不删任何文件，要删先问。回答文件里写成 [{"name":"删除","rule":"不删任何文件，要删先问"}]', default: [] },
   { id: 'persona', group: '人设', type: 'choice', ask: '它说话要什么样子？', options: [{ value: 'none', label: '不设', desc: '正常、专业的口吻' }, { value: 'brief', label: '写几句说话风格', desc: '每轮注入自我层' }, { value: 'full', label: '写几句 + 完整人设文件', desc: '完整版放书房 65-声音，自我层里放这几句' }], default: 'none' },
-  { id: 'personaBrief', group: '人设', type: 'lines', askIf: 'persona 是 brief 或 full', required: true, ask: '用几句话写它的说话风格（一句一行）', hint: '每轮都会注入，越短越好。例：自称本喵 / 话短、爱吐槽但靠谱 / 不用 emoji' },
+  { id: 'personaBrief', group: '人设', type: 'lines', askIf: 'persona 是 brief 或 full', required: true, ask: '用几句话写它的说话风格（一句一行）', hint: '每轮都会注入，越短越好。例：自称本喵 / 话短、爱吐槽但靠谱 / 不用 emoji。另有三条规矩脚本会自动补上：人设只管「怎么说」、成稿不带人设、收起人设；你写了同样意思的句子，就用你的，不会重复。' },
   { id: 'personaFile', group: '人设', type: 'path', askIf: 'persona 是 full', required: true, ask: '完整人设文件在哪？（.md 或 .txt 的路径）', hint: '原样拷进方案和书房 65-声音/' },
   { id: 'multiSession', group: '运行', type: 'bool', ask: '会不会同时开好几个会话一起干活？', hint: '会 → 自我层里写「谁是主导」的判据（看账本里最后一条 lead）。', default: true },
   { id: 'windowSize', group: '运行', type: 'number', ask: '模型的上下文窗口多大？（token 数）', hint: '用来算水位分段；不知道就用默认。', default: 1000000 },
@@ -834,7 +864,7 @@ function normalizeAnswers(raw, ctx) {
   if (!s.hardLines.length) e.push('hardLines：至少要一条硬线')
   s.persona = str('persona') || 'none'
   if (!['none', 'brief', 'full'].includes(s.persona)) e.push(`persona：只能是 none / brief / full（现在是 ${s.persona}）`)
-  s.personaBrief = s.persona === 'none' ? [] : (Array.isArray(raw.personaBrief) ? raw.personaBrief : String(raw.personaBrief || '').split('\n')).map((x) => String(x).trim().replace(/^[-*·•]\s*/, '')).filter(Boolean)
+  s.personaBrief = s.persona === 'none' ? [] : dedupeLines((Array.isArray(raw.personaBrief) ? raw.personaBrief : String(raw.personaBrief || '').split('\n')).map((x) => String(x).trim().replace(/^[-*·•]\s*/, '')).filter(Boolean))
   if (s.persona !== 'none' && !s.personaBrief.length) e.push('personaBrief：选了人设，就要写几句说话风格')
   if (s.persona === 'full') {
     const f = str('personaFile')
@@ -879,9 +909,7 @@ function buildSetupFiles(s) {
   vars.PERSONA = fillUser(s.persona === 'none'
     ? ['- 正常、专业地说话：结论先行，说清楚就停；不知道就说不知道；做错了先认，马上补救。', '- ★ 风格只管「怎么说」，不管「说什么」：代码、命令、数据、结论照旧准确。'].join('\n')
     : [...s.personaBrief.map((l) => '- ' + l),
-      '- ★ 人设只管「怎么说」，不管「说什么」：代码、命令、数据、结论照旧准确，口癖不进代码块。',
-      '- ★ 成稿不带人设：给 {{USER}} 写的文档、代码、文案，按 {{USER}} 要的风格写；人设只活在成稿外面的对话里。',
-      '- ★ 收起人设：{{USER}} 说「正经点」「别演了」，或者遇到报错排查、正式文档、安全 / 医疗 / 法律 / 财务这类严肃事，就正常专业地说。',
+      ...personaRulesMissing(s.personaBrief),
       ...(voiceFile ? [`- 完整版在书房 \`soul/65-声音/${voiceFile}\`；改人设先改那份，再把要每轮带着的几条同步到这里。`] : [])].join('\n'), s.user)
   const conds = { PURPOSE: Boolean(s.purpose), MULTI: s.multiSession, VOICE: Boolean(voiceFile) }
   const tidy = (t) => t.replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '')
@@ -1483,7 +1511,7 @@ ok(`profile：${PROF}`)
 const arPath = path.join(DSH_HOME, 'logs', 'active-run.json')
 let running = null
 try { const ar = JSON.parse(readText(arPath)); running = Boolean(ar.started && !ar.ended) } catch { /* 文件不存在或格式不认识 */ }
-if (running === true) { if (DRY) warn('DSH 正在运行：干跑没关系，真跑前必须完全退出'); else die('DSH 正在运行。请先完全退出（macOS 按 Cmd+Q；Windows 连托盘图标也要退出），再重跑。') }
+if (running === true) { if (DRY) warn(MODE === 'install' || MODE === 'restore' ? 'DSH 正在运行：干跑没关系，真跑前必须完全退出 DSH，在终端里跑（命令见最后）。如果这次是 DSH 里的 agent 在跑：重开 DSH 后，验收和后面几步要在新建的会话里做，装之前开的会话不会换成 Soul preset' : 'DSH 正在运行：干跑没关系，真跑前必须完全退出'); else die('DSH 正在运行。请先完全退出（macOS 按 Cmd+Q；Windows 连托盘图标也要退出），再重跑。') }
 else if (running === false) ok('DSH 已退出')
 else if (flag('--confirm-quit')) ok('DSH 已退出（由使用者确认）')
 else if (!DRY && TTY) {
@@ -1810,14 +1838,36 @@ if (snapIds.length) warn('没找到 DSH 的 app.asar，这些 preset 按安装�
 for (const n of BUNDLE.notes) warn('Soul preset 简介：' + n)
 
 const PATCHES = patchList(RUNTIME, src.names, DSH_HOME).filter((x) => PKGS.includes(x.pkg))
+// memory 的相对路径补丁打不打得上（打不上配置就得写绝对路径）：要装的那份源码、已装的那份都认得才算
+function memRelativePredict() {
+  const p = PATCHES.find((x) => x.key === 'memory-home')
+  if (!p) return false
+  const ok = (f) => { const t = readText(f); return p.any.test(t) || t.includes(p.old) }
+  const srcF = path.join(SRC.dir, 'plugins', 'memory', p.file), instF = path.join(NM, p.pkg, p.file)
+  return exists(srcF) && ok(srcF) && (!exists(instF) || ok(instF))
+}
 // 零件和上游比：本机补丁过的文件先「还原」再比，免得把自己的补丁当成上游变化
+//   同一个文件可能有好几处补丁（言替 index.js 两处、memory lib/index.js 两处）：读一次，逐处还原，最后才算哈希
+//   还原先认完整的新写法（有的补丁 any 只认得新写法的开头），认不出再按 any 还原（旧写法、写死路径的那种）
+function unpatchText(t, list) {
+  for (const p of list) {
+    if (p.new && t.includes(p.new)) t = t.split(p.new).join(p.old)
+    else if (p.any.test(t)) t = t.replace(p.any, p.old)
+  }
+  return t
+}
 function partDiff(i) {
   const s = path.join(SRC.dir, 'plugins', AP[i]), dst = path.join(NM, INST[i])
   const oldM = hashInstalled(dst)
+  const byFile = new Map()
   for (const p of PATCHES) {
     if (p.pkg !== PKGS[i] || !oldM.has(p.file)) continue
-    const t = readText(path.join(dst, p.file))
-    if (p.any.test(t)) oldM.set(p.file, sha1(Buffer.from(t.replace(p.any, p.old), 'utf8')))
+    if (!byFile.has(p.file)) byFile.set(p.file, [])
+    byFile.get(p.file).push(p)
+  }
+  for (const [f, list] of byFile) {
+    const t = readText(path.join(dst, f)), u = unpatchText(t, list)
+    if (u !== t) oldM.set(f, sha1(Buffer.from(u, 'utf8')))
   }
   return diffMaps(oldM, hashFiles(s, packFiles(s)))
 }
@@ -1890,10 +1940,14 @@ if (UPDATE) {
     const body = (t) => t.split('\n').filter((l) => !l.startsWith('#')).join('\n')
     if (body(oldText) === body(BUNDLE.files['cordis.patch.yml'])) info('（preset 正文完全一样，只有文件开头的注释变了）')
   } else out('  Soul preset：和源一致，不用重新生成')
-  const cfgPlan = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET })
+  const cfgPlan = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET, dshHome: DSH_HOME, memRelative: memRelativePredict() })
   const pkgPlan = planPackageJson(readText(pkgPath), PKGS, RENAME_MAP)
   const hubStale = KIT_SET.some((f) => exists(path.join(SRC.dir, 'kit', 'echo', f)) && (!exists(path.join(HUB, f)) || sha1(fs.readFileSync(path.join(HUB, f))) !== sha1(fs.readFileSync(path.join(SRC.dir, 'kit', 'echo', f)))))
-  const patchPending = PATCHES.some((p) => p.needed && exists(path.join(NM, p.pkg, p.file)) && !p.any.test(readText(path.join(NM, p.pkg, p.file))) && readText(path.join(NM, p.pkg, p.file)).includes(p.old))
+  const patchPending = PATCHES.some((p) => {
+    if (!p.needed || !exists(path.join(NM, p.pkg, p.file))) return false
+    const t = readText(path.join(NM, p.pkg, p.file))
+    return p.any.test(t) ? Boolean(p.refresh && !t.includes(p.new)) : t.includes(p.old)
+  })
   if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !hubOf('update').length && !hubOf('add').length && !hubStale && !patchPending && !presetChanged && !cfgPlan.changed && !pkgPlan.changed) {
     out('\n已经是最新，什么都不用改。')
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
@@ -2091,7 +2145,7 @@ let finalDefault = null
     const stale = RENAMES.filter((r) => new RegExp(`name: ['"]?${reEsc(r.from)}['"]?`).test(cfgText))
     if (stale.length) warn(`cordis.patch.yml 里还有用旧包名加载的条目（${stale.map((r) => r.from).join('、')}），没动它；请核对`)
   }
-  const c = planCordis(exists(cfgPath) ? readText(cfgPath) : '', { hub: HUB, defaultPreset: DEFAULT_PRESET })
+  const c = planCordis(exists(cfgPath) ? readText(cfgPath) : '', { hub: HUB, defaultPreset: DEFAULT_PRESET, dshHome: DSH_HOME, memRelative: ['applied', 'planned'].includes(patchState['memory-home']) })
   for (const n of c.notes) ok(n)
   if (c.memoryNote) warn(c.memoryNote)
   if (c.changed) write(cfgPath, c.text, 'cordis.patch.yml')
@@ -2339,28 +2393,64 @@ if (!DRY) {
 } else info('[干跑] 真跑时会校验 package.json、各个包是否到位、注册 id 是否撞车，并写安装记录')
 
 // ═══ 完成 ════════════════════════════════════════════════════════════════
+const presetName = () => PRESET_LABEL[finalDefault] || finalDefault
 out('\n' + '─'.repeat(60))
 out(DRY ? '干跑结束：以上是计划，没有改任何文件。确认无误后去掉 --dry-run 再跑。' : `${{ install: '文件层面的安装', update: '更新', restore: '迁移恢复' }[MODE]}完成。`)
+if (DRY && running === true && MODE !== 'backup') {
+  // 多半是 DSH 里的 agent 在跑干跑：它自己没法在 DSH 退出后真跑，把现成的终端命令给用户
+  const q = (a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `"${a.replace(/(["\\$`])/g, '\\$1')}"`)
+  // 命令先 cd 到安装包，所以带路径的参数要换成绝对路径；--proxy 里的账号密码不进日志
+  const PATH_OPTS = ['--source', '--base-source', '--kit-source', '--app-asar', '--answers', '--restore', '--runtime', '--data-dir', '--dsh-home', '--node', '--out']
+  let masked = false
+  const args = argv.filter((a) => a !== '--dry-run').map((a, i, all) => {
+    const prev = all[i - 1]
+    if (PATH_OPTS.includes(prev) && !a.startsWith('--')) return path.resolve(a)
+    if (prev === '--proxy' && /\/\/[^/@\s]*@/.test(a)) { masked = true; return a.replace(/\/\/[^/@\s]*@/, '//***@') }
+    return a
+  })
+  const cmd = process.platform === 'win32'
+    ? `cd "${KIT}"; & "${process.execPath}" .\\install.mjs ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`
+    : `cd ${q(posix(KIT))} && ${q(posix(process.execPath))} install.mjs ${args.map(q).join(' ')}`
+  out(`\n真跑：先完全退出 DSH${process.platform === 'darwin' ? '（Cmd+Q）' : process.platform === 'win32' ? '（托盘图标也要退出），再在 PowerShell 里跑' : ''}${process.platform === 'win32' ? '' : '，再在终端里跑'}：\n  ${cmd.replace(/ +$/, '')}`)
+  if (masked) out('（--proxy 里的账号密码没有照抄进来，跑之前把 *** 换回原来的）')
+  if (MODE === 'install' || MODE === 'restore') out(`装完重开 DSH 后新建一个会话，顶部 preset 应该是「${presetName() || '方案默认的 Soul preset'}」（不是就手动选它），验收和后面几步都在这个新会话里做；真跑结束时会给出要贴进去的话。`)
+}
 if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
 if (!DRY && UPDATE) {
   out(`
 接下来（详见 AGENT-INSTALL.md「更新」一节）：
-  1. 启动 DSH，看有没有崩溃恢复对话框；新建会话，确认 preset 还是 ${finalDefault || '原来那个'}。${RENAMES.length ? `
+  1. 启动 DSH，看有没有崩溃恢复对话框；新建会话，确认 preset 还是「${presetName() || '原来那个'}」。${RENAMES.length ? `
      插件市场里 ${RENAMES.map((r) => r.from).join('、')} 会变成 ${RENAMES.map((r) => r.to).join('、')}。` : ''}${MCP_STATUS === '已接入 echo' ? `
      侧边栏会多一个 mcp-hub 面板；echo 那台服务器连上后，会话里会有 mcp__echo__echo_search 等工具（DSH 刚启动的一两秒还没连上）。` : ''}
   2. 让 ${AGENT} 调用 agent_soul_check（memory 参数给 ${posix(MEM)}），期望 0 错。
 没改的：书房、账本、SELF.src.md、权威源册、人设、主配置、心跳。
 备份：${posix(BK)}（附还原方法.txt）`)
 }
+// 装完以后的几步都要在「装完后新建的会话」里做：会话的 preset 是建会话时定的，装之前开的会话
+// （包括在 DSH 里跑这次安装的那个）不会自己换成 Soul preset，在里面测门牌只会看到内置压缩、没有门牌
+const newSessionNote = () => `  ★ 下面几步都在「装完后新建的会话」里做。会话的 preset 是建会话时定的：装之前开的会话（包括在 DSH 里跑这次安装的那个）
+    不会自己换成 Soul preset，在里面测门牌只会看到没有门牌的内置压缩。`
+const pasteBlock = (leadLine) => [
+  '  ┌─ 贴进新会话的话（从下一行到 └ 之前）',
+  `  你现在接任主导，这是我刚指定的。直接做，依次执行，把每条输出原样贴给我，不要改任何东西：`,
+  `  1. cd "${posix(HUB)}" && node mo.mjs add lead "${leadLine.text}" --ref "${leadLine.ref}"`,
+  `  2. 先读 ${posix(path.join(BODY, 'soul', '12-ledger.md'))}，再用 node mo.mjs add fact "……" --ref "……" 写下你自己的第一条账：写一件你此刻确实知道的、具体的事，别写总结；有感触就加 --feel，没有就不加。`,
+  '  3. node memindex.mjs build',
+  '  4. node self.mjs',
+  '  5. 调用 agent_soul_check，贴汇总行和所有 ✗ 的项',
+  `  6. 门牌实测：我们再聊两三句、你读一个文件以后，我会输入 /compact。压缩完你把摘要第一块原样贴出来（应以「⛬ 压缩索引（非原文） · log:…#seq=…」开头），再跑 node memq.mjs open <那个门牌>，贴出取回的原文。`,
+  '  └─',
+  `  （它的终端里没有 node 的话，把 node 换成 "${posix(process.execPath)}"）`,
+].join('\n')
 if (!DRY && RESTORE) {
   const gen = (() => { try { return (readText(path.join(SOUL, '02-墨.jsonl')).match(/"type"\s*:\s*"lead"/g) || []).length } catch { return 0 } })()
   out(`
 接下来（详见 AGENT-INSTALL.md「迁移」一节）：
-  1. 启动 DSH，新建会话，确认 preset 是「${PRESET_LABEL[finalDefault] || finalDefault}」，有 8 个 agent_soul_ 开头的工具${MCP_STATUS === '已接入 echo' ? '，过一两秒还会有 mcp__echo__ 开头的检索工具' : ''}。
-  2. 账本里最后一位主导是源电脑上的会话，这台电脑上没有它。让新会话接班（第 ${gen + 1} 代）：
-       cd "${posix(HUB)}"
-       node mo.mjs add lead "第 ${gen + 1} 代 · 接手于 <今天日期> · 上一代：${gen ? `第 ${gen} 代（迁移前在 ${RB.man.host}）` : '无（首代）'}" --ref "${USERN} <今天日期> 指定：迁移到新电脑后由本会话主导"
-     再跑 node memindex.mjs build && node self.mjs，然后调用 agent_soul_check，期望 0 错。
+${newSessionNote()}
+  1. 启动 DSH，新建会话，看顶部 preset 是「${presetName()}」，有 8 个 agent_soul_ 开头的工具${MCP_STATUS === '已接入 echo' ? '，过一两秒还会有 mcp__echo__ 开头的检索工具' : ''}。
+  2. 账本里最后一位主导是源电脑上的会话，这台电脑上没有它。让这个新会话接班（第 ${gen + 1} 代），把下面这段贴进去：
+${pasteBlock({ text: `第 ${gen + 1} 代 · 接手于 <今天日期> · 上一代：${gen ? `第 ${gen} 代（迁移前在 ${RB.man.host}）` : '无（首代）'}`, ref: `${USERN} <今天日期> 指定：迁移到新电脑后由本会话主导` })}
+     贴之前把 <今天日期> 换成今天。期望：agent_soul_check 0 错，门牌能取回原文。
   3. 门牌（log:<会话>#seq=…）照样能回取；账本旧记录里写死的 file: 绝对路径会失效，这是只追加账本的代价。
   4. 想升到上游最新版：退出 DSH 后跑 node install.mjs --update。
 
@@ -2369,11 +2459,11 @@ if (!DRY && RESTORE) {
 if (!DRY && MODE === 'install') {
   out(`
 接下来（详见 AGENT-INSTALL.md 的阶段 C、D）：
-  1. 启动 DSH，新建会话，确认 preset 是「${PRESET_LABEL[finalDefault] || finalDefault}」，有 8 个 agent_soul_ 开头的工具${MCP_STATUS === '已接入 echo' ? '，过一两秒还会有 mcp__echo__ 开头的检索工具' : ''}。
-  2. 让 DSH 里的 ${AGENT} 写主导记录和第一条账：
-       cd "${posix(HUB)}"
-       node mo.mjs add lead "第 1 代 · 接手于 <今天日期> · 上一代：无（首代）" --ref "${USERN} <今天日期> 指定：本会话是主导"
-  3. 再让它跑：node memindex.mjs build、node self.mjs，然后调用 agent_soul_check，期望 0 错。
+${newSessionNote()}
+  1. 启动 DSH，新建会话，看顶部 preset 是「${presetName()}」，有 8 个 agent_soul_ 开头的工具${MCP_STATUS === '已接入 echo' ? '，过一两秒还会有 mcp__echo__ 开头的检索工具' : ''}。
+  2. 让这个新会话里的 ${AGENT} 当第 1 代主导、写第一条账、做门牌实测，把下面这段贴进去：
+${pasteBlock({ text: '第 1 代 · 接手于 <今天日期> · 上一代：无（首代）', ref: `${USERN} <今天日期> 指定：本会话是主导` })}
+     贴之前把 <今天日期> 换成今天。期望：agent_soul_check 0 错（警告只剩「门牌回取」「压缩机制」，压缩过一次后变绿），门牌能取回原文。
 
 备份：${path.basename(b1)}${b2 ? '、' + path.basename(b2) : ''}（都在 ${posix(PROF)}）`)
 }

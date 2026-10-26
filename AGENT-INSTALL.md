@@ -135,6 +135,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 
 **B4. 真装**：用户确认后，请用户**完全退出 DSH**（macOS 按 `Cmd+Q`，点红色按钮只是关窗口；Windows 连托盘图标也要右键退出），然后去掉 `--dry-run` 再跑同一条命令。
 
+- **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
 - 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset ptc-soul`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--dsh-home <目录>`。
@@ -148,16 +149,16 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 | 2 | 下载并检查上游源码（缺文件、零件改成不认识的名字就停）；按方案生成 Soul preset 并校验 | 源码不对就停 |
 | 3 | 备份 `package.json`、`cordis.patch.yml` 为 `*.bak-<时间>-pre-soul-kit` | 出问题能还原 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频） | 桌面版只能这样装 |
-| 5 | 本机补丁：mnemon-probe 的默认路径改成真实的热记忆目录；clock 面板的定位；mcp-hub 找清单的默认目录；yantai 的账本 / 记忆中枢路径、riji 的日记目录（都要指向本机书房，桌面端不传环境变量）；echo、huanqi-panel 的 `cordis.patch.yml` 里加载名改成和包名一致（没装的零件跳过） | 见第十一节 3、4、16、17、22 |
+| 5 | 本机补丁：mnemon-probe 的默认路径改成真实的热记忆目录；clock 面板的定位；mcp-hub 找清单的默认目录；memory 的相对路径改成相对 DSH 家目录；yantai 的账本 / 记忆中枢路径、riji 的日记目录（都要指向书房，桌面端不传环境变量）；echo、huanqi-panel 的 `cordis.patch.yml` 里加载名改成和包名一致（没装的零件跳过）。路径类补丁都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧补丁会换成新写法 | 见第十一节 3、4、16、17、23 |
 | 6 | 生成 `node_modules/dsh-soul-preset`：从本机 DSH 自带的官方 PTC、和 Flash 精简·PTC v3 派生方案里要的 Soul 版，只把 `compaction-basic`、`tool-result-pruner` 的实现换成我们的两个零件 | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
-| 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath`、`statePath`、`maxBytes: 12288`；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐 |
+| 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`）；已有就不动 | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → `install-kit --all` 把脚本装进 hub（再补上同义词表 `synonyms.json`）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
 | 10 | 写入 `SELF.src.md`（方案里的模板，填上本机路径）→ `scaffold --apply` 搭骨架 → 方案带完整人设的放进 `65-声音/` | plan 的第 2、3 步 |
 | 11 | 心跳：写 `soul/60-工具/heartbeat.mjs`；方案开了心跳的，macOS 注册 launchd，Windows 注册计划任务（用电池也照跑，错过会补跑），并立刻触发一次 | 每天自动刷新索引和自我层 |
 | 12 | 校验：package.json 合法、各个包到位、注册 id 不撞车且面板 id 等于包名、**每个包要加载的插件都在 node_modules 里找得到**；写安装记录（含方案、拒掉的零件） | 任何一条不对都会让 DSH 一启动就崩或面板加载失败 |
 
-**B6. 成功的样子**：最后是「文件层面的安装完成」；开了心跳的，心跳那一步显示「已注册……并已手动触发一次」。「需要留意」里出现的提醒，逐条报给用户。
+**B6. 成功的样子**：最后是「文件层面的安装完成」；开了心跳的，心跳那一步显示「已注册……并已手动触发一次」。「需要留意」里出现的提醒，逐条报给用户。最后一段「接下来」里有一整段要贴进新会话的话（主导、第一条账、重建索引、装配自我层、体检、门牌实测），原样交给用户。
 
 ## 六、阶段 C：启动验收
 
@@ -175,27 +176,32 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 | C8 | 插件市场「已安装」里看 dsh-agent-compaction、dsh-agent-pruner | 显示「已停用」，**这是正常的**：它们由 Soul preset 调用，不在 bundles 里。不要打开，也不要卸载 |
 | C9 | （装了 mcp-hub）用户打开侧边栏的 mcp-hub 面板；DSH 启动几秒后，让 agent 列出名字以 `mcp__echo__` 开头的工具 | 面板里 echo 是已连接；工具有 echo_search、echo_open、echo_stats。刚启动一两秒内还没连上属正常（它是后台连接） |
 
-## 七、阶段 D：在 DSH 里让 agent 完成剩下几步
+## 七、阶段 D：在装完后新建的会话里完成剩下几步
 
 这几步**必须由 DSH 里的 agent 来跑**：账本要记下是哪个会话写的，装配 SELF.md 要用当前会话 ID 和本地时间，外面代跑会写错。
 
-把下面这段发给 DSH 里的 agent（先替换：`<HUB>` 是本机路径，macOS 是 `/Users/<用户名>/.dsh/dsh-soul/memory/hub`，Windows 是 `C:/Users/<用户名>/.dsh/dsh-soul/memory/hub`；`<今天>` 是今天的日期；`<称呼>` 是方案里的称呼。脚本最后打印的命令已经替换好，可以直接用）：
+**而且必须是装完、重开 DSH 之后新建的会话。** 会话的 preset 在新建会话时就定了：装之前开的会话（包括在 DSH 里跑这次安装的那个）不会自己换成 Soul preset，在里面做门牌实测，压缩走的是内置那套，只会看到「没有门牌」的假结论；主导也应该是用 Soul preset 跑的那个会话。
 
-```text
-你是第 1 代主导，这是我现在指定的。直接做，依次执行，把每条输出原样贴给我，不要改任何东西：
-1. cd "<HUB>" && node mo.mjs add lead "第 1 代 · 接手于 <今天> · 上一代：无（首代，灵魂架构刚装好）" --ref "<称呼> <今天> 指定：本会话是主导"
-2. 先读 profile 里 node_modules/dsh-agent-soul/soul/12-ledger.md，再用 node mo.mjs add fact "……" --ref "……" 写下你自己的第一条账：写一件你此刻确实知道的、具体的事，别写总结；有感触就加 --feel，没有就不加。
-3. node memindex.mjs build
-4. node self.mjs
-5. 调用 agent_soul_check，贴汇总行和所有 ✗ 的项
-```
+**D1.** 请用户新建会话，先看会话顶部的 preset：应该是方案的默认 Soul preset（大肥鱼方案是「PTC · Soul · Flash 模式」）。不是的话，在新建会话时手动选上再开始。
+
+然后把安装脚本最后打印的那段话（「┌─ 贴进新会话的话」到「└─」之间）原样贴进这个新会话。里面的路径、称呼、代数都已经按这台电脑填好了，**不要自己拼路径**（DSH 家目录不一定是 `~/.dsh`，Windows 上也可能在别处）。把 `<今天日期>` 换成今天的日期。那段话依次让 agent：
+
+1. 用 `mo.mjs add lead` 写主导记录（`--ref` 写清是用户哪天指定的）；
+2. 读 `dsh-agent-soul/soul/12-ledger.md`，写下自己的第一条账（写一件此刻确实知道的、具体的事，别写总结；有感触才加 `--feel`）；
+3. `node memindex.mjs build`；
+4. `node self.mjs`；
+5. 调用 `agent_soul_check`，贴汇总行和所有 ✗ 的项；
+6. 门牌实测的准备（见 D2）。
+
+脚本的输出找不到了：重跑同一条安装命令（重复跑安全，做过的步骤会跳过），最后会再打印一遍。
 
 - 自我层里有「开工」这类硬线的，agent 动手前可能会先问；用户回「直接做」即可。
-- 它的终端里没有 `node` 的话，把命令里的 `node` 换成阶段 A3 找到的完整路径。
+- 它的终端里没有 `node` 的话，那段话最后一行写了要换成的完整路径。
 - **正确结果**：`agent_soul_check` **0 错**；警告只剩「门牌回取」「压缩机制」（还没发生过压缩）。方案开了心跳、却还有「心跳」警告的，说明定时任务没注册上，看阶段 E。
 
-**D2. 门牌实测（Soul preset 真的接管了没有）**：在同一个会话里再聊两三句，让它读一个文件，然后用户输入 `/compact`。看到「Compacted … history items」后，让 agent 把压缩摘要第一块原样贴出来：应以「⛬ 压缩索引（非原文） · log:session-…#seq=…」开头。再让它跑 `node memq.mjs open log:<那个会话>#seq=<那个数>`，能翻出原话，就把 `soul/00-authority.md` 第七节「检索能否指回原文」那一项填成「能」，并写上这次的实测。
-（工具输出裁剪只在自动压缩时才会发生，手动 `/compact` 不触发；等第一次自动压缩后，看被裁掉的工具输出里有没有「原文在 append-only 会话日志 seq N」。）
+**D2. 门牌实测（Soul preset 真的接管了没有）**：**在 D1 的这个新会话里**再聊两三句，让它读一个文件，然后用户输入 `/compact`。看到「Compacted … history items」后，让 agent 把压缩摘要第一块原样贴出来：应以「⛬ 压缩索引（非原文） · log:session-…#seq=…」开头。再让它跑 `node memq.mjs open log:<那个会话>#seq=<那个数>`，能翻出原话，就把 `soul/00-authority.md` 第七节「检索能否指回原文」那一项填成「能」，并写上这次的实测。
+- 摘要开头不是「⛬ 压缩索引」：先看这个会话顶部的 preset 是不是 Soul preset（第十一节 22），再看第十一节 8、21。
+- 工具输出裁剪只在自动压缩时才会发生，手动 `/compact` 不触发；等第一次自动压缩后，看被裁掉的工具输出里有没有「原文在 append-only 会话日志 seq N」。
 
 ## 八、阶段 E：心跳验收（方案开了心跳才做）
 
@@ -278,7 +284,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 |---|---|---|---|
 | 1 | 往 `~/.zshrc` 或系统里设的环境变量，插件读不到 | DSH 桌面版只从登录 shell 取 PATH、LANG 等少数几个变量 | 所有路径都改用配置文件或改代码默认值，不靠环境变量 |
 | 2 | 在插件市场装 / 卸任何插件后，`agent_soul_*` 工具突然读不到配置 | 市场会触发 pnpm 重装整个 profile，按每个包的 `files` 清单重整文件，**清单外的文件、软链接会被删** | 配置副本放在本体的 `kit/` 里（在清单内）；所有包都写进 dependencies，补丁也会保留 |
-| 3 | mnemon-probe 每轮报「读盘失败 / 到达上限」 | 它默认找 `~/.mnemon/runtime`，实际在 `<DSH 家目录>/.mnemon/runtime`；或者根本没装 dsh-mnemon | 补丁改默认值；没装 dsh-mnemon 时全新安装不让选它 |
+| 3 | mnemon-probe 每轮报「读盘失败 / 到达上限」 | 它默认找 `~/.mnemon/runtime`，实际在 `<DSH 家目录>/.mnemon/runtime`；或者根本没装 dsh-mnemon | 补丁改默认值（运行时按 DSH 家目录定位）；没装 dsh-mnemon 时全新安装不让选它 |
 | 4 | 时钟面板掉出窗口左下角 | 插件 bug：坐标写在了没有定位的外层元素上 | 补丁修定位 |
 | 5 | 自我层每轮被截断 | memory 默认上限 8192 字节，作者的装配预算是 12288 | `maxBytes: 12288`；自我层模板控制在约 6KB 以内 |
 | 6 | 体检「版本漂移」报红，点名 `test-self-check.mjs` | `install-kit --all` 带进了仓库的测试脚本 | 挪到 `memory/_kit-unused/` |
@@ -292,11 +298,13 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 | 14 | Windows 建软链接失败 | 普通用户没有建软链接的权限 | 改写成只含 memory 一项的指针文件 |
 | 15 | Windows 上 PowerShell 脚本里的中文路径乱码；计划任务插电池时不跑 | PowerShell 5.1 读无 BOM 脚本按本地代码页解码；计划任务默认「用电池时不启动」 | 注册脚本带 BOM；计划任务设成用电池也跑、错过补跑 |
 | 16 | 上游 v2.0.0 起回声面板、换气面板加载失败（「应用无法启动」或面板空白） | 作者把两个包改名为 `dsh-yanqing-echo`、`dsh-yanqing-huanqi-panel`，面板 id 也跟着改了，但它们 `cordis.patch.yml` 里要加载的 `name` 还是旧的 `dsh-agent-*`；DSH 按这个名字去 node_modules 找包，找不到 | 本机修：把那一行改成和包名一致；校验阶段会检查每个包要加载的插件都找得到 |
-| 17 | mcp-hub 找不到清单 | 它找 `$DSH_HOME/mcp-hub/servers.json`，环境变量里没有 DSH_HOME 时退到作者机器的 `D:\AI\dsh\home` | 本机改：默认值换成本机 DSH 家目录 |
+| 17 | mcp-hub 找不到清单 | 它找 `$DSH_HOME/mcp-hub/servers.json`，环境变量里没有 DSH_HOME 时退到作者机器的 `D:\AI\dsh\home` | 本机改：默认值换成运行时找到的 DSH 家目录 |
 | 18 | 作者的常驻检索服务 `echo-svc.mjs` 在 Mac 上用不了 | 它用 Windows 命名管道 | 不启动它；`memq` 连不上会自动退回直接读，快路子走 mcp-hub 的 echo |
 | 19 | 下载报 `SSL_ERROR_SYSCALL` / `socket disconnected` | 代理那一刻连不上 GitHub | 过一会儿重跑，或换代理；还不行就浏览器下载源码，用 `--source` |
 | 20 | 在 agent 的终端里跑 `install.mjs` 没有提问，直接停在「要先选怎么装」 | agent 的终端不是真终端，脚本不在里面提问 | 照 B1～B3 走：`--setup <方案名>`，或 `--questions` 问完写回答文件再 `--fresh --answers` |
 | 21 | 上游 `agent_soul_install` 的 scan 报 dsh-agent-compaction、dsh-agent-pruner「在 node_modules 但不在 bundles —— 等于没启用」，agent 据此以为压缩是内置那套在做，要去「接管」 | scan 只看 bundles，认不出路 B。这两个按设计就不进 bundles，由 Soul preset 在 compaction 组里同 id 换 name 接管（上游源码也把它们列为只能走路 B 的零件） | 误报，不用动配置：别把它们加进 bundles（会和内置的抢名字），也别去改 `~/.dsh/.agent-presets`（DSH NEXT 不读）。判断压缩是谁做的看产物：摘要第一行是「⛬ 压缩索引（非原文）」、被裁的工具输出写着「原文在 append-only 会话日志 seq N」的，是我们的两个包；换气触发的清理压缩走内置，没有这个开头，属正常 |
+| 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
+| 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 
 ## 十二、回滚 / 卸载
 
@@ -313,6 +321,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 - **换主导**：每个新会话默认只是「执行者」（能记事实，不能许承诺）。用户想让某个会话接班，就让它写一条新的 `lead`（`--ref` 写清是用户哪天指定的），再跑 `node memindex.mjs build && node self.mjs` 让自我层跟上。
 - **改人设**：有完整人设的，先改 `soul/65-声音/<名字>-声音.md`，再把需要每轮带着的几条同步进 `memory/hub/SELF.src.md` 的「说话与样子」；没有的直接改那一节。然后让 agent 跑 `node self.mjs`。
 - **改方案**：想让以后装出来的不一样，改 `setups/<方案名>/` 里的文件（`setup.json` 管零件、preset、心跳；另外两个是权威源册和自我层模板）。已经装好的电脑不受影响，要改就改书房和中枢里的那份。
+- **换电脑、换用户名、挪 DSH 家目录**：memory 的配置和路径类补丁不带用户名，跟着家目录走；但中枢主配置 `echo.config.json`、心跳、mcp-hub 里 echo 的命令是按这台电脑写的绝对路径，搬到别处要用第十节的备份恢复，或者在新位置重跑一次安装。
 - **改配置**：只改主配置 `memory/hub/echo.config.json`，再复制到 `profile/node_modules/dsh-agent-soul/kit/echo.config.json`（`--update` 也会照主配置重写副本）。
 - **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset ptc-soul`（只能选这台电脑生成了的 preset）。
 
