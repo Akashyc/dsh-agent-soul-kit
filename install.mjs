@@ -22,7 +22,7 @@
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
 //   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
-//   --default-preset <id|keep>   新会话默认用的 preset：ptc-soul-flash、ptc-soul、keep（更新默认）；安装默认按方案
+//   --default-preset <id|keep>   新会话默认用的 preset：ptc-soul、ptc-soul-flash、standard-soul、minimal-soul、cordis-soul 或 keep（更新默认）；安装默认按方案
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → ~/.dsh → %APPDATA%\dsh 依次找
@@ -59,6 +59,7 @@ import { createRequire } from 'node:module'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline/promises'
 import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle } from './lib/soul-presets.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
@@ -86,8 +87,6 @@ const HUB_EXCLUDE = ['install-kit.mjs', 'test-self-check.mjs']
 // 这两个由 Soul preset 调用，只进 dependencies，不进 bundles（进了 bundles 会挂到根层，和内置压缩抢名字）
 const PRESET_ONLY = ['dsh-agent-compaction', 'dsh-agent-pruner']
 const PRESET_PKG = 'dsh-soul-preset'
-const PRESET_IDS = ['ptc-soul', 'ptc-soul-flash']
-const OLD_PRESET_IDS = { 'flash-lean-ptc-v3-soul': 'ptc-soul-flash' } // 早期版本用过的 id
 const PREDECESSORS = ['dsh-loop-guard', 'dsh-reasoning-only-guard', 'dsh-stalled-turn-continue']
 const KIT_SET = ['echo-doctor.mjs', 'echo-config.mjs'] // 中枢里归仓库管的两个脚本，其余按本机演化
 const SKIP_RE = /(^|\/)(\.DS_Store|\.git|node_modules)(\/|$)|\.(mp4|mov|webm)$/i
@@ -646,132 +645,6 @@ function patchNamesMissing(nm, pkgDirs, parse) {
 }
 
 // ── Soul preset ───────────────────────────────────────────────────────
-function openAsar(file) {
-  const fd = fs.openSync(file, 'r')
-  const b8 = Buffer.alloc(8); fs.readSync(fd, b8, 0, 8, 0)
-  const headerSize = b8.readUInt32LE(4)
-  const hb = Buffer.alloc(headerSize); fs.readSync(fd, hb, 0, headerSize, 8)
-  const header = JSON.parse(hb.subarray(8, 8 + hb.readUInt32LE(4)).toString('utf8'))
-  const base = 8 + headerSize
-  const node = (p) => { let n = header; for (const seg of p.split('/')) { if (!n.files || !n.files[seg]) return null; n = n.files[seg] } return n }
-  return {
-    read(p) {
-      const n = node(p); if (!n || n.files) return null
-      if (n.unpacked) return fs.readFileSync(path.join(file + '.unpacked', ...p.split('/')))
-      const b = Buffer.alloc(n.size); fs.readSync(fd, b, 0, n.size, base + Number(n.offset)); return b
-    },
-    close() { fs.closeSync(fd) },
-  }
-}
-function findAppAsar() {
-  const c = []
-  if (opt('--app-asar')) c.push(path.resolve(opt('--app-asar')))
-  let d = path.dirname(process.execPath)
-  for (let i = 0; i < 10; i++) { c.push(path.join(d, 'app.asar'), path.join(d, 'resources', 'app.asar'), path.join(d, 'Resources', 'app.asar')); const up = path.dirname(d); if (up === d) break; d = up }
-  if (process.platform === 'darwin') for (const r of ['/Applications', path.join(os.homedir(), 'Applications')]) for (const n of ['DSH NEXT.app', 'DeepSeek Harness.app']) c.push(path.join(r, n, 'Contents', 'Resources', 'app.asar'))
-  if (process.platform === 'win32') for (const r of [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'), process.env.ProgramFiles].filter(Boolean)) {
-    try { for (const e of fs.readdirSync(r)) c.push(path.join(r, e, 'resources', 'app.asar')) } catch { /* 没有这个目录 */ }
-  }
-  for (const f of c) {
-    try {
-      if (!exists(f) || !fs.statSync(f).isFile()) continue
-      const a = openAsar(f)
-      const ptc = a.read('node_modules/@deepseek-ai/dsh-web-app/presets/ptc.patch.yml')
-      if (!ptc) { a.close(); continue }
-      const web = JSON.parse(String(a.read('node_modules/@deepseek-ai/dsh-web-app/package.json') || '{}'))
-      const app = JSON.parse(String(a.read('package.json') || '{}'))
-      a.close()
-      return { file: f, text: ptc.toString('utf8'), webApp: web.version || null, app: app.version || null }
-    } catch { /* 下一个 */ }
-  }
-  return null
-}
-function presetSources(nm) {
-  const a = findAppAsar()
-  const ptc = a
-    ? { text: a.text, from: `DSH 自带（${posix(a.file)}）`, version: `DSH ${a.app || '?'} · dsh-web-app ${a.webApp || '?'}`, dsh: { app: a.app, webApp: a.webApp } }
-    : { text: readText(path.join(ASSETS, 'presets', 'ptc.patch.yml')), from: '安装包快照 assets/presets/ptc.patch.yml', version: 'DSH 2.0.19-next · dsh-web-app 0.2.1-rc.2（快照）', dsh: null, snapshot: true }
-  const fp = path.join(nm, 'dsh-flash-presets', 'presets', 'flash-lean-ptc-v3.patch.yml')
-  const fpj = readJson(path.join(nm, 'dsh-flash-presets', 'package.json'))
-  const flash = exists(fp)
-    ? { text: readText(fp), from: '已装的 dsh-flash-presets', version: `dsh-flash-presets ${fpj && fpj.version}` }
-    : { text: readText(path.join(ASSETS, 'presets', 'flash-lean-ptc-v3.patch.yml')), from: '安装包快照 assets/presets/flash-lean-ptc-v3.patch.yml', version: 'dsh-flash-presets 0.2.5（快照）', snapshot: true }
-  return { ptc, flash }
-}
-// 从源 preset 派生 Soul 版：只换 id / 名字 / 说明，和压缩、裁剪两个零件的 name，其余逐字保留
-function derive(srcText, { id, label, description }) {
-  const lines = srcText.replace(/\r\n/g, '\n').split('\n')
-  const start = lines.findIndex((l) => /^- insert:\s*$/.test(l))
-  if (start < 0) throw new Error('源文件里找不到 - insert:')
-  let body = lines.slice(start + 1).join('\n').replace(/\s+$/, '') + '\n'
-  const once = (re, fn, what) => {
-    const m = body.match(new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'))
-    if (!m || m.length !== 1) throw new Error(`${what}：应匹配 1 处，实际 ${m ? m.length : 0} 处`)
-    body = body.replace(re, fn)
-  }
-  once(/^(    - id: )(preset-[\w-]+)$/m, (_, a) => a + 'preset-' + id, '声明行 id')
-  once(/^(        id: )([\w-]+)$/m, (_, a) => a + id, 'preset id')
-  const head = () => body.split('        plugins:')[0]
-  if (/^        name: .*$/m.test(head())) once(/^(        name: ).*$/m, (_, a) => a + JSON.stringify(label), 'preset 名称')
-  else body = body.replace(/^(        id: [\w-]+)$/m, `$1\n        name: ${JSON.stringify(label)}`)
-  if (/^        description: .*$/m.test(head())) once(/^(        description: ).*$/m, (_, a) => a + JSON.stringify(description), 'preset 说明')
-  else body = body.replace(/^(        name: .*)$/m, `$1\n        description: ${JSON.stringify(description)}`)
-  once(/name: '@deepseek-ai\/dsh-compaction-basic'/, () => "name: 'dsh-agent-compaction'", '压缩零件')
-  once(/name: '@deepseek-ai\/dsh-compaction-tool-result-pruner'/, () => "name: 'dsh-agent-pruner'", '裁剪零件')
-  return body
-}
-const PTC_DESC = '官方 PTC 预设，只把兜底压缩和工具结果裁剪换成 dsh-agent-soul 的版本（摘要和被裁内容带可回取原文的门牌），其余与官方 PTC 完全一致。'
-const FLASH_DESC = '与 PTC · Soul 模式一样带门牌压缩和裁剪，区别是更省 token：多一套精简行事规则（控回合数、少空想、批量调用、只读新内容）；上下文用到 25% 就压缩，只留最近约 2 万 token 原文（PTC · Soul 模式到 80% 才压）；不带定时任务工具和每轮的时间提示，子 agent 默认可续接。'
-function buildPresetBundle(src, ids = PRESET_IDS) {
-  const made = {}
-  if (ids.includes('ptc-soul')) made['ptc-soul'] = derive(src.ptc.text, { id: 'ptc-soul', label: PRESET_LABEL['ptc-soul'], description: PTC_DESC })
-  if (ids.includes('ptc-soul-flash')) made['ptc-soul-flash'] = derive(src.flash.text, { id: 'ptc-soul-flash', label: PRESET_LABEL['ptc-soul-flash'], description: FLASH_DESC })
-  const a = made['ptc-soul'], b = made['ptc-soul-flash']
-  // 简介里写的对比是按 DSH 2.0.19-next / dsh-flash-presets 0.2.5 核过的；源变了就提醒
-  const notes = []
-  const block = (t, id) => { const m = t.match(new RegExp(`- id: ${id}\\n[\\s\\S]*?(?=\\n\\s*- id: |$)`)); return m ? m[0] : '' }
-  if (a && /thresholdRatio/.test(block(a, 'compaction-basic'))) notes.push('官方 PTC 现在自带压缩阈值，「PTC · Soul 模式到 80% 才压」可能不准')
-  if (b && (!/thresholdRatio: 0\.25/.test(b) || !/retainTokens: 20000/.test(b))) notes.push('Flash 源的压缩参数变了，「25% 就压缩、只留约 2 万 token」可能不准')
-  if (b && (/- id: time-context\b/.test(b) || /- id: tool-schedule\b/.test(b))) notes.push('Flash 源现在带了时间提示或定时任务工具，简介里「不带」那句可能不准')
-  const srcLine = [a && `${PRESET_LABEL['ptc-soul']} ← 官方 PTC，${src.ptc.version}`, b && `${PRESET_LABEL['ptc-soul-flash']} ← Flash 精简·PTC v3，${src.flash.version}`].filter(Boolean).join('；')
-  const yml = [
-    '# dsh-soul-preset：从现成 preset 派生的 Soul 版，由 dsh-agent-soul 安装包的 install.mjs 生成，不要手改。',
-    '# 与源 preset 的差别只有两处：compaction-basic → dsh-agent-compaction，tool-result-pruner → dsh-agent-pruner。',
-    `# 源：${srcLine}`,
-    '- insert:',
-  ].join('\n') + '\n' + PRESET_IDS.filter((id) => made[id]).map((id) => made[id]).join('').replace(/\n$/, '')
-  const pkg = JSON.stringify({
-    name: PRESET_PKG, version: '0.1.0', private: true, type: 'module',
-    description: '从现成 preset 派生的 Soul 版：只把兜底压缩和工具结果裁剪换成 dsh-agent-compaction / dsh-agent-pruner，其余与源 preset 一致',
-    files: ['README.md', 'cordis.patch.yml', 'package.json'],
-    dsh: { bundle: { patch: './cordis.patch.yml' } },
-  }, null, 2)
-  const list = [a && `「${PRESET_LABEL['ptc-soul']}」（源：官方 PTC）`, b && `「${PRESET_LABEL['ptc-soul-flash']}」（源：Flash 精简·PTC v3）`].filter(Boolean)
-  const readme = [
-    '# dsh-soul-preset',
-    '',
-    `给 DSH 的 preset 列表加 Soul 版：${list.join('和')}。每个 Soul 版从源 preset 原样派生，只改两行：`,
-    '',
-    '- `compaction-basic` 的实现换成 `dsh-agent-compaction`（兜底压缩的摘要第一块带门牌 `log:<会话>#seq=<n>`）',
-    '- `tool-result-pruner` 的实现换成 `dsh-agent-pruner`（被裁掉的工具输出标出原文所在的 seq）',
-    '',
-    `id ${PRESET_IDS.filter((id) => made[id]).length > 1 ? '分别' : ''}是 ${PRESET_IDS.filter((id) => made[id]).join('、')}，isolate、压缩阈值等参数全部照抄源 preset。`,
-    '',
-    '## 为什么要单独做 preset',
-    '',
-    'DSH NEXT 里每个 preset 自带一个隔离的 `compaction` 组，会话用的是 preset 里那份压缩，不是 profile 根层那份。',
-    '所以「把 dsh-agent-compaction 排到 bundles 最前 + 根层禁用 compaction-basic」只改了根层，会话里跑的仍是内置压缩；',
-    'preset 嵌在 declaration 的 config 里，profile 的 cordis.patch.yml 也没法按 id 改到它。只能派生一个新 preset。',
-    'dsh-agent-compaction / dsh-agent-pruner 因此只在 dependencies 里、不在 bundles 里，插件市场会把它们显示成「已停用」，这是正常的，不要打开也不要卸载。',
-    '',
-    '## 维护',
-    '',
-    '- `cordis.patch.yml` 由安装包的 `install.mjs` 从源 preset 生成，不要手改；DSH 或源 preset 更新后跑 `install.mjs --update` 重新生成。',
-    '- 源：官方 PTC 来自 DSH 自带的 `dsh-web-app/presets/ptc.patch.yml`（在 app.asar 里）；Flash 精简·PTC v3 来自已装的 `dsh-flash-presets`，没装就用安装包里的快照。',
-    '- 依赖 profile 里已装好 `dsh-agent-compaction`、`dsh-agent-pruner`（只需在 dependencies 里，不必在 bundles 里）。',
-  ].join('\n')
-  return { files: { 'package.json': pkg, 'cordis.patch.yml': yml, 'README.md': readme }, notes }
-}
 function yamlParser(prof) {
   const req = createRequire(path.join(prof, 'package.json'))
   try {
@@ -884,8 +757,6 @@ const PART_INFO = {
   splash: { what: '启动一屏：换动画、淡入淡出、选择显示项', without: '每次启动都是默认画面' },
   yantai: { what: '工作台面板：上下文水位、未结的活、最近账本、几扇门', without: '状态散在四个地方，想先看一眼的成本高到不会做' },
 }
-const PRESET_LABEL = { 'ptc-soul': 'PTC · Soul 模式', 'ptc-soul-flash': 'PTC · Soul · Flash 模式' }
-const PRESET_INFO = { 'ptc-soul': '官方 PTC + 带门牌的压缩和裁剪，上下文到 80% 才压', 'ptc-soul-flash': '更省 token：精简行事规则，上下文到 25% 就压，只留最近约 2 万 token 原文' }
 // 硬线的默认规则；{{USER}} 换成称呼
 const BUILTIN_LINES = [
   { name: '凭据', rule: '不读、不复述、不交出。API KEY / cookie / token / 密码 / 私钥 / 二维码串一律同等对待' },
@@ -1559,7 +1430,7 @@ if (QUESTIONS_MODE) {
       name: '小鲸', user: '老板', userNote: '', purpose: '帮我写代码、整理资料',
       hardLines: DEFAULT_LINES, customHardLines: [{ name: '删除', rule: '不删任何文件，要删先问老板' }],
       persona: 'brief', personaBrief: ['自称小鲸', '话短，结论先行', '不用 emoji'],
-      multiSession: true, windowSize: 1000000, presets: ['ptc-soul', 'ptc-soul-flash'], defaultPreset: 'ptc-soul-flash',
+      multiSession: true, windowSize: 1000000, presets: ['ptc-soul', 'ptc-soul-flash', 'standard-soul', 'minimal-soul', 'cordis-soul'], defaultPreset: 'ptc-soul-flash',
       heartbeat: true, heartbeatTime: '12:00', parts: OPTIONAL_PARTS.filter((x) => !PART_INFO[x].needsMnemon || mnemon !== false), setupName: '小鲸',
     },
   }, null, 2))
@@ -1671,7 +1542,7 @@ ok(`书房 ${SOUL}`)
 ok(`记忆中枢 ${MEM}`)
 
 // ═══ 备份（--backup）：只带 dsh-agent-soul 自己的东西 ═══════════════════
-const SOUL_IDS_FALLBACK = ['dsh-agent-soul', 'dsh-agent-compaction', 'dsh-agent-pruner', 'dsh-agent-memory', 'dsh-agent-mnemon-probe', 'dsh-agent-echo', 'dsh-agent-clock', 'huanqi', 'dsh-agent-huanqi-panel', 'dsh-mcp-hub', 'preset-ptc-soul', 'preset-ptc-soul-flash']
+const SOUL_IDS_FALLBACK = ['dsh-agent-soul', 'dsh-agent-compaction', 'dsh-agent-pruner', 'dsh-agent-memory', 'dsh-agent-mnemon-probe', 'dsh-agent-echo', 'dsh-agent-clock', 'huanqi', 'dsh-agent-huanqi-panel', 'dsh-mcp-hub', 'preset-ptc-soul', 'preset-ptc-soul-flash', 'preset-standard-soul', 'preset-minimal-soul', 'preset-cordis-soul']
 const STATE_FILES = ['dsh-huanqi.json', 'huanqi-turns.jsonl']
 if (BACKUP) {
   if (!installed) die('这台电脑上还没装 dsh-agent-soul，没什么可备份的。')
@@ -1917,7 +1788,7 @@ if (!UPDATE && installed) {
 
 const SRC_PRESETS = presetSources(NM)
 let BUNDLE
-try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE) } catch (e) { die(`生成 Soul preset 失败：${e.message}。源 preset 的结构变了，要人工看一下，先停下告诉用户。`) }
+try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
 const parseYaml = yamlParser(PROF)
 if (parseYaml) {
   try {
@@ -1927,12 +1798,15 @@ if (parseYaml) {
     for (const r of d[0].insert) {
       const comp = r.config.plugins.find((p) => p.id === 'compaction')
       const names = comp && Array.isArray(comp.config) ? comp.config.map((x) => x.name) : []
-      if (!names.includes('dsh-agent-compaction') || !names.includes('dsh-agent-pruner')) throw new Error(`${r.config.id} 的 compaction 组没换成功`)
+      const srcText = SRC_PRESETS[PRESET_SOURCE[r.config.id]].text
+      const needPruner = srcText.indexOf('dsh-compaction-tool-result-pruner') >= 0
+      if (!names.includes('dsh-agent-compaction') || (needPruner && !names.includes('dsh-agent-pruner'))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
     }
   } catch (e) { die(`生成的 Soul preset 校验没过：${e.message}`) }
 }
-ok(`Soul preset 的源：${[PRESET_CHOICE.includes('ptc-soul') && `PTC ← ${SRC_PRESETS.ptc.from}`, PRESET_CHOICE.includes('ptc-soul-flash') && `Flash ← ${SRC_PRESETS.flash.from}`].filter(Boolean).join('；')}`)
-if (SRC_PRESETS.ptc.snapshot && PRESET_CHOICE.includes('ptc-soul')) warn('没找到 DSH 的 app.asar，「PTC · Soul 模式」按安装包里的快照生成，可能和本机 DSH 版本对不上；可以用 --app-asar 指定')
+ok('Soul preset 的源：' + PRESET_CHOICE.map((id) => PRESET_LABEL[id] + ' ← ' + SRC_PRESETS[PRESET_SOURCE[id]].from).join('；'))
+const snapIds = PRESET_CHOICE.filter((id) => PRESET_SOURCE[id] !== 'flash' && SRC_PRESETS[PRESET_SOURCE[id]].snapshot)
+if (snapIds.length) warn('没找到 DSH 的 app.asar，这些 preset 按安装包里的快照生成，可能和本机 DSH 版本对不上：' + snapIds.map((id) => PRESET_LABEL[id]).join('、') + '；可以用 --app-asar 指定')
 for (const n of BUNDLE.notes) warn('Soul preset 简介：' + n)
 
 const PATCHES = patchList(RUNTIME, src.names, DSH_HOME).filter((x) => PKGS.includes(x.pkg))
@@ -2445,7 +2319,7 @@ if (!DRY) {
     dsh: SRC_PRESETS.ptc.dsh,
     setup: SETUP_INFO,
     presetIds: PRESET_CHOICE,
-    presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, x === 'ptc-soul' ? SRC_PRESETS.ptc.version : SRC_PRESETS.flash.version])),
+    presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
     defaultPreset: finalDefault,
     parts: partsDone,
     declined: [...new Set([...DECLINED0, ...OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p))])].filter((p) => !isInstalledPart(p)),
