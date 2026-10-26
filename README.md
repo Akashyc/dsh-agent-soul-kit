@@ -1,18 +1,21 @@
 # dsh-agent-soul 安装包
 
-这不是DSH插件！！这不是DSH插件！！这不是DSH插件！！
-使用方式就是clone或下载下来，将文件目录作为Agnet的工作区，然后输入对应指令让AI做事。
-现在只测试了Mac环境，Windows待测试。
+**版本 2.6**（2026-10-27）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
 
-2026-10-24 在 Boss 的 Mac 上给 DSH 里的大肥鱼装好了 dsh-agent-soul 灵魂架构，这个文件夹是从那次安装整理出来的安装包。它能做这些事：
+> **这不是 DSH 插件，不要往插件市场里装。**
+> 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
 
-- 在一台电脑上（macOS 或 Windows）装好这套架构；
-- 作者在 GitHub 上更新后升级；
+用法：clone 或下载到电脑上一个固定的位置，把这个文件夹设成 agent 的工作区，再把下面「怎么用」里对应的那段话发给它。
+
+这个安装包（下文也叫 kit）能做这些事：
+
+- 在 macOS 或 Windows 上装好 dsh-agent-soul 灵魂架构；
+- 上游作者在 GitHub 上更新后，跟着升级；
 - 把 agent 连同账本、对话一起搬到另一台电脑；
-- 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定。
-- 迭代 kit 自身：先检查并同步 kit GitHub 仓库的更新，再检查插件上游变化，分析并修正安装、更新、备份、迁移四个流程。
+- 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定；
+- 迭代 kit 自身：同步 kit 仓库的更新，对照上游的变化，修正安装、更新、备份、迁移四个流程。
 
-插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。
+插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。kit 最早是 2026-10-24 在 Boss 的 Mac 上给大肥鱼装这套架构时整理出来的。
 
 ## 两种装法
 
@@ -59,9 +62,9 @@
 node install.mjs
 ```
 
-node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程 → PATH → 常见安装位置」，当前版本不够时自动换一个合格的把自己重跑一遍。细节见 AGENT-INSTALL.md 的 A3。
+直接跑会先问用现成方案还是全新安装；全新安装一问一答，回车就用默认值。最后给一份总结，确认之后才动手。动手前要先完全退出 DSH：macOS 按 Cmd+Q，Windows 连托盘图标也要右键退出。
 
-直接跑会先问用哪个方案，还是全新安装。全新安装会一问一答，回车就用默认值。最后给一份总结，确认之后才动手。动手前要先按 Cmd+Q 退出 DSH。
+node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安装位置」自己找，版本不够就换一个合格的把自己重跑一遍。电脑上一个 node 都没有的话，用 DSH 自带的那个来启动，路径见 AGENT-INSTALL.md 的 A3。
 
 **更新已经装好的电脑**：
 
@@ -81,19 +84,28 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 请读 AGENT-ITERATE.md，先检查 kit 自身 GitHub 仓库的更新，有必要则拉取并合入本地 kit，保留本地修改和方案；再检查插件上游作者仓库相对上次 kit 迭代基线的变化，逐项分析安装、更新、备份、迁移四个流程，完成需要的 kit 修正和验证，再登记本轮迭代结果。分别告诉我两个仓库的检查结果、完成了什么、还有什么未验证。
 ```
 
-这条流程由 Agent 完成代码分析、修改和验证。`node install.mjs --kit-iterate` 先检查 `Akashyc/dsh-agent-soul-kit`：本地干净且可快进时更新；有本地修改、分叉或使用下载版时，保存新版快照与差异，由 Agent 合入。同步后 Agent 重新读取新版手册、重跑入口，再比较插件上游 `cyanwell/dsh-agent-soul` 并准备四流程报告。完成后用 `--kit-accept <报告目录>` 登记插件上游审查基线。仅生成报告或同步 kit 不会标记四流程迭代完成，也不会更新本机已安装的插件。
+迭代分三步，代码分析、修改和验证都由 agent 做：
 
-自身检查需要 Git。`--kit-update` 可单独检查并同步 kit；`--kit-repo`、`--kit-ref` 指定 kit 发布源，和插件上游的 `--ref` 独立。`--dry-run` 只检查，发现 kit 更新时先返回更新计划。离线提供 `--base-source`、`--source` 时默认跳过 kit 联网检查；可用 `--kit-source <干净的Git目录>` 同时离线检查 kit。已人工合入并验证后可用 `--skip-kit-update` 继续本轮；跳过会写进报告，不代表 kit 已最新。
+1. **同步 kit**：`node install.mjs --kit-iterate` 先查 kit 仓库 `Akashyc/dsh-agent-soul-kit`。本地干净、能快进就直接更新；有本地修改、分叉了，或者用的是下载版，就存一份新版快照和差异，由 agent 合入。
+2. **对照上游**：agent 重新读新版手册、重跑入口，再和插件上游 `cyanwell/dsh-agent-soul` 比对，写出四流程报告，完成修正和验证。
+3. **登记**：用 `--kit-accept <报告目录>` 登记这次的上游审查基线。只生成报告、只同步 kit 都不算迭代完成；整个流程也不会动本机已经装好的插件。
 
-常用命令（都可以加 `--dry-run` 先看会改什么）：
+需要 Git。相关参数：
+
+- `--kit-update`：只检查、同步 kit；加 `--dry-run` 只检查，有更新时只报计划；
+- `--kit-repo`、`--kit-ref`：指定 kit 的仓库和版本，和插件上游的 `--ref` 互不相干；
+- 离线：给了 `--base-source`、`--source` 就默认不联网查 kit，想把 kit 也一起离线查，加 `--kit-source <干净的 Git 目录>`；
+- `--skip-kit-update`：已经人工合入并验证过时，跳过 kit 检查继续本轮；跳过会写进报告，不代表 kit 已是最新。
+
+常用命令（都可以加 `--dry-run` 先看会改什么；安装、更新、恢复真跑前都要先完全退出 DSH）：
 
 ```bash
-"$NODE" install.mjs --setup 大肥鱼        # 用现成方案装
-"$NODE" install.mjs --update             # 更新（先 Cmd+Q 退出 DSH）
-"$NODE" install.mjs --backup             # 打迁移用的备份包，放在 backups/
-"$NODE" install.mjs --restore            # 在新电脑上：装好并放回 backups/ 里最新的备份
-node install.mjs --kit-update            # 单独检查并同步 kit 自身仓库
-node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游证据，由 Agent 完成修正
+node install.mjs --setup 大肥鱼     # 用现成方案装
+node install.mjs --update          # 更新到上游最新版
+node install.mjs --backup          # 打迁移用的备份包，放在 backups/
+node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
+node install.mjs --kit-update      # 只检查、同步 kit 自身仓库
+node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，交给 agent 修正
 ```
 
 ## 装出来是什么
@@ -111,7 +123,7 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 | 文件 | 用途 |
 |---|---|
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
-| `AGENT-ITERATE.md` | 给 Agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
+| `AGENT-ITERATE.md` | 给 agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
 | `install.mjs` | 安装 / 更新 / 备份 / 恢复脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
@@ -170,9 +182,22 @@ node install.mjs --kit-iterate           # 先同步 kit，再收集插件上游
 
 ## 注意
 
-- **平台**：macOS 实际装过、修过、验过。Windows 是按仓库作者的 Windows 资料写的，**没在 Windows 上实测**。脚本每一步都有校验，出错就停，并且留有备份。
+- **平台**：macOS、Windows 都实际装过、验过，测试通过。脚本每一步都有校验，出错就停，并且留有备份。
 - **插件市场里的「已停用」**：dsh-agent-compaction、dsh-agent-pruner 显示「已停用」是正常的，它们由 Soul preset 调用。不要打开，也不要卸载。
 - **上游 v2.0.0 的加载名**：回声面板、换气面板改名时漏改了一处加载名，原样装会加载失败。安装包会自动修好，并在收尾时检查每个包要加载的插件都找得到。
 - **路径不带用户名**：memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录，Mac、Windows 同一份。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
 - **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，用 `--backup` / `--restore` 迁移，到了新电脑再任命下一代主导。
+
+## 版本记录
+
+版本号和 `install.mjs` 里的 `KIT_VERSION` 一致，脚本行为改了就往上加。
+
+| 版本 | 日期 | 改了什么 |
+|---|---|---|
+| 2.6 | 2026-10-27 | 路径改成运行时自动定位，配置和补丁里不再写死用户名；「说话与样子」不再重复补三条规矩；装完在新会话里验收，干跑给出现成的终端命令 |
+| 2.5 | 2026-10-26 | kit 自身仓库更新与双源迭代（`--kit-update`）；新增标准、极简、Cordis 三个 Soul preset |
+| 2.4 | 2026-10-26 | kit 上游分析与自我迭代流程（`--kit-iterate`、`AGENT-ITERATE.md`）；修好换气面板第一次保存失败 |
+| 2.3 | 2026-10-26 | 新增五个可选面板件（model-statusbar、mobile-adapt、riji、splash、yantai）；修正 node 探测和 mnemon 记忆目录的解析 |
+| 2.2 | 2026-10-26 | 装的时候选现成方案或全新安装；必装以外的零件都可选；终端、agent 两种互动方式 |
+| 2.1 及以前 | 2026-10-24 ~ 10-26 | 在 Boss 的 Mac 上首装；跟进上游到 v2.0.0，加上 mcp-hub |
