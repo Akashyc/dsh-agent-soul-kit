@@ -69,20 +69,23 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 
 **A2. dsh-mnemon（建议装）。** 这套架构「可复用结论」那一层靠它，mnemon-probe 也只有装了它才有用。没装的话问用户要不要先在 DSH 插件市场装上、随便聊一句让它生成数据目录；不装也能继续，全新安装时 mnemon-probe 不会出现在选项里，自我层里也不写 mnemon 那一节。
 
-**A3. 找一个 node（18 以上）。** 优先用 DSH 自带的：心跳会一直用这个路径，脚本也靠它找到 DSH 的 app.asar 来生成「PTC · Soul 模式」。别用临时目录里的 node。
+**A3. 一个 node（18 以上）。** 不用手动找路径。脚本自己按「DSH 自带 → 当前进程 → PATH → 常见安装位置」的顺序找；当前这个版本不够时会自动换一个合格的、把自己重跑一遍。心跳、MCP 的 echo、开机自启这些要长期用的配置，优先写 DSH 自带的那个 node —— 它不依赖用户的 PATH，DSH 换版本重跑一次安装就会跟着更新。
 
-- macOS（DSH NEXT）：
+想先确认一下：
+
+- macOS / Linux：`node -v` 不够 18，再看 DSH 自带的：
   ```bash
-  NODE="/Applications/DSH NEXT.app/Contents/Resources/runtime/arm64/primary-runtime/dependencies/node/bin/node"
-  "$NODE" -v
+  ls -d /Applications/*DSH*.app 2>/dev/null
+  find /Applications -path "*dependencies/node/bin/node" -type f 2>/dev/null
   ```
-  找不到就搜一下：`find /Applications -path "*primary-runtime/dependencies/node/bin/node" -type f 2>/dev/null`
 - Windows（PowerShell）：
   ```powershell
-  $NODE = Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:LOCALAPPDATA","$env:ProgramFiles" -Recurse -Filter node.exe -ErrorAction SilentlyContinue | Where-Object FullName -like '*primary-runtime*' | Select-Object -First 1 -ExpandProperty FullName
-  & $NODE -v
+  node -v
+  Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter node.exe -ErrorAction SilentlyContinue |
+    Where-Object FullName -like '*dependencies*' | Select-Object -First 3 -ExpandProperty FullName
   ```
-  DSH 装在别的盘就把搜索目录换成它的安装目录。实在找不到，用系统里的 node 也行（`node -v` 要 ≥ 18），这时脚本可能找不到 app.asar，会提示用 `--app-asar <路径>` 指定。
+
+都找不到就装一个 18 以上的 node（`brew install node` / nodejs.org / `apt install nodejs`），或者用 `--node <路径>` 直接指定。不要用临时目录里的 node。
 
 **A4. 把整个文件夹放到一个固定位置**（例如「文稿」或「文档」下）。路径里有空格、有中文都没关系。
 

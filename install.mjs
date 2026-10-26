@@ -21,8 +21,11 @@
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
 //   --default-preset <id|keep>   新会话默认用的 preset：ptc-soul-flash、ptc-soul、keep（更新默认）；安装默认按方案
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
+//   --node <路径>                指定用哪个 node 跑（默认自动找：DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → ~/.dsh → %APPDATA%\dsh 依次找
 //   --profile <名字>             默认 desktop
+//   --runtime <目录>             mnemon 热记忆目录；不给就按 dsh-mnemon 的 storageScope 自动解析
+//   --data-dir <目录>            mnemon 数据根目录（热记忆在 <目录>/runtime；代替默认的 ~/.mnemon）
 //   --confirm-quit               无法自动判断 DSH 是否已退出时，由你确认它已完全退出
 //   --skip-part <目录名,…>       不装某个可选零件（例如 mcp-hub）；更新时用它拒掉的，以后也不再补
 //   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
@@ -99,6 +102,8 @@ let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
 const PROXY_OPT = opt('--proxy')
 const PROFILE = opt('--profile', 'desktop')
+const RUNTIME_OPT = opt('--runtime')
+const DATA_DIR_OPT = opt('--data-dir')
 let HB_TIME = opt('--heartbeat-time')
 let NO_HB = flag('--no-heartbeat')
 let DEFAULT_PRESET = opt('--default-preset', UPDATE ? 'keep' : null)
@@ -109,6 +114,7 @@ const QUESTIONS_MODE = flag('--questions')
 const TTY = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flag('--no-input')
 let SKIP_PARTS = String(opt('--skip-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
 if ([UPDATE, BACKUP, RESTORE].filter(Boolean).length > 1) { console.log('--update、--backup、--restore 一次只能用一个'); process.exit(2) }
+if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
 if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复不需要选方案'); process.exit(2) }
 if (FRESH && SETUP_OPT) { console.log('--setup（用现成方案）和 --fresh（全新安装）只能选一个'); process.exit(2) }
@@ -467,13 +473,15 @@ function checkSource(dir) {
 const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function patchList(runtime, names, dshHome) {
   const list = [
-    {
+    // 解析不出热记忆目录时整个条目不加：让 probe 保持上游默认（每轮报读盘失败是诚实的），
+    // 绝不能把 null 拼进它的默认路径
+    ...(runtime ? [{
       key: 'mnemon-probe', pkg: 'dsh-agent-mnemon-probe', file: 'index.js', label: 'mnemon-probe 默认路径',
       needed: path.resolve(runtime) !== path.resolve(os.homedir(), '.mnemon', 'runtime'),
       old: "const RUNTIME = process.env.MNEMON_RUNTIME || path.join(os.homedir(), '.mnemon', 'runtime')",
       new: `const RUNTIME = process.env.MNEMON_RUNTIME || ${JSON.stringify(posix(runtime))} // 本机改：DSH 不传环境变量，默认值指向真实的 mnemon 热记忆目录`,
       any: /const RUNTIME = process\.env\.MNEMON_RUNTIME \|\| [^\n]*本机改[^\n]*/,
-    },
+    }] : []),
     {
       key: 'clock', pkg: 'dsh-agent-clock', file: 'client.js', label: 'clock 面板定位', needed: true,
       old: 'open ? h("div", { style: panelStyle }, h(ClockPanel)) : null);',
@@ -1081,6 +1089,336 @@ async function askTerminal(rl, ctx) {
   return raw
 }
 
+// ─── mnemon 热记忆目录解析 ────────────────────────────────────────────────
+// 背景：dsh-mnemon 的 storageDirectory() 有四种 storageScope，每个 scope 落到
+// 完全不同的目录；而它的 expandDirectory() 只认 "~" 和 "~/x"，其余一律
+// path.resolve(v)（即相对当前工作目录，不是 DSH 家目录）。安装器以前只会找
+// ~/.mnemon/runtime，所以改了 dataDir 或换了 scope 的机器会被判成“没装”。
+// 这里的展开规则必须和 dsh-mnemon 完全一致，否则 custom/dataDir 会指错地方。
+//
+// 本块只做解析，不创建目录、不改任何设置。解析不出来时返回 dir: null，
+// 由调用方打印候选表让用户选，绝不默认往 ~/.mnemon 里写东西。
+
+function expandDir(v) {
+  if (!v || typeof v !== 'string') return null
+  const s = v.trim()
+  if (!s) return null
+  if (s === '~') return os.homedir()
+  if (s.startsWith('~/')) return path.join(os.homedir(), s.slice(2))
+  if (s.startsWith('~')) return null // "~user" 这种形式不猜，交给调用方兜底
+  return path.resolve(s)
+}
+
+const MNEMON_FILES = ['memories.json', 'MEMORY.md', 'USER.md']
+
+// 指纹分级，用来区分“这是我该用的目录”和“这是别人留下的空壳”：
+//   hard = memories.json 能解析 且 至少一份 md 在 → 真初始化过
+//   soft = 目录在、里面至少有一个 mnemon 文件 → 可能是刚建的空目录
+//   none = 目录不存在或什么都没有
+function probeRuntimeDir(dir) {
+  if (!dir) return { dir: null, level: 'none', files: [], hasJson: false }
+  let files = []
+  try {
+    files = fs.readdirSync(dir).filter((f) => MNEMON_FILES.includes(f))
+  } catch {
+    return { dir, level: 'none', files: [], hasJson: false }
+  }
+  let hasJson = false
+  if (files.includes('memories.json')) {
+    try {
+      JSON.parse(fs.readFileSync(path.join(dir, 'memories.json'), 'utf8'))
+      hasJson = true
+    } catch {
+      hasJson = false
+    }
+  }
+  const hasMd = files.includes('MEMORY.md') || files.includes('USER.md')
+  const level = hasJson && hasMd ? 'hard' : files.length > 0 ? 'soft' : 'none'
+  return { dir, level, files, hasJson }
+}
+
+// 从 cordis.patch.yml 里读 mnemon 的 config 段。装一个安装器不该为读五行配置
+// 引入 yaml 依赖，所以按缩进硬解析；规则对着本机真实文件核过：
+//   1. 找到 `- id: mnemon` 那行，记它的缩进 b；
+//   2. 区块内（遇到非空且缩进 <= b 的行即结束）找缩进恰为 b+2 的 `config:`；
+//   3. 只收缩进恰为 b+4 的 `k: v`；更深的是 embedding/memoryView 之类的嵌套，
+//      跳过（注意：b+2 那一层还有 `name:`，绝不能当成配置收进来）；
+//   4. 值去掉行尾注释和成对引号。
+function readMnemonConfig(file) {
+  let text = ''
+  try {
+    text = fs.readFileSync(file, 'utf8')
+  } catch {
+    return null
+  }
+  const lines = text.split(/\r?\n/)
+  const head = lines.findIndex((l) => /^\s*-\s*id:\s*['"]?mnemon['"]?\s*(#.*)?$/.test(l))
+  if (head < 0) return null
+  const b = lines[head].match(/^\s*/)[0].length
+  const out = {}
+  let inConfig = false
+  for (let i = head + 1; i < lines.length; i++) {
+    const raw = lines[i]
+    if (!raw.trim()) continue
+    const indent = raw.match(/^\s*/)[0].length
+    if (indent <= b) break
+    if (!inConfig) {
+      if (indent === b + 2 && /^config:\s*(#.*)?$/.test(raw.trim())) inConfig = true
+      continue
+    }
+    if (indent <= b + 2) break
+    if (indent !== b + 4) continue
+    const m = raw.trim().match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
+    if (!m) continue
+    let v = m[2].replace(/\s+#.*$/, '').trim()
+    if (!v) continue
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1)
+    }
+    out[m[1]] = v
+  }
+  return Object.keys(out).length ? out : null
+}
+
+// storageScope=workspaces 时，各工作区的运行时在 <root>/workspaces/<hash>/runtime。
+// 目录名是工作区绝对路径的哈希，重算不现实（那是 dsh-mnemon 的内部实现），
+// 所以只能枚举；枚举到的每一个都当候选，指纹分高的胜出。
+function scanWorkspaceRuntimes(root) {
+  if (!root) return []
+  const base = path.join(root, 'workspaces')
+  let names = []
+  try {
+    names = fs.readdirSync(base)
+  } catch {
+    return []
+  }
+  const out = []
+  for (const n of names) {
+    const rt = path.join(base, n, 'runtime')
+    if (exists(rt)) out.push(rt)
+  }
+  return out
+}
+
+// 优先级：显式指定 > 环境变量 > 配置里的 scope > 历史兜底。
+// 返回第一个 hard；没有 hard 就把第一个 soft 顶上；都没有则 dir: null。
+// ok 只表示“找到真初始化过的目录”，soft 命中时 ok 为 false —— 调用方据此
+// 决定是直接用，还是提示用户“这个目录像空的，确认一下”。
+function resolveMnemon(o) {
+  const opt = o || {}
+  const cfgFile = path.join(DSH_HOME, 'profiles', PROFILE, 'cordis.patch.yml')
+  const cfg = readMnemonConfig(cfgFile) || {}
+  const scope = cfg.storageScope || null
+  const cData = expandDir(cfg.dataDir)
+  const eData = expandDir(process.env.MNEMON_DATA_DIR)
+  const eRt = expandDir(process.env.MNEMON_RUNTIME)
+  const gRoot = eData || expandDir('~/.mnemon') // global 的默认根
+  const wRoot = cData || gRoot // workspaces 的默认根
+
+  const cands = []
+  const add = (dir, source) => {
+    if (dir) cands.push({ dir, source })
+  }
+  const addRoot = (root, source) => {
+    if (root) add(path.join(root, 'runtime'), source)
+  }
+
+  add(expandDir(opt.runtime), '--runtime')
+  add(eRt, 'MNEMON_RUNTIME')
+  addRoot(expandDir(opt.dataDir), '--data-dir')
+  addRoot(eData, 'MNEMON_DATA_DIR')
+
+  if (scope === 'global') addRoot(gRoot, 'storageScope=global')
+  else if (scope === 'custom') addRoot(cData, 'storageScope=custom')
+  else if (scope === 'workspace') addRoot(path.join(process.cwd(), '.mnemon'), 'storageScope=workspace')
+  else if (scope === 'workspaces') {
+    for (const d of scanWorkspaceRuntimes(wRoot)) add(d, 'storageScope=workspaces')
+  }
+
+  // 兜底：这些位置“历史上可能对”，但都不构成硬证据，一律排在 scope 之后。
+  add(expandDir(opt.installedRuntime), '已装配置')
+  add(expandDir(opt.stateRuntime), '.install-state.json')
+  add(expandDir('~/.mnemon/runtime'), '默认 ~/.mnemon')
+  add(path.join(DSH_HOME, '.mnemon', 'runtime'), '默认 $DSH_HOME/.mnemon')
+  add(path.join(DSH_HOME, 'profiles', PROFILE, '.mnemon', 'runtime'), '默认 <profile>/.mnemon')
+
+  const tried = []
+  const seen = new Set()
+  let hard = null
+  let soft = null
+  let hi = -1
+  let si = -1
+  for (const c of cands) {
+    const key = path.resolve(c.dir)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const p = probeRuntimeDir(c.dir)
+    tried.push({ dir: posix(c.dir), source: c.source, level: p.level, files: p.files })
+    if (p.level === 'hard' && !hard) { hard = { ...c, probe: p }; hi = tried.length - 1 }
+    if (p.level === 'soft' && !soft) { soft = { ...c, probe: p }; si = tried.length - 1 }
+  }
+  // 配置指到的目录就算只是个空壳，也比历史遗留的 ~/.mnemon 可信：
+  // 空壳排得更靠前时用它，让上层去提示「确认一下」，而不是悄悄换成别的目录
+  const useSoft = Boolean(soft) && (!hard || si < hi)
+  const hit = useSoft ? soft : hard
+  return {
+    dir: hit ? hit.dir : null,
+    source: hit ? hit.source : null,
+    probe: hit ? hit.probe : { dir: null, level: 'none', files: [], hasJson: false },
+    scope,
+    dataDir: cData ? posix(cData) : null,
+    tried,
+    ok: Boolean(hard) && !useSoft,
+    soft: useSoft,
+  }
+}
+
+// ═══ node 探测 ═════════════════════════════════════════════════════════
+// 不假定 node 在哪：DSH NEXT、老版 Desktop、CLI 版、Windows 各有各的位置。
+// 优先级：DSH 自带 > 当前进程 > PATH > 常见安装位置。
+const NODE_MIN_MAJOR = 18
+const IS_WIN = process.platform === 'win32'
+const NODE_BIN = IS_WIN ? 'node.exe' : 'node'
+const BUNDLED_SKIP = new Set(['node_modules', 'dependencies', 'Frameworks', 'Cache', 'cache', 'GPUCache', 'CachedData'])
+
+function nodeVersionOf(bin) {
+  if (!bin || !exists(bin)) return null
+  try {
+    const r = spawnSync(bin, ['-v'], { encoding: 'utf8', timeout: 5000, windowsHide: true })
+    if (r.error || r.status !== 0 || !r.stdout) return null
+    const version = String(r.stdout).trim().replace(/^v/i, '')
+    const major = Number(version.split('.')[0])
+    if (!Number.isFinite(major) || major <= 0) return null
+    return { version, major }
+  } catch { return null }
+}
+
+// DSH 自带的 node 长这样：
+//   macOS    <app>/Contents/Resources/runtime/<arch>/<flavor>/dependencies/node/bin/node
+//   Windows  <app>/resources/runtime/<arch>/<flavor>/dependencies/node/bin/node.exe
+// 只从 Resources 起摸，深度有限，跳过 Frameworks / node_modules，避免扫整个 app。
+function bundledNodeUnder(dir, depth) {
+  const d = depth || 0
+  if (d > 6) return null
+  try { if (!fs.statSync(dir).isDirectory()) return null } catch { return null }
+  for (const rel of [['dependencies', 'node', 'bin', NODE_BIN], ['node', 'bin', NODE_BIN], ['bin', NODE_BIN]]) {
+    const p = path.join(dir, ...rel)
+    if (exists(p)) return p
+  }
+  let entries
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return null }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue
+    if (e.name.startsWith('.') || BUNDLED_SKIP.has(e.name)) continue
+    const got = bundledNodeUnder(path.join(dir, e.name), d + 1)
+    if (got) return got
+  }
+  return null
+}
+
+// 只挑名字像 DSH 的安装目录，别把整个 /Applications 和 Program Files 翻一遍。
+function dshAppDirs() {
+  const out = []
+  if (process.platform === 'darwin') {
+    for (const r of ['/Applications', path.join(os.homedir(), 'Applications')]) {
+      let names = []
+      try { names = fs.readdirSync(r) } catch { continue }
+      for (const n of names) {
+        if (!/\.app$/i.test(n) || !/dsh|deepseek/i.test(n)) continue
+        const app = path.join(r, n)
+        const base = path.join(app, 'Contents', 'Resources')
+        out.push({ dir: exists(base) ? base : app, label: n.replace(/\.app$/i, '') })
+      }
+    }
+  } else if (process.platform === 'win32') {
+    const roots = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'), process.env.LOCALAPPDATA, process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)
+    for (const r of roots) {
+      let names = []
+      try { names = fs.readdirSync(r) } catch { continue }
+      for (const n of names) {
+        if (!/dsh|deepseek/i.test(n)) continue
+        const app = path.join(r, n)
+        for (const sub of ['resources', 'Resources', '']) {
+          if (!exists(path.join(app, sub))) continue
+          out.push({ dir: sub ? path.join(app, sub) : app, label: n })
+          break
+        }
+      }
+    }
+  } else {
+    for (const r of ['/opt', '/usr/local', '/usr/lib']) {
+      let names = []
+      try { names = fs.readdirSync(r) } catch { continue }
+      for (const n of names) if (/dsh|deepseek/i.test(n)) out.push({ dir: path.join(r, n), label: n })
+    }
+  }
+  return out
+}
+
+function nodesOnPath() {
+  const out = []
+  for (const d of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!d) continue
+    const p = path.join(d, NODE_BIN)
+    if (exists(p)) out.push(p)
+  }
+  return out
+}
+
+function commonNodePlaces() {
+  const h = os.homedir()
+  const out = []
+  const add = (p) => { if (p && exists(p)) out.push(p) }
+  if (process.platform === 'win32') {
+    for (const r of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA].filter(Boolean)) add(path.join(r, 'nodejs', 'node.exe'))
+  } else {
+    for (const p of ['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node', '/opt/local/bin/node']) add(p)
+    add(path.join(h, '.volta', 'bin', 'node'))
+    // nvm / fnm / asdf：只取版本号最大的三个，不逐个跑
+    const scanVersions = (root, tail) => {
+      let names = []
+      try { names = fs.readdirSync(root) } catch { return }
+      const best = names
+        .map((n) => ({ n, m: /v?(\d+)\.(\d+)\.(\d+)/.exec(n) }))
+        .filter((x) => x.m)
+        .map((x) => ({ n: x.n, k: [Number(x.m[1]), Number(x.m[2]), Number(x.m[3])] }))
+        .sort((a, b) => b.k[0] - a.k[0] || b.k[1] - a.k[1] || b.k[2] - a.k[2])
+        .slice(0, 3)
+      for (const x of best) add(path.join(root, x.n, ...tail))
+    }
+    scanVersions(path.join(h, '.nvm', 'versions', 'node'), ['bin', 'node'])
+    scanVersions(path.join(h, '.fnm', 'node-versions'), ['installation', 'bin', 'node'])
+    scanVersions(path.join(h, '.local', 'share', 'fnm', 'node-versions'), ['installation', 'bin', 'node'])
+    scanVersions(path.join(h, '.asdf', 'installs', 'nodejs'), ['bin', 'node'])
+  }
+  return out
+}
+
+// dshOnly=true：只找 DSH 自带的（写配置时用它，不碰用户的 PATH）
+function detectNode(o = {}) {
+  const tried = []
+  const seen = new Set()
+  let hit = null
+  const consider = (bin, from) => {
+    if (!bin || hit) return
+    let key
+    try { key = fs.realpathSync(bin) } catch { key = path.resolve(bin) }
+    if (seen.has(key)) return
+    seen.add(key)
+    const v = nodeVersionOf(bin)
+    const okVer = Boolean(v && v.major >= NODE_MIN_MAJOR)
+    tried.push({ bin: posix(bin), from, version: v ? v.version : null, ok: okVer })
+    if (okVer) hit = { bin, from, version: v.version, major: v.major }
+  }
+  for (const d of dshAppDirs()) consider(bundledNodeUnder(d.dir, 0), `DSH 自带（${d.label}）`)
+  if (!o.dshOnly) {
+    consider(process.execPath, '当前进程')
+    for (const p of nodesOnPath()) consider(p, 'PATH')
+    for (const p of commonNodePlaces()) consider(p, '常见安装位置')
+  }
+  return hit ? { ...hit, tried } : null
+}
+
 // ═══ 0. 预检 ═══════════════════════════════════════════════════════════
 const homeCands = [opt('--dsh-home'), process.env.DSH_HOME, path.join(os.homedir(), '.dsh'), process.platform === 'win32' && process.env.APPDATA ? path.join(process.env.APPDATA, 'dsh') : null].filter(Boolean)
 // ═══ 问题清单（--questions）：给 agent 用，只输出 JSON ═════════════════════
@@ -1088,7 +1426,9 @@ if (QUESTIONS_MODE) {
   const home = homeCands.find((h) => exists(path.join(h, 'profiles', PROFILE, 'package.json')))
   const pj = home ? readJson(path.join(home, 'profiles', PROFILE, 'package.json')) : null
   const b = (pj && pj.dsh && pj.dsh.profile && pj.dsh.profile.bundles) || []
-  const mnemon = pj ? b.includes('dsh-mnemon') : null
+  // 这个分支在 DSH_HOME 定下来之前就跑，只能就地探一次 node_modules：
+  // 「装了但没启用」也算有，否则会错误地把 mnemon-probe 标成不可选
+  const mnemon = pj ? (b.includes('dsh-mnemon') || exists(path.join(home, 'profiles', PROFILE, 'node_modules', 'dsh-mnemon', 'package.json'))) : null
   const qs = QUESTIONS.map((x) => ({ ...x, ...(x.options ? { options: x.options.map((o) => ({ ...o, ...(x.id === 'parts' && PART_INFO[o.value].needsMnemon && mnemon === false ? { available: false, why: '这台电脑没装 dsh-mnemon' } : {}) })) } : {}) }))
   console.log(JSON.stringify({
     kit: 'dsh-agent-soul 安装包', kitVersion: KIT_VERSION,
@@ -1115,9 +1455,38 @@ if (QUESTIONS_MODE) {
 out(`dsh-agent-soul 安装包 · ${{ install: '安装', update: '更新', backup: '备份', restore: '迁移恢复' }[MODE]}（${KIT_VERSION}）${DRY ? '（干跑：只报计划，不改任何文件）' : ''}`)
 out(`参数：${argv.length ? argv.join(' ').replace(/\/\/[^/@\s]*@/g, '//***@') : '（无）'}`)
 step('预检')
-const major = Number(process.versions.node.split('.')[0])
-if (major < 18) die(`node 版本太旧（${process.versions.node}），需要 18 以上。请改用 DSH 自带的 node。`)
-ok(`node ${process.versions.node}：${process.execPath}`)
+// 当前 node 不够版本：找一个够的，用它把自己重新跑一遍（同一套参数，不丢任何状态）
+let NODE_FOR_CONFIG = process.execPath
+// --node：明确指定用哪个（自动找错了、或者想固定到某个版本时用）
+const nodeOpt = opt('--node')
+if (nodeOpt && path.resolve(nodeOpt) !== path.resolve(process.execPath)) {
+  const nb = path.resolve(nodeOpt)
+  const nv = nodeVersionOf(nb)
+  if (!nv) die(`--node 指的 ${nodeOpt} 跑不起来（没有 -v 输出）。`)
+  if (nv.major < NODE_MIN_MAJOR) die(`--node 指的 node 是 ${nv.version}，需要 ${NODE_MIN_MAJOR} 以上。`)
+  warn(`按 --node 改用 ${posix(nb)}（${nv.version}）继续`)
+  const r = spawnSync(nb, [process.argv[1], ...process.argv.slice(2)], { stdio: 'inherit', windowsHide: true })
+  process.exit(r.status === null ? 1 : r.status)
+}
+const selfMajor = Number(process.versions.node.split('.')[0])
+if (selfMajor < NODE_MIN_MAJOR) {
+  if (process.env.DSH_SOUL_NODE_REEXEC === '1') die(`当前 node ${process.versions.node} 低于 ${NODE_MIN_MAJOR}，换过之后仍然不够。请装一个 ${NODE_MIN_MAJOR} 以上的 node，或用 --node <路径> 指定。`)
+  const better = detectNode()
+  if (!better) die(`当前 node ${process.versions.node} 低于 ${NODE_MIN_MAJOR}，也没在本机找到合格的 node。\n    装一个 ${NODE_MIN_MAJOR} 以上的 node（macOS: brew install node；Windows: https://nodejs.org ；Linux: apt install nodejs），\n    或者直接打开 DSH，用 DSH 自带的 node 跑这个脚本。\n    找过的位置：\n      ${detectNode({ dshOnly: true }) || nodesOnPath().length ? '见上面' : 'DSH 安装目录、当前进程、PATH、常见安装位置'}`)
+  warn(`当前 node ${process.versions.node} 低于 ${NODE_MIN_MAJOR}，改用 ${posix(better.bin)}（${better.version}，来源：${better.from}）继续`)
+  const r = spawnSync(better.bin, [process.argv[1], ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, DSH_SOUL_NODE_REEXEC: '1' }, windowsHide: true })
+  process.exit(r.status === null ? 1 : r.status)
+}
+ok(`node ${process.versions.node}：${posix(process.execPath)}（来源：当前进程）`)
+// 写进持久配置的那一个单独挑：优先 DSH 自带的 node —— 它不依赖用户的 PATH 和 shell 环境
+const dshNode = detectNode({ dshOnly: true })
+if (dshNode) {
+  NODE_FOR_CONFIG = dshNode.bin
+  const same = path.resolve(dshNode.bin) === path.resolve(process.execPath)
+  ok(same ? 'DSH 自带的 node 就是当前进程，写进配置用它' : `DSH 自带的 node ${dshNode.version}：${posix(dshNode.bin)}（写进配置用它）`)
+} else {
+  warn('没找到 DSH 自带的 node，写进配置用当前进程的 node（DSH 升级后可能要重跑一次安装）')
+}
 for (const f of ['templates/00-authority.md.tpl', 'templates/SELF.src.md.tpl', 'templates/heartbeat.mjs.tpl', 'presets/ptc.patch.yml', 'presets/flash-lean-ptc-v3.patch.yml']) if (!exists(path.join(ASSETS, f))) die(`安装包不完整：assets/${f} 不存在`)
 ok('安装包素材齐全')
 
@@ -1156,16 +1525,33 @@ const HUB = path.join(MEM, 'hub')
 const SESSIONS = path.join(DSH_HOME, 'sessions')
 const STATE_PATH = path.join(SOUL_ROOT, '.install-state.json')
 const state0 = readJson(STATE_PATH)
-const runtimeCands = [installedCfg && installedCfg.runtime, path.join(DSH_HOME, '.mnemon', 'runtime'), path.join(os.homedir(), '.mnemon', 'runtime')].filter(Boolean)
-let RUNTIME = runtimeCands.find(exists)
-if (!RUNTIME) { RUNTIME = path.join(DSH_HOME, '.mnemon', 'runtime'); if (!UPDATE) warn(`没找到 mnemon 热记忆目录，先按 ${RUNTIME} 配；dsh-mnemon 用过一次后会生成它`) }
+// mnemon 热记忆目录：按 dsh-mnemon 自己的 storageScope 解析（global/custom/workspace/workspaces）；
+// 解析不出来就留 null —— 绝不默认往 ~/.mnemon 里写东西，那里可能是别的机器留下来的空壳。
+const MNE = resolveMnemon({ runtime: RUNTIME_OPT, dataDir: DATA_DIR_OPT, installedRuntime: installedCfg && installedCfg.runtime, stateRuntime: state0 && state0.runtime })
+const RUNTIME = MNE.dir
+const RX = RUNTIME ? posix(RUNTIME) : null // 拼配置一律走它；null 时绝不落进任何文件（宁可缺键，也不写错路径）
+if (RUNTIME) {
+  ok(`mnemon 热记忆目录 ${RX}（来源：${MNE.source}）`)
+  if (MNE.soft) warn('这个目录里没有 memories.json + MEMORY.md，像还没初始化：先按它配，确认一下是不是你要的那个')
+}
+if (!RUNTIME && !UPDATE) {
+  warn('没找到 mnemon 热记忆目录：这一层先空着，不往任何默认路径写东西')
+  const tried = MNE.tried.slice(0, 10)
+  if (tried.length) console.log(`    试过的位置：\n${tried.map((x) => `      ${x.level === 'none' ? '—' : '·'} ${x.dir}  [${x.source}]${x.level === 'none' ? '' : ` (${x.level})`}`).join('\n')}`)
+  console.log('    三种办法：① 先在 DSH 里用一次 mnemon，让它自己建目录　② --runtime <热记忆目录>　③ MNEMON_DATA_DIR=<数据根目录>')
+}
 const installed = exists(path.join(BODY, 'package.json'))
+// dsh-mnemon 三态：装了（node_modules）/ 启用了（bundles）/ 热记忆初始化过（MNE.ok）。
+// 前两个决定 mnemon-probe 有没有东西可测，第三个只决定读到的是不是真数据，别混成一个布尔。
+const MNEMON_INSTALLED = exists(path.join(NM, 'dsh-mnemon', 'package.json'))
+const MNEMON_ENABLED = bundles0.includes('dsh-mnemon')
 
 if (UPDATE) {
   if (!installed) die('这台电脑上还没装 dsh-agent-soul（profile 的 node_modules 里没有）。全新安装请去掉 --update。')
   ok(`已装：${state0 && state0.upstream ? `提交 ${short(state0.upstream.sha)}（${state0.updatedAt || state0.installedAt}）` : '没有安装记录（旧版安装包或手工装的），按 node_modules 里现有文件比对'}`)
 } else {
-  if (!bundles0.includes('dsh-mnemon')) warn('还没装 dsh-mnemon：建议先在 DSH 插件市场装上它，否则「可复用结论」那一层是空的')
+  if (!MNEMON_INSTALLED && !MNEMON_ENABLED) warn('还没装 dsh-mnemon：建议先在 DSH 插件市场装上它，否则「可复用结论」那一层是空的')
+  else if (MNEMON_INSTALLED && !MNEMON_ENABLED) warn('dsh-mnemon 装了但没启用（profile 的 bundles 里没有它）：它不会跑，「可复用结论」那一层仍然是空的')
   for (const p of PREDECESSORS) if (bundles0.includes(p)) warn(`检测到 ${p}：它是换气（huanqi）的前身，两套一起跑会让一轮被续成两轮，建议先卸掉`)
 }
 ok(`书房 ${SOUL}`)
@@ -1216,7 +1602,7 @@ if (BACKUP) {
     host: os.hostname(), platform: process.platform,
     upstream: state0 && state0.upstream ? state0.upstream : null,
     parts: (state0 && state0.parts) || Object.values(PART_NAMES).flat().filter((d) => exists(path.join(NM, d, 'package.json'))),
-    paths: { dshHome: posix(DSH_HOME), soul: posix(SOUL), memory: posix(MEM), hub: posix(HUB), sessions: posix(SESSIONS), runtime: posix(RUNTIME) },
+    paths: { dshHome: posix(DSH_HOME), soul: posix(SOUL), memory: posix(MEM), hub: posix(HUB), sessions: posix(SESSIONS), runtime: RX },
     counts, bytes, files,
   }
   entries.unshift({ name: `${BK_ROOT}`, dir: true }, { name: `${BK_ROOT}/manifest.json`, data: JSON.stringify(manifest, null, 2) })
@@ -1280,7 +1666,7 @@ if (RESTORE) {
 }
 
 // ═══ 方案：装成什么样（安装时选；更新、恢复按原来的）═══════════════════════
-const MNEMON = bundles0.includes('dsh-mnemon')
+const MNEMON = MNEMON_ENABLED
 function selfTitle(hubDir) { try { const m = readText(path.join(hubDir, 'SELF.src.md')).match(/^# SELF · (.+)$/m); return m && !m[1].includes('<') ? m[1].trim() : null } catch { return null } }
 // 安装记录里没写方案的（安装包 2.1 及以前装的）：按自我层的标题认
 function knownSetup(st, title) {
@@ -1639,7 +2025,7 @@ else {
 if (RESTORE) {
   step('放回备份里的数据')
   const from = RB.man.paths || {}
-  const to = { dshHome: posix(DSH_HOME), soul: posix(SOUL), memory: posix(MEM), hub: posix(HUB), sessions: posix(SESSIONS), runtime: posix(RUNTIME) }
+  const to = { dshHome: posix(DSH_HOME), soul: posix(SOUL), memory: posix(MEM), hub: posix(HUB), sessions: posix(SESSIONS), runtime: RX }
   const pairs = pathPairs(from, to)
   if (RB.conflict) {
     const keep = path.join(SOUL_ROOT, '_backup', `${TS}-pre-restore`)
@@ -1733,7 +2119,7 @@ if (PKGS.includes('dsh-mcp-hub')) {
   step('mcp-hub 接入 echo 检索（记忆召回走常驻服务）')
   const SERVERS = path.join(DSH_HOME, 'mcp-hub', 'servers.json')
   const echoMcp = path.join(HUB, 'echo-mcp.mjs')
-  const entry = { serverName: 'echo', transport: 'stdio', enabled: true, command: process.execPath, args: [posix(echoMcp)], cwd: posix(HUB), toolCallTimeoutMs: 60000 }
+  const entry = { serverName: 'echo', transport: 'stdio', enabled: true, command: posix(NODE_FOR_CONFIG), args: [posix(echoMcp)], cwd: posix(HUB), toolCallTimeoutMs: 60000 }
   const willHave = exists(echoMcp) || hubOf('add').includes('echo-mcp.mjs') || hubOf('update').includes('echo-mcp.mjs') || (!UPDATE && exists(path.join(SRC.dir, 'kit', 'echo', 'echo-mcp.mjs')))
   if (!willHave) { warn('中枢里没有 echo-mcp.mjs（上游这一版还没有，或本机中枢不是全套），没接入；mcp-hub 照样能用来接别的 MCP'); MCP_STATUS = '未接入 echo' }
   else {
@@ -1756,7 +2142,7 @@ if (PKGS.includes('dsh-mcp-hub')) {
 
 // ═══ 安装：书房 + 中枢 + 自我层 + 心跳 ═══════════════════════════════════
 // 方案文件里留到安装时才填的：路径（换电脑会变）、心跳时间、这台电脑有没有 dsh-mnemon
-const IVARS = { HUB: posix(HUB), SOUL: posix(SOUL), MEM: posix(MEM), SESSIONS: posix(SESSIONS), DSH_HOME: posix(DSH_HOME), PROFILE_DIR: posix(PROF), RUNTIME: posix(RUNTIME), HB_TIME }
+const IVARS = { HUB: posix(HUB), SOUL: posix(SOUL), MEM: posix(MEM), SESSIONS: posix(SESSIONS), DSH_HOME: posix(DSH_HOME), PROFILE_DIR: posix(PROF), RUNTIME: RX, HB_TIME }
 const ICONDS = { MNEMON, HEARTBEAT: !NO_HB }
 let HB_STATUS = UPDATE ? '更新不动心跳' : '未注册'
 if (!UPDATE) {
@@ -1795,7 +2181,8 @@ if (!UPDATE) {
   }
   {
     // 配置：一主、一副本、一指针
-    const cfg = { _说明: 'dsh-agent-soul / echo 的唯一配置（主）。副本：profile 的 node_modules/dsh-agent-soul/kit/echo.config.json（改主后复制过去）；指针：<DSH 家目录>/hub/echo.config.json。', soul: posix(SOUL), memory: posix(MEM), sessions: posix(SESSIONS), runtime: posix(RUNTIME) }
+    const cfg = { _说明: 'dsh-agent-soul / echo 的唯一配置（主）。副本：profile 的 node_modules/dsh-agent-soul/kit/echo.config.json（改主后复制过去）；指针：<DSH 家目录>/hub/echo.config.json。', soul: posix(SOUL), memory: posix(MEM), sessions: posix(SESSIONS) }
+    if (RX) cfg.runtime = RX // 解析不出热记忆目录就不写这个键：留空是「没配」，写 null 会让下游把 null 当路径
     const text = JSON.stringify(cfg, null, 2)
     const master = path.join(HUB, 'echo.config.json')
     if (exists(master) && readText(master) !== text) backup(master, 'pre-soul-kit')
@@ -1852,7 +2239,7 @@ if (!UPDATE) {
   <string>${label}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${esc(process.execPath)}</string>
+    <string>${esc(NODE_FOR_CONFIG)}</string>
     <string>${esc(HB)}</string>
   </array>
   <key>StartCalendarInterval</key>
@@ -1886,7 +2273,7 @@ if (!UPDATE) {
       const ps1 = path.join(SOUL, '60-工具', 'register-heartbeat.ps1')
       const body = [
         "$ErrorActionPreference = 'Stop'",
-        `$action = New-ScheduledTaskAction -Execute ${q(process.execPath)} -Argument ${q('"' + HB + '"')}`,
+        `$action = New-ScheduledTaskAction -Execute ${q(NODE_FOR_CONFIG)} -Argument ${q('"' + HB + '"')}`,
         `$trigger = New-ScheduledTaskTrigger -Daily -At ${q(HB_TIME)}`,
         '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)',
         "Register-ScheduledTask -TaskName 'dsh-soul-heartbeat' -Action $action -Trigger $trigger -Settings $settings -Description 'dsh-agent-soul heartbeat' -Force | Out-Null",
@@ -1950,6 +2337,10 @@ if (!DRY) {
     parts: partsDone,
     declined: [...new Set([...DECLINED0, ...OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p))])].filter((p) => !isInstalledPart(p)),
     heartbeat: UPDATE ? (state0 && state0.heartbeat) || null : { enabled: !NO_HB, time: HB_TIME, status: HB_STATUS },
+    // 热记忆目录是怎么找到的：出问题时不用再猜，直接看这一行
+    runtime: { dir: RX, source: MNE.source, scope: MNE.scope, dataDir: MNE.dataDir, probe: MNE.probe.level },
+    // 写进持久配置的那个 node（DSH 自带优先）；DSH 升级换了 app 路径时，这里会跟着变
+    node: { bin: posix(NODE_FOR_CONFIG), version: process.versions.node, from: path.resolve(NODE_FOR_CONFIG) === path.resolve(process.execPath) ? '当前进程' : 'DSH 自带' },
     patches: patchState,
     mcpHub: MCP_STATUS,
     history: [...((state0 && state0.history) || (RESTORE && (readJson(path.join(RB.root, 'install-state.json')) || {}).history) || []), { at: now, mode: MODE, sha: SRC.sha, ...(RESTORE ? { from: `${RB.man.host} ${RB.man.createdAt}` } : {}) }],
