@@ -1,0 +1,115 @@
+{
+  "format": 1,
+  "repo": "cyanwell/dsh-agent-soul",
+  "baseline": {
+    "sha": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+    "treeDigest": "e22a81a6db22d83d6e26bc21ecfc627302e082f993c9ffb443df87b7b399f1d8"
+  },
+  "history": [
+    {
+      "completedAt": "2026-10-26T07:26:38.073Z",
+      "reportCreatedAt": "2026-10-26T07:17:43.044Z",
+      "base": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+      "target": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+      "kitVersion": "2.4",
+      "summary": "kit 2.4 新增 Agent 驱动的上游对比、四流程分析、修正验证与完成登记流程。本次真实下载的 main 与原 VERIFIED 基线均为 6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9，218 个纳入比较的文件一致，未发现由新增上游变化引起的四流程适配需求。完成源码对照和迭代工具回归，保留原 VERIFIED，不宣称重新完成桌面端验收。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "unchanged",
+          "reason": "上游包结构、清单、初始化工具与补丁相关源码相对基线没有变化，契约检查没有发现缺失文件、未知包名或失效锚点；本轮无需因上游变化调整安装策略。新增迭代入口复用 getSource，其双归档隔离与原有入口已通过回归。",
+          "evidence": [
+            "report.json：base 与 target 的完整提交、218 个文件及 treeDigest 一致，changes=[]、findings=[]",
+            "install.mjs：getSource、REQUIRED_SOURCE_FILES、checkSource、patchList、buildPresetBundle",
+            "上游 6ea60a28：INSTALL.md、package.json、plugins/*/package.json、kit/echo/install-kit.mjs 与 tools/init.mjs"
+          ],
+          "checks": [
+            "upstream-comparison",
+            "syntax",
+            "iteration-regression"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "unchanged",
+          "reason": "两份上游源码相同，没有新增包改名、发布文件或中枢脚本变化。本轮保留 PART_NAMES、包名迁移、本机补丁归一化和中枢三方比对策略，无新增上游适配修改。迭代基线独立存放，不改变本机安装记录。",
+          "evidence": [
+            "report.json：changes=[]；base.sha 与 target.sha 相同",
+            "install.mjs：PART_NAMES、ADDED_PARTS、renameInLocks、partDiff、HUB_PLAN",
+            "上游 6ea60a28：plugins/*/package.json、kit/echo/；README.md 更新记录已包含在现有基线中"
+          ],
+          "checks": [
+            "upstream-comparison",
+            "syntax",
+            "iteration-regression"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "上游没有新增持久数据或设置变化。核对换气插件与 echo 使用的 dsh-huanqi.json、huanqi-turns.jsonl，仍在 STATE_FILES 中；本轮没有修改备份范围、manifest 格式、配置抽取或文件校验行为。结论仅针对本次上游差异，不表示重新完成备份往返验证。",
+          "evidence": [
+            "report.json：218 个文件一致，没有持久化实现差异",
+            "install.mjs：STATE_FILES、soulEntryIds、cordisBlocks、BACKUP 分支、writeTarGz",
+            "上游 6ea60a28：plugins/huanqi/lib/index.js 的账本与 turnsFile；plugins/echo/index.js 的 HUANQI_TURNS、HUANQI_LEDGER"
+          ],
+          "checks": [
+            "upstream-comparison",
+            "syntax"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "目标与基线没有数据格式、配置路径或索引工具变化，不需要新增旧备份兼容逻辑。本轮保留恢复前校验、路径替换、冲突保护、会话只补不覆盖和索引重建；没有重新执行跨目录恢复演练。",
+          "evidence": [
+            "report.json：基线与目标完整提交相同，changes=[]",
+            "install.mjs：RESTORE 备份读取分支、pathPairs、rewritePaths、copyTree、MCP 清单恢复与 memindex 重建",
+            "上游 6ea60a28：kit/echo/、plugins/mcp-hub/、plugins/huanqi/lib/index.js"
+          ],
+          "checks": [
+            "upstream-comparison",
+            "syntax",
+            "iteration-regression"
+          ]
+        }
+      ],
+      "findings": [],
+      "checks": [
+        {
+          "id": "upstream-comparison",
+          "scope": "static",
+          "command": "node install.mjs --kit-iterate",
+          "status": "passed",
+          "evidence": "实际联网下载基线与 main；两者 SHA 均为 6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9，文件数均为 218，treeDigest 均为 e22a81a6db22d83d6e26bc21ecfc627302e082f993c9ffb443df87b7b399f1d8；变化 0 个、契约提示 0 项。另人工对照四流程调用点及上游安装说明、更新记录、状态文件引用。"
+        },
+        {
+          "id": "syntax",
+          "scope": "static",
+          "command": "node --check install.mjs && node --check lib/kit-iterate.mjs",
+          "status": "passed",
+          "evidence": "两个入口语法检查退出码均为 0。"
+        },
+        {
+          "id": "iteration-regression",
+          "scope": "simulated",
+          "command": "node --test tests/kit-iterate.test.mjs",
+          "status": "passed",
+          "evidence": "15 项通过、0 失败、0 跳过；覆盖双源码隔离、增删改、契约提示、离线与干跑、模式互斥、四流程完成要求、失败记录拦截、快照变化、过期报告、未知提交、脏目录和旧入口。测试使用临时目录，不执行上游脚本，不操作真实 DSH。"
+        },
+        {
+          "id": "diff-check",
+          "scope": "static",
+          "command": "git diff --check",
+          "status": "passed",
+          "evidence": "已跟踪文件的工作区差异检查退出码为 0。"
+        }
+      ],
+      "limitations": [
+        "本轮为零上游差异的源码审查与迭代工具回归，未重新运行四个生产流程的完整安装、升级、备份和恢复演练。",
+        "未进行真实 DSH 桌面启动、会话压缩、MCP 与心跳验收；VERIFIED 保持原值。",
+        "未在 Windows 上实测。"
+      ]
+    }
+  ]
+}

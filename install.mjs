@@ -14,6 +14,8 @@
 //   node install.mjs --update               更新到最新版
 //   node install.mjs --backup               打一个迁移用的备份包（放在本文件夹的 backups/）
 //   node install.mjs --restore [备份包]      在新电脑上：装好并放回备份里的数据（不写包名就用 backups/ 里最新的）
+//   node install.mjs --kit-iterate          对比上游，准备四流程迭代报告，交给 Agent 修正 kit
+//   node install.mjs --kit-accept <报告目录>  校验 Agent 的完成记录，保存新的 kit 迭代基线
 //
 // 可选参数：
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
@@ -30,7 +32,9 @@
 //   --skip-part <目录名,…>       不装某个可选零件（例如 mcp-hub）；更新时用它拒掉的，以后也不再补
 //   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
 //   --heartbeat-time HH:MM       心跳时间（仅安装；默认按方案）
-//   --out <目录>                 备份包放哪（仅 --backup），默认本文件夹的 backups/
+//   --out <目录>                 备份或 kit 报告父目录，默认 backups/ 或 logs/kit-iterations/
+//   --base-ref <提交>             kit 迭代的对比基线，默认上次完成迭代的提交或 VERIFIED
+//   --base-source <目录|.tar.gz>   kit 迭代的本地基线，和 --source 配合可离线检查
 //   --force                      新电脑上已经有灵魂数据时仍然恢复（原有的先整份备份）
 //
 // 原则：先备份再动手；重复跑安全；任何一步失败就停下。输出同时存进本文件夹的 logs/。
@@ -53,7 +57,7 @@ import { createInterface } from 'node:readline/promises'
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.3'
+const KIT_VERSION = '2.4'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -96,8 +100,10 @@ const UPDATE = flag('--update')
 const BACKUP = flag('--backup')
 const RESTORE = flag('--restore')
 const RESTORE_FILE = opt('--restore')
+const KIT_ITERATE = flag('--kit-iterate')
+const KIT_ACCEPT = flag('--kit-accept')
 const FORCE = flag('--force')
-const MODE = BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : 'install'
+const MODE = KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : 'install'
 let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
 const PROXY_OPT = opt('--proxy')
@@ -113,7 +119,30 @@ const SETUP_OPT = opt('--setup')
 const QUESTIONS_MODE = flag('--questions')
 const TTY = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flag('--no-input')
 let SKIP_PARTS = String(opt('--skip-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
-if ([UPDATE, BACKUP, RESTORE].filter(Boolean).length > 1) { console.log('--update、--backup、--restore 一次只能用一个'); process.exit(2) }
+if ([UPDATE, BACKUP, RESTORE, KIT_ITERATE, KIT_ACCEPT].filter(Boolean).length > 1) {
+  console.log('--update、--backup、--restore、--kit-iterate、--kit-accept 一次只能用一个')
+  process.exit(2)
+}
+if ((KIT_ITERATE || KIT_ACCEPT) && QUESTIONS_MODE) {
+  console.log('kit 迭代不能和 --questions 一起使用')
+  process.exit(2)
+}
+if (KIT_ACCEPT && !opt('--kit-accept')) {
+  console.log('--kit-accept 需要给出报告目录')
+  process.exit(2)
+}
+if ((flag('--base-ref') || flag('--base-source')) && !KIT_ITERATE) {
+  console.log('--base-ref、--base-source 只用于 --kit-iterate')
+  process.exit(2)
+}
+if (KIT_ITERATE) {
+  for (const key of ['--base-ref', '--base-source', '--ref', '--source', '--out']) {
+    if (flag(key) && !opt(key)) {
+      console.log(`${key} 需要给出参数值`)
+      process.exit(2)
+    }
+  }
+}
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
 if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复不需要选方案'); process.exit(2) }
@@ -134,7 +163,7 @@ const TMP_DIRS = []
 let LOG_FILE = null
 process.on('exit', () => {
   for (const d of TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }) } catch { /* 清不掉就算了 */ } }
-  if (QUESTIONS_MODE) return // 问题清单只输出 JSON，不记日志
+  if (QUESTIONS_MODE || KIT_ITERATE || KIT_ACCEPT) return // kit 模式自行保存报告，不写安装日志
   try {
     fs.mkdirSync(path.join(KIT, 'logs'), { recursive: true })
     LOG_FILE = path.join(KIT, 'logs', `${MODE}${DRY ? '-dry' : ''}-${TS}.log`)
@@ -412,10 +441,16 @@ function rewritePaths(t, pairs) {
   return t.replace(re, (m) => map.get(m))
 }
 
-async function getSource() {
-  const tmp = path.join(os.tmpdir(), `dsh-soul-src-${TS}`)
-  if (SOURCE) {
-    const s = path.resolve(SOURCE)
+/**
+ * 获取指定上游源码，临时目录按调用隔离，供安装与 kit 迭代复用。
+ * @param options ref 为上游版本；source 为本地来源，null 表示下载
+ * @returns 源码目录、提交号及来源说明；失败时停止当前流程
+ */
+async function getSource({ ref = REF, source = SOURCE } = {}) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-src-'))
+  TMP_DIRS.push(tmp)
+  if (source) {
+    const s = path.resolve(source)
     if (!exists(s)) die(`--source 指的地方不存在：${s}`)
     if (fs.statSync(s).isDirectory()) {
       let dir = s
@@ -425,29 +460,28 @@ async function getSource() {
       }
       let sha = null
       if (exists(path.join(dir, '.git'))) { const r = spawnSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }); if (r.status === 0) sha = r.stdout.trim() }
-      return { dir, sha, from: '本地目录 ' + posix(dir) }
+      return { dir, sha, local: true, from: '本地目录 ' + posix(dir) }
     }
-    if (/\.(tar\.gz|tgz)$/i.test(s)) { TMP_DIRS.push(tmp); const r = extractTarGz(s, tmp); return { ...r, from: '本地压缩包 ' + posix(s) } }
+    if (/\.(tar\.gz|tgz)$/i.test(s)) { const r = extractTarGz(s, tmp); return { ...r, from: '本地压缩包 ' + posix(s) } }
     die('--source 只认文件夹或 .tar.gz。下载的是 .zip 的话，先解压，再把解压出的文件夹传给 --source')
   }
-  const url = `https://codeload.github.com/${REPO}/tar.gz/${REF.split('/').map(encodeURIComponent).join('/')}`
-  const file = path.join(os.tmpdir(), `dsh-agent-soul-${TS}.tar.gz`)
-  TMP_DIRS.push(tmp, file)
+  const url = `https://codeload.github.com/${REPO}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`
+  const file = path.join(tmp, 'upstream.tar.gz')
   info(`下载 ${url}`)
   const d = await download(url, file)
   if (!d.ok) {
     const tip1 = d.proxy ? `① 代理 ${showProxy(d.proxy)} 这次没连上 GitHub：过一会儿重跑，或者换个代理地址加 --proxy <地址> 重跑` : '① 加 --proxy http://127.0.0.1:<端口> 走代理重跑'
-    die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${REPO}/archive/${REF}.tar.gz 下载，再加 --source <下载的文件> 重跑（也可以是 git clone 下来的文件夹）`)
+    die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${REPO}/archive/${ref}.tar.gz 下载，再加 --source <下载的文件> 重跑（基线用 --base-source；也可以是 git clone 下来的文件夹）`)
   }
   let r
   try { r = extractTarGz(file, tmp) } catch (e) { die(`解压失败：${e.message}`) }
-  return { ...r, from: `GitHub ${REPO}@${REF}（${d.via}）` }
+  return { ...r, from: `GitHub ${REPO}@${ref}（${d.via}）` }
 }
 
 // ── 源码体检 ──────────────────────────────────────────────────────────
+const REQUIRED_SOURCE_FILES = ['package.json', 'index.js', 'cordis.patch.yml', 'kit/echo/install-kit.mjs', 'kit/echo/scaffold.mjs', 'kit/templates/SELF.src.md', 'tools/init.mjs', 'tools/verify-client-ids.mjs']
 function checkSource(dir) {
-  const need = ['package.json', 'index.js', 'cordis.patch.yml', 'kit/echo/install-kit.mjs', 'kit/echo/scaffold.mjs', 'kit/templates/SELF.src.md', 'tools/init.mjs', 'tools/verify-client-ids.mjs']
-  const missing = need.filter((f) => !exists(path.join(dir, f)))
+  const missing = REQUIRED_SOURCE_FILES.filter((f) => !exists(path.join(dir, f)))
   if (missing.length) die(`上游源码里缺这些文件：${missing.join('、')}。可能是仓库结构改了，这份安装包还没跟上。\n    先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包验证过的版本，并告诉用户。`)
   const names = {}, absent = []
   for (const p of PARTS) {
@@ -1417,6 +1451,30 @@ function detectNode(o = {}) {
     for (const p of commonNodePlaces()) consider(p, '常见安装位置')
   }
   return hit ? { ...hit, tried } : null
+}
+
+// kit 迭代只操作当前工具包与报告，在读取 DSH profile、检查宿主进程之前分流。
+if (KIT_ITERATE || KIT_ACCEPT) {
+  try {
+    const { prepareIteration, acceptIteration } = await import('./lib/kit-iterate.mjs')
+    if (KIT_ITERATE) {
+      const result = await prepareIteration({
+        kit: KIT, repo: REPO, version: KIT_VERSION, verified: VERIFIED,
+        ref: REF, source: SOURCE, baseRef: opt('--base-ref'), baseSource: opt('--base-source'),
+        output: opt('--out'), dryRun: DRY,
+        contract: { requiredFiles: REQUIRED_SOURCE_FILES, partNames: PART_NAMES, optionalSource: OPTIONAL_SRC },
+        helpers: { getSource, hashDir, diffMaps, patchList }
+      })
+      console.log(result.message)
+    } else {
+      const result = acceptIteration({ kit: KIT, repo: REPO, directory: opt('--kit-accept'), dryRun: DRY, hashDir })
+      console.log(result.message)
+    }
+  } catch (error) {
+    console.error(`kit 迭代失败：${error.message}`)
+    process.exit(1)
+  }
+  process.exit(0)
 }
 
 // ═══ 0. 预检 ═══════════════════════════════════════════════════════════

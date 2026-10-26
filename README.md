@@ -4,12 +4,13 @@
 使用方式就是clone或下载下来，将文件目录作为Agnet的工作区，然后输入对应指令让AI做事。
 现在只测试了Mac环境，Windows待测试。
 
-2026-10-24 在 Boss 的 Mac 上给 DSH 里的大肥鱼装好了 dsh-agent-soul 灵魂架构，这个文件夹是从那次安装整理出来的安装包。它能做四件事：
+2026-10-24 在 Boss 的 Mac 上给 DSH 里的大肥鱼装好了 dsh-agent-soul 灵魂架构，这个文件夹是从那次安装整理出来的安装包。它能做这些事：
 
 - 在一台电脑上（macOS 或 Windows）装好这套架构；
 - 作者在 GitHub 上更新后升级；
 - 把 agent 连同账本、对话一起搬到另一台电脑；
 - 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定。
+- 迭代 kit 自身：检查上游变化，分析并修正安装、更新、备份、迁移四个流程。
 
 插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。
 
@@ -74,6 +75,14 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 请读这个文件夹里的 AGENT-INSTALL.md，按第十节「迁移」操作：在旧电脑上先备份；新电脑上用备份恢复。每一步先跟我确认。
 ```
 
+**迭代 kit 自身**：
+
+```text
+请读 AGENT-ITERATE.md，检查上游作者仓库相对上次 kit 迭代基线的变化，逐项分析安装、更新、备份、迁移四个流程，完成需要的 kit 修正和验证，再登记本轮迭代结果。告诉我完成了什么、还有什么未验证。
+```
+
+这条流程由 Agent 完成代码分析、修改和验证。`node install.mjs --kit-iterate` 负责准备上游差异、源码快照与四流程报告；Agent 完成后用 `--kit-accept <报告目录>` 登记新基线。仅生成报告不会标记为完成，也不会更新本机已安装的插件。
+
 常用命令（都可以加 `--dry-run` 先看会改什么）：
 
 ```bash
@@ -81,6 +90,7 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 "$NODE" install.mjs --update             # 更新（先 Cmd+Q 退出 DSH）
 "$NODE" install.mjs --backup             # 打迁移用的备份包，放在 backups/
 "$NODE" install.mjs --restore            # 在新电脑上：装好并放回 backups/ 里最新的备份
+node install.mjs --kit-iterate           # 收集 kit 迭代证据，接着交给 Agent 完成修正
 ```
 
 ## 装出来是什么
@@ -98,7 +108,11 @@ node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程
 | 文件 | 用途 |
 |---|---|
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
+| `AGENT-ITERATE.md` | 给 Agent 的 kit 自我迭代流程：上游对比、四流程分析、修正、验证、完成登记 |
 | `install.mjs` | 安装 / 更新 / 备份 / 恢复脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
+| `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
+| `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
+| `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
 | `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、两个 preset 的快照 |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
