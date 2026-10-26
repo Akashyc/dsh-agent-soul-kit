@@ -50,12 +50,13 @@
 请读这个文件夹里的 AGENT-INSTALL.md，按它把 dsh-agent-soul 装到这台电脑上。先问我用现成方案还是全新安装；全新安装就按手册一组一组问我设定。每个阶段开始前先跟我确认，需要退出或重开 DSH 时告诉我。
 ```
 
-**自己在终端里装**（macOS，用 DSH 自带的 node）：
+**自己在终端里装**：
 
 ```bash
-NODE="/Applications/DSH NEXT.app/Contents/Resources/runtime/arm64/primary-runtime/dependencies/node/bin/node"
-"$NODE" install.mjs
+node install.mjs
 ```
+
+node 的路径不用自己找：脚本会依次试「DSH 自带 → 当前进程 → PATH → 常见安装位置」，当前版本不够时自动换一个合格的把自己重跑一遍。细节见 AGENT-INSTALL.md 的 A3。
 
 直接跑会先问用哪个方案，还是全新安装。全新安装会一问一答，回车就用默认值。最后给一份总结，确认之后才动手。动手前要先按 Cmd+Q 退出 DSH。
 
