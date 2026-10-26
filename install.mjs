@@ -53,6 +53,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline/promises'
+import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
@@ -503,6 +504,8 @@ function checkSource(dir) {
 // ③ 上游 v2.0.0 把 echo / huanqi-panel 改名成 dsh-yanqing-*，但它们 cordis.patch.yml 里要加载的 name 还是旧名
 //    → DSH 按旧名去 node_modules 找不到包，面板的宿主半加载失败。改成和包名一致
 // ④ mcp-hub 找清单时，环境变量里没有 DSH_HOME 就退到作者机器的 D:\AI\dsh\home → 默认值改成本机 DSH 家目录
+// ⑤ 换气面板只会在「已有的节」上改值，而换气是 bundle 层 insert 进来的、profile 层本来就没有这一节
+//    → 新装的机器第一次保存必然报「没有 `- id: huanqi` 这一节」。改成找不到时自己补一节（lib/huanqi-panel-patch.mjs）
 // any：认得出「已经打过」的写法（包括早期手工打的）；fixed：上游自己已经改好的写法
 const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function patchList(runtime, names, dshHome) {
@@ -559,6 +562,12 @@ function patchList(runtime, names, dshHome) {
       fixed: new RegExp(`^\\s*name: ['"]?${reEsc(pkg)}['"]?\\s*$`, 'm'),
     })
   }
+  if (names['huanqi-panel']) list.push({
+    key: 'huanqi-panel-ensure-block', pkg: names['huanqi-panel'], file: 'index.js',
+    label: '换气面板：profile 里没有 `- id: huanqi` 时自建一节', needed: true,
+    old: HUANQI_PANEL_OLD, new: HUANQI_PANEL_NEW,
+    any: HUANQI_PANEL_ANY, fixed: HUANQI_PANEL_FIXED,
+  })
   return list.filter((p) => Object.values(names).includes(p.pkg))
 }
 function applyPatch(nm, p, pendingSrc) {
