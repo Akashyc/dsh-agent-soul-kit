@@ -127,6 +127,8 @@ node install.mjs --kit-iterate           # 收集 kit 迭代证据，接着交�
 
 上游给零件改名时自动迁移，目录、配置、锁文件一起换。安装包后来新加的零件，更新时会问你装不装；拒掉的会记下来，以后不再问。
 
+本机补丁（锚点写在 `install.mjs` 与 `lib/huanqi-panel-patch.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过。目前有：mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名，以及换气面板「profile 里没有 `- id: huanqi` 时自建一节」。
+
 **不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
 
 更新前会把要换的东西整份备份到 `dsh-soul/_backup/`，附还原方法。
