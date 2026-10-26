@@ -5,9 +5,11 @@
 > 安装包只带方案、模板和脚本，插件本体由 `install.mjs` 从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**。作者还在持续更新，所以不锁死版本。
 > 适用：macOS、Windows；DSH 桌面版（DSH NEXT），profile 名为 `desktop`。
 
+> 用户要求检查上游变化并修正 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。该流程通过 `--kit-iterate` 准备证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
+
 ## 一、规矩（动手前先读）
 
-1. 称呼用户按用户自己说的来；不知道就先问。用「大肥鱼」方案时，用户是 **Boss**。每个阶段开始前，用一两句话告诉用户要做什么，等用户确认后再动手。
+1. 称呼用户按用户自己说的来；不知道就先问。用「大肥鱼」方案时，用户是 **Boss**。本手册涉及本机安装与数据操作的阶段开始前，用一两句话告诉用户要做什么，等用户确认后再动手。kit 源码迭代的授权与验证范围见 `AGENT-ITERATE.md`。
 2. 只按本手册做。脚本报错就停下，把输出原文给用户看，不要自己绕过或手工补救。每次运行的输出也会存进本文件夹的 `logs/`。
 3. **不要**用 `dsh plugin add` 安装，也**不要**运行仓库作者的 `install-desktop.ps1`：桌面版 profile 不接受 CLI 安装，作者脚本也不包含这里的修正。
 4. **不要**照作者的 `tools/soul-one-shot.mjs --fix` 去改配置：它只认旧版的 `.agent-presets` 目录，在 DSH NEXT 上会把已经接管的压缩 / 裁剪误报成「没接管」。
