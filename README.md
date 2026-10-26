@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 2.6**（2026-10-27）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
+**版本 2.7**（2026-10-27）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
 
 > **这不是 DSH 插件，不要往插件市场里装。**
 > 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
@@ -12,6 +12,7 @@
 - 在 macOS 或 Windows 上装好 dsh-agent-soul 灵魂架构；
 - 上游作者在 GitHub 上更新后，跟着升级；
 - 把 agent 连同账本、对话一起搬到另一台电脑；
+- 卸载：先打备份包，再把本体、零件、Soul preset、配置和书房一起卸掉，想回来用备份包恢复；
 - 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定；
 - 迭代 kit 自身：同步 kit 仓库的更新，对照上游的变化，修正安装、更新、备份、迁移四个流程。
 
@@ -78,6 +79,14 @@ node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安�
 请读这个文件夹里的 AGENT-INSTALL.md，按第十节「迁移」操作：在旧电脑上先备份；新电脑上用备份恢复。每一步先跟我确认。
 ```
 
+**卸载**：
+
+```text
+请读这个文件夹里的 AGENT-INSTALL.md，按第十二节「卸载」把 dsh-agent-soul 卸掉。先干跑，把要删什么、有多少旧会话用的是 Soul preset 报给我，旧会话怎么处理让我选，我确认后再真跑。
+```
+
+卸载前一定先打备份包（在 `backups/` 里，文件名以 `-pre-uninstall` 结尾）。用 Soul preset 建的旧会话，preset 删了多半打不开，三种处理任选：留一个空壳 preset（`shell`，旧会话照常打开）、把旧会话改成对应的官方 preset（`rewrite`）、不管（`keep`）。书房和记忆中枢默认一起删，想留着加 `--keep-data`。
+
 **迭代 kit 自身**：
 
 ```text
@@ -97,13 +106,14 @@ node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安�
 - 离线：给了 `--base-source`、`--source` 就默认不联网查 kit，想把 kit 也一起离线查，加 `--kit-source <干净的 Git 目录>`；
 - `--skip-kit-update`：已经人工合入并验证过时，跳过 kit 检查继续本轮；跳过会写进报告，不代表 kit 已是最新。
 
-常用命令（都可以加 `--dry-run` 先看会改什么；安装、更新、恢复真跑前都要先完全退出 DSH）：
+常用命令（都可以加 `--dry-run` 先看会改什么；安装、更新、恢复、卸载真跑前都要先完全退出 DSH）：
 
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
 node install.mjs --update          # 更新到上游最新版
 node install.mjs --backup          # 打迁移用的备份包，放在 backups/
 node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
+node install.mjs --uninstall       # 卸载：先备份；终端里会问旧会话怎么处理（也可以加 --old-sessions shell|rewrite|keep）
 node install.mjs --kit-update      # 只检查、同步 kit 自身仓库
 node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，交给 agent 修正
 ```
@@ -124,10 +134,11 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 |---|---|
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
 | `AGENT-ITERATE.md` | 给 agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
-| `install.mjs` | 安装 / 更新 / 备份 / 恢复脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
+| `install.mjs` | 安装 / 更新 / 备份 / 恢复 / 卸载脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
-| `lib/soul-presets.mjs` | 从官方预设派生 Soul preset |
+| `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
+| `lib/soul-presets.mjs` | 从官方预设派生 Soul preset；卸载时做空壳 preset |
 | `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
@@ -136,7 +147,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
 | `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照 |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
-| `backups/` | `--backup` 打出的备份包；迁移时连同整个文件夹一起拷走 |
+| `backups/` | `--backup`、`--uninstall` 打出的备份包；迁移时连同整个文件夹一起拷走 |
 
 ## 更新会动什么
 
@@ -195,6 +206,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.7 | 2026-10-27 | 新增卸载（`--uninstall`）：先打备份包，再收回本体、零件、Soul preset、配置、锁文件、心跳和书房；用 Soul preset 建的旧会话可以留空壳、改写或不管 |
 | 2.6 | 2026-10-27 | 路径改成运行时自动定位，配置和补丁里不再写死用户名；「说话与样子」不再重复补三条规矩；装完在新会话里验收，干跑给出现成的终端命令 |
 | 2.5 | 2026-10-26 | kit 自身仓库更新与双源迭代（`--kit-update`）；新增标准、极简、Cordis 三个 Soul preset |
 | 2.4 | 2026-10-26 | kit 上游分析与自我迭代流程（`--kit-iterate`、`AGENT-ITERATE.md`）；修好换气面板第一次保存失败 |

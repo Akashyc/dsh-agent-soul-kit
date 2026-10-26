@@ -1,6 +1,6 @@
-# 给 Agent 的手册：dsh-agent-soul 安装、更新与迁移
+# 给 Agent 的手册：dsh-agent-soul 安装、更新、迁移与卸载
 
-> **你的任务**：在这台电脑上，给 DeepSeek Harness（下称 DSH）装上 dsh-agent-soul 灵魂架构；已经装过的，按第九节更新到最新版；要把一台电脑上的 agent 搬到另一台，按第十节备份和恢复。
+> **你的任务**：在这台电脑上，给 DeepSeek Harness（下称 DSH）装上 dsh-agent-soul 灵魂架构；已经装过的，按第九节更新到最新版；要把一台电脑上的 agent 搬到另一台，按第十节备份和恢复；要卸掉，按第十二节（先备份再卸）。
 > 装成什么样的 agent 由**方案**决定：用现成方案（安装包 `setups/` 里的，例如 Boss 的「大肥鱼」），或者**全新安装**——在对话里引导用户填设定，填完存成新方案再装。
 > 安装包只带方案、模板和脚本，插件本体由 `install.mjs` 从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**。作者还在持续更新，所以不锁死版本。
 > 适用：macOS、Windows；DSH 桌面版（DSH NEXT），profile 名为 `desktop`。
@@ -42,7 +42,9 @@
 ```
 README.md                    给人看的说明
 AGENT-INSTALL.md             本手册
-install.mjs                  安装 / 更新 / 备份 / 恢复脚本（跨平台，可重复跑，先 --dry-run）
+install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
+lib/                         install.mjs 用的模块：Soul preset 派生、路径自动定位、人设规矩、卸载规划、kit 迭代
+tests/                       回归测试：node --test tests/*.test.mjs
 setups/                      方案：每个子文件夹一套
   大肥鱼/
     setup.json               名字、称呼、硬线、人设类型、零件、preset、心跳
@@ -58,7 +60,7 @@ assets/
   presets/cordis.patch.yml   官方「Cordis」预设的快照（同上）
   presets/flash-lean-ptc-v3.patch.yml   Flash 精简·PTC v3 的快照（没装 dsh-flash-presets 时用）
 logs/                        每次运行的输出（脚本自动建，可以删）
-backups/                     --backup 打出的备份包（迁移时连同文件夹一起拷走）
+backups/                     --backup、--uninstall 打出的备份包（迁移时连同文件夹一起拷走）
 ```
 
 模板里的记号：`{{名字}}` 换成值；行首 `{{?条件}}` / `{{!条件}}` 表示条件成立 / 不成立时才保留这一行。名字、称呼、硬线、人设在生成方案时填好；路径、心跳时间、这台电脑有没有 dsh-mnemon 留到安装时按电脑填。
@@ -305,14 +307,49 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 | 21 | 上游 `agent_soul_install` 的 scan 报 dsh-agent-compaction、dsh-agent-pruner「在 node_modules 但不在 bundles —— 等于没启用」，agent 据此以为压缩是内置那套在做，要去「接管」 | scan 只看 bundles，认不出路 B。这两个按设计就不进 bundles，由 Soul preset 在 compaction 组里同 id 换 name 接管（上游源码也把它们列为只能走路 B 的零件） | 误报，不用动配置：别把它们加进 bundles（会和内置的抢名字），也别去改 `~/.dsh/.agent-presets`（DSH NEXT 不读）。判断压缩是谁做的看产物：摘要第一行是「⛬ 压缩索引（非原文）」、被裁的工具输出写着「原文在 append-only 会话日志 seq N」的，是我们的两个包；换气触发的清理压缩走内置，没有这个开头，属正常 |
 | 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
+| 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`ptc-soul`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
 
-## 十二、回滚 / 卸载
+## 十二、卸载与回滚
 
-- **安装的回滚**（先退出 DSH）：用 profile 目录里的 `package.json.bak-<时间>-pre-soul-kit` 和 `cordis.patch.yml.bak-<时间>-pre-soul-kit` 覆盖回去。node_modules 里新增的目录（`dsh-agent-*`、`dsh-yanqing-*`、`dsh-huanqi`、`dsh-mcp-hub`、`dsh-soul-preset`）不在 bundles 里就不会加载，留着无害。DSH NEXT 每次正常启动还会在 `<DSH 家目录>/recovery/` 存一份健康快照，也能拿来还原。
+**卸载**（`--uninstall`）把本体、零件、Soul preset、配置、心跳、书房和记忆中枢一起卸掉。动手前先用 kit 打一个备份包，想回来就 `--restore`。
+
+1. **先干跑**：`"$NODE" install.mjs --uninstall --dry-run`。把「清点要卸的东西」「打算怎么做」两段原样报给用户，特别是这几项：要删哪些包、新会话默认 preset 改成哪个、书房和中枢删不删、多少个会话是用 Soul preset 建的。
+2. **旧会话问用户**（有用 Soul preset 建的会话时才问）。会话文件开头记着建会话时的 preset id，preset 删了，这些会话多半打不开。三个选项原样给用户选，不要替用户定：
+   - `shell` 留空壳 preset：dsh-soul-preset 留着，id 不变，名字后面标「（已卸载）」；压缩和裁剪换回官方原版，不依赖本架构的任何包。旧会话照常打开。
+   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（ptc-soul → ptc、standard-soul → standard、minimal-soul → minimal、cordis-soul → cordis；Flash 版回到 flash-lean-ptc-v3，没装 dsh-flash-presets 就回到 ptc）。只改这一个值，会话原样在备份包里。
+   - `keep` 不管：preset 全删，旧会话可能打不开；要看时用备份包装回来。
+3. **书房和记忆中枢**默认一起删（备份包里有）。用户想留着，就加 `--keep-data`；以后用 `--setup <方案>` 重装，会接着用原来的书房和账本。
+4. **真跑**：用户确认后，请用户**完全退出 DSH**，在终端里跑 `"$NODE" install.mjs --uninstall --old-sessions <用户选的>`（要保留书房的照加 `--keep-data`）。你本身是 DSH 里的 agent 时自己跑不了：干跑最后会打印现成的终端命令，交给用户。用户在终端里直接跑 `--uninstall` 的，脚本会一步步问，最后确认才动手。
+5. **成功的样子**：最后是「卸载完成」，校验那一步全是 ✓。「需要留意」逐条报给用户。备份包在安装包的 `backups/` 里，文件名以 `-pre-uninstall.tar.gz` 结尾。
+
+卸载按下面的顺序做，出错就停，停之前改过的都有备份：
+
+| 步骤 | 内容 |
+|---|---|
+| 备份 | 和 `--backup` 同一种包：书房、记忆中枢、会话原文、换气账本、本架构插件的设置、mcp-hub 清单、安装记录。书房和中枢已经不在了（比如上次卸载时删了）又要改写会话的，只把要改的会话单独打一个包 |
+| 心跳 | macOS 停掉 launchd 并删 plist（标签是 `com.dsh-soul.heartbeat`，或者调的是书房里的心跳脚本）；Windows 注销计划任务 `dsh-soul-heartbeat`；Linux 上自己加过 cron 的，手动删 |
+| 旧会话 | 按用户选的处理 |
+| profile 配置 | `package.json` 的 bundles、dependencies、desktopNextDeselectedBundles 去掉本架构的包。`cordis.patch.yml` 去掉本架构插件的配置块（memory、换气面板自建的 huanqi 等）；默认 preset 是 Soul preset 的，换回官方的。其他插件的配置不碰 |
+| 锁文件 | `pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`.modules.yaml`、`.package-map.json` 里这些包的条目摘掉。不摘的话，下次在插件市场装东西，pnpm 会照锁文件去找已经删掉的 `file:node_modules/<包>`，整个失败 |
+| 本体和零件 | 删掉 node_modules 里的本体、零件、dsh-soul-preset（留空壳时换成空壳），以及更新时留下的 `<包>.bak-…` 旧拷贝 |
+| DSH 家目录 | mcp-hub 清单里的 echo（清单空了、mcp-hub 也卸了，就连 `mcp-hub/` 一起删）、`hub/echo.config.json` 指针、`state/` 里换气的账本和日志、书房和记忆中枢。书房不在 DSH 家目录里的不删，只提醒 |
+| 校验 | 配置和锁文件都能解析，里面没有残留的包名，剩下的包要加载的插件都找得到，默认 preset 存在 |
+
+改过的配置文件旁边各留一份 `.bak-<时间>-pre-uninstall`。**不碰**：dsh-mnemon（含热记忆）、其他插件、skills、表情包、附件、DSH 本身的设置、`sessions/` 里的会话记录（`rewrite` 只改会话开头那一个值）、安装包文件夹。
+
+卸载以后：
+
+- **装回来**：退出 DSH，跑 `"$NODE" install.mjs --restore <备份包>`。恢复不覆盖本机已有的会话，所以选过 `rewrite` 的旧会话装回来以后仍是官方 preset。
+- **留了空壳又不想要了**：再跑一次 `--uninstall --old-sessions rewrite`（或 `keep`）。
+- **已经全卸了，旧会话打不开**：先 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`。
+
+**回滚**（只想撤回某一次改动，不卸载）：
+
+- **安装的回滚**（先退出 DSH）：用 profile 目录里的 `package.json.bak-<时间>-pre-soul-kit` 和 `cordis.patch.yml.bak-<时间>-pre-soul-kit` 覆盖回去。DSH NEXT 每次正常启动还会在 `<DSH 家目录>/recovery/` 存一份健康快照，也能拿来还原。
 - **更新的回滚**：看 `<DSH 家目录>/dsh-soul/_backup/<时间>-update/还原方法.txt`。
-- **书房和中枢**在 `<DSH 家目录>/dsh-soul/`，和 profile 无关，回滚不影响它们；会话记录在 `<DSH 家目录>/sessions/`，也不受影响。
+- **卸载的回滚**：用备份包 `--restore`；只想撤回配置的，用各文件旁边的 `.bak-<时间>-pre-uninstall` 覆盖回去。
 - **方案**在安装包的 `setups/` 里，删掉某个方案只影响以后用它安装，不影响已经装好的电脑。
-- **卸载心跳**：
+- **只停心跳**：
   - macOS：`launchctl bootout gui/$(id -u)/com.dsh-soul.heartbeat && rm ~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist`
   - Windows：`Unregister-ScheduledTask -TaskName dsh-soul-heartbeat -Confirm:$false`
 
@@ -329,5 +366,5 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 
 - **Boss 那台 Mac 和安装包装出来的有两处不同**：心跳是第一次手工安装时建的 `memory/hub/heartbeat.sh`（launchd 用 `/bin/bash` 调它，日志同样写进 `hub/heartbeat/`），安装包现在生成的是 `soul/60-工具/heartbeat.mjs`，效果一样；mnemon-probe 的补丁是早期手工写法，脚本认得，不会重打。排查那台 Mac 的心跳时看 `heartbeat.sh` 和 `~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist`。
 - **macOS**：Boss 的 Apple Silicon Mac + DSH NEXT 2.0.19-next（dsh 0.2.1-rc.2）上逐步实测装过一遍，Soul preset 的门牌也实测通过（`/compact` 摘要带门牌、`memq open` 取回原文），v2.0.0 的更新也在这台 Mac 上真跑过：启动正常、mcp-hub 的 echo 连上 3 个工具，自动压缩和裁剪的门牌都在真实会话里出现了。
-- **模拟环境里跑通过的**：全新安装、重复跑、从 349b60a 更新到 9899e02、从 9899e02 更新到 v2.0.0（两个零件改名迁移、锁文件换名、补装 mcp-hub、中枢三方比对、重建索引；书房和自我层一个字节没变）、旧版安装包的配置迁移、已是最新时不动；备份与恢复（中文长路径、空目录、会话原文、修改时间、插件设置；换家目录后路径全部改写，`memq open` 用门牌取回了原话；已有数据时停下，`--force` 先备份再覆盖），并用 Boss 那台 Mac 的真备份恢复过一遍，体检 0 错。安装包 2.2 的方案：用大肥鱼方案装出来的文件和 2.1 逐个一致（只有时间戳不同）；全新安装的终端问答、回答文件、缺项校验、只装部分零件、只生成一个 preset、不开心跳、中文和英文称呼、完整人设文件都跑过，装完体检 0 错；更新时拒掉的零件不会再补，旧安装记录（没写方案的）能按自我层认出方案。
+- **模拟环境里跑通过的**：全新安装、重复跑、从 349b60a 更新到 9899e02、从 9899e02 更新到 v2.0.0（两个零件改名迁移、锁文件换名、补装 mcp-hub、中枢三方比对、重建索引；书房和自我层一个字节没变）、旧版安装包的配置迁移、已是最新时不动；备份与恢复（中文长路径、空目录、会话原文、修改时间、插件设置；换家目录后路径全部改写，`memq open` 用门牌取回了原话；已有数据时停下，`--force` 先备份再覆盖），并用 Boss 那台 Mac 的真备份恢复过一遍，体检 0 错。卸载（2.7）：留空壳、改写旧会话、不管三种都真跑过，配置、锁文件里没有残留，旧会话的 preset 按选的处理，正文一个字没动；卸完再用备份包恢复、留空壳后再卸一次、`--keep-data`、终端里一问一答和中途取消（一个文件都没动）也都跑过。安装包 2.2 的方案：用大肥鱼方案装出来的文件和 2.1 逐个一致（只有时间戳不同）；全新安装的终端问答、回答文件、缺项校验、只装部分零件、只生成一个 preset、不开心跳、中文和英文称呼、完整人设文件都跑过，装完体检 0 错；更新时拒掉的零件不会再补，旧安装记录（没写方案的）能按自我层认出方案。
 - **Windows**：按仓库作者的 Windows 脚本和文档写成，**没有在 Windows 上实测**。脚本每一步都有校验，出错会停下并保留备份；遇到问题把输出原文给用户。Intel Mac 的 DSH 自带 node 路径里的 `arm64` 可能是别的名字，用 A3 里的搜索命令找。
