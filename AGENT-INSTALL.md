@@ -24,7 +24,7 @@
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板，包名 dsh-yanqing-echo）。按上游零件清单标 ✓ 的定，不能跳过 |
 | 可选零件 | Ⅰ/Ⅱ 层：mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板，包名 dsh-yanqing-huanqi-panel，要和 huanqi 一起装）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门）。装哪些按方案；大肥鱼方案装前五个，后五个默认不勾 |
-| Soul preset | 「PTC · Soul 模式」（官方 PTC 原样，只换压缩和裁剪）和「PTC · Soul · Flash 模式」（更省 token 的精简版），生成哪几个、默认用哪个按方案。大肥鱼方案两个都生成，默认 Flash |
+| Soul preset | 五个：PTC / PTC · Flash / 标准 / 极简 / Cordis，各自从官方同名预设原样派生，只把压缩（源有裁剪的连裁剪一起）换成带门牌的版本；生成哪几个、默认用哪个按方案。大肥鱼方案五个都生成，默认 PTC · Flash |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
@@ -53,6 +53,9 @@ setups/                      方案：每个子文件夹一套
 assets/
   templates/                 全新安装用的通用模板：权威源册、自我层、心跳脚本
   presets/ptc.patch.yml      官方 PTC 的快照（找不到本机 DSH 的 app.asar 时才用）
+  presets/standard.patch.yml 官方「标准」预设的快照（同上）
+  presets/minimal.patch.yml  官方「极简」预设的快照（同上）
+  presets/cordis.patch.yml   官方「Cordis」预设的快照（同上）
   presets/flash-lean-ptc-v3.patch.yml   Flash 精简·PTC v3 的快照（没装 dsh-flash-presets 时用）
 logs/                        每次运行的输出（脚本自动建，可以删）
 backups/                     --backup 打出的备份包（迁移时连同文件夹一起拷走）
@@ -207,7 +210,7 @@ backups/                     --backup 打出的备份包（迁移时连同文件
 
 ## 九、更新
 
-**什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后（「PTC · Soul 模式」要按新版官方 PTC 重新生成）；装了或升级了 dsh-flash-presets 后（「PTC · Soul · Flash 模式」跟着重新生成）。
+**什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后（PTC / 标准 / 极简 / Cordis 四个 Soul 模式要按新版官方预设重新生成）；装了或升级了 dsh-flash-presets 后（「PTC · Soul · Flash 模式」跟着重新生成）。
 
 **更新会动的**：
 - profile 里的本体、已装的零件（只换有变化的，换完重打本机补丁）、dsh-soul-preset（只重新生成原来装的那几个 preset）；
