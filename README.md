@@ -1,5 +1,9 @@
 # dsh-agent-soul 安装包
 
+这不是DSH插件！！这不是DSH插件！！这不是DSH插件！！
+使用方式就是clone或下载下来，将文件目录作为Agnet的工作区，然后输入对应指令让AI做事。
+现在只测试了Mac环境，Windows待测试。
+
 2026-10-24 在 Boss 的 Mac 上给 DSH 里的大肥鱼装好了 dsh-agent-soul 灵魂架构，这个文件夹是从那次安装整理出来的安装包。它能做四件事：
 
 - 在一台电脑上（macOS 或 Windows）装好这套架构；
@@ -8,8 +12,6 @@
 - 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定。
 
 插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。
-
-现在只测试了Mac环境，Windows待测试
 
 ## 两种装法
 
