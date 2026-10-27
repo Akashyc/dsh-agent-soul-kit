@@ -14,7 +14,9 @@ import {
   MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig, memoryConfigPaths,
 } from '../lib/home-paths.mjs'
 
-const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `soul-kit-${name}-`))
+// macOS 的 /var 是指向 /private/var 的符号链接，而 ESM 会按真实路径给 import.meta.url；
+// 先取 realpath，子进程算出来的家目录才和这里的期望是同一种写法。
+const tmp = (name) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `soul-kit-${name}-`)))
 const posix = (p) => p.replace(/\\/g, '/')
 
 test('家目录推算：环境变量优先，其次插件所在位置，最后 ~/.dsh', () => {
