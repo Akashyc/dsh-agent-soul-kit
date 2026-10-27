@@ -110,6 +110,130 @@
         "未进行真实 DSH 桌面启动、会话压缩、MCP 与心跳验收；VERIFIED 保持原值。",
         "未在 Windows 上实测。"
       ]
+    },
+    {
+      "completedAt": "2026-10-27T03:00:17.915Z",
+      "reportCreatedAt": "2026-10-27T02:57:39.066Z",
+      "base": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+      "target": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+      "kitVersion": "2.7",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "d517bf04190b66703b25e6a10895fe605b52c444",
+        "targetSha": "d517bf04190b66703b25e6a10895fe605b52c444",
+        "changes": [],
+        "status": "current",
+        "ready": true,
+        "directory": null,
+        "message": "kit 自身已包含发布源 Akashyc/dsh-agent-soul-kit@d517bf04190b66703b25e6a10895fe605b52c444；保留本地修改，继续检查插件上游。"
+      },
+      "summary": "kit 自身：本地在发布源 Akashyc/dsh-agent-soul-kit 主分支 d517bf0（2.7），与远端 main 一致，无需拉取或合入，本地方案与修改全部保留。插件上游：cyanwell/dsh-agent-soul 的 main 与上次基线同为 6ea60a28，零文件差异、零契约提示。四流程复核后，上游没有需要适配的新契约；本轮实际修正的是 kit 自身两处缺陷：(1) macOS 上 home-paths 回归因 /var→/private/var 符号链接把 ESM 的真实路径与临时目录写法对不上而失败，测试的临时目录改取 realpath，53 项回归全绿；(2) 迭代报告的备份流程落点仍引用已被 2.5-2.7 重构删除的 STATE_FILES，改为 makeBackup/STATE_RE，并注明 --backup 与 --uninstall 共用。备份用假 profile 做了含中文路径、空目录、会话与换气账本的打包往返；恢复用另一临时家目录做了干跑路径替换核对。保留 VERIFIED 6ea60a28，未宣称重新完成桌面端验收。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "unchanged",
+          "reason": "上游目标与基线是同一个提交，包结构、发布文件、零件清单和补丁锚点都没有变化；安装器的 checkSource/PART_NAMES/patchList 对照本轮下载的 target/ 快照没有出现缺失文件或未知包名。本轮没有新增安装步骤或可选项，只把迭代报告的检查提示改成真实存在的符号，避免后续审查照着一个不存在的 STATE_FILES 找证据。",
+          "evidence": [
+            "report.json：base.sha=target.sha=6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9，changes=[]、findings=[]",
+            "install.mjs：checkSource、patchList、buildPresetBundle、planPackageJson、PARTS/PART_NAMES 与 target/plugins/*/package.json 对照无变化",
+            "target/README.md、target/INSTALL.md 与 base/ 同名文件内容一致（零差异）"
+          ],
+          "checks": [
+            "syntax",
+            "unit-regression",
+            "upstream-compare"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "unchanged",
+          "reason": "没有出现包改名、加载名或依赖清单变化，PART_NAMES 的旧名迁移表、ADDED_PARTS、partDiff 三方比对和 HUB_PLAN 都不需要跟着上游改。本轮修改仅涉及测试与迭代提示，不动更新路径，因此旧安装升级、拒绝项保留和本机修改归一化行为不变。",
+          "evidence": [
+            "report.json：changes=[]；base 与 target 同一提交",
+            "install.mjs：PART_NAMES、ADDED_PARTS、partDiff、HUB_PLAN、renameInLocks 与上一轮一致（本轮未编辑）",
+            "target/plugins/*/package.json 的 name/version 字段与 base/ 逐项相同"
+          ],
+          "checks": [
+            "syntax",
+            "unit-regression",
+            "upstream-compare"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "上游没有新增持久数据或设置写入点，makeBackup 的收集范围（书房、记忆中枢去 hub/index、会话、state 下换气账本与日志、本架构插件的 cordis 设置与 mcp-hub 清单）仍然覆盖现有实现。本轮把报告里过时的 STATE_FILES 提示改成 makeBackup/STATE_RE，并注明卸载前备份与 --backup 共用同一格式，避免离线审查时误判覆盖范围。用假 profile 实测打包：中文目录、空目录、会话原文、换气账本都进包，hub/index 被排除，manifest 与逐文件 sha1 核对通过。",
+          "evidence": [
+            "install.mjs：makeBackup、STATE_RE=/^(dsh-huanqi\\.json.*|huanqi-.+)$/、addTree(mem,'memory',r=>r==='hub/index')、writeTarGz、manifest.kind='dsh-agent-soul-backup'",
+            "lib/uninstall.mjs 与 install.mjs 的 UNINSTALL 分支调用同一 makeBackup（suffix=pre-uninstall），未另写一套格式",
+            "实测 manifest：counts.soul=1、memory=1、sessions=1、state=1，files 含 soul/65-声音/大肥鱼-声音.md 与 state/dsh-huanqi.json，无 hub/index"
+          ],
+          "checks": [
+            "syntax",
+            "backup-roundtrip"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "备份 manifest 仍是 format 1，restore 读取 kind/format、按 pathPairs 把旧主机路径换成新家目录、冲突时先备份再覆盖、会话只补不覆盖、索引按本机重建，上游没有改这些数据的来源或键名。本轮只在临时家目录做干跑核对：备份里记录的旧家目录被替换成新家目录，恢复收尾仍会重跑 memindex build 与 self.mjs。",
+          "evidence": [
+            "install.mjs：RESTORE 分支校验 man.kind==='dsh-agent-soul-backup'、pathPairs/rewritePaths/copyTree、恢复收尾重建索引与自我层",
+            "report.json 的 target/ 快照与本轮备份 manifest（format 1）字段一致：kind、format、kitVersion、counts、files、paths、upstream",
+            "restore 干跑日志：把记忆中枢配置里的 TMP/fake-home 换成本机 TMP/fake-home2"
+          ],
+          "checks": [
+            "syntax",
+            "restore-plan"
+          ]
+        }
+      ],
+      "findings": [],
+      "checks": [
+        {
+          "id": "syntax",
+          "scope": "static",
+          "command": "node --check install.mjs && node --check lib/kit-iterate.mjs && node --check tests/home-paths.test.mjs && git diff --check",
+          "status": "passed",
+          "evidence": "全部输出 OK-SYNTAX 与 OK-DIFFCHECK，退出码 0；install.mjs、lib/kit-iterate.mjs、修改后的测试均无语法错误，工作区无空白错误"
+        },
+        {
+          "id": "unit-regression",
+          "scope": "simulated",
+          "command": "node --test tests/*.test.mjs",
+          "status": "passed",
+          "evidence": "ℹ tests 53 / ℹ pass 53 / ℹ fail 0（修复前为 pass 51 fail 2，均为 macOS /var 符号链接导致的路径断言差异）"
+        },
+        {
+          "id": "upstream-compare",
+          "scope": "static",
+          "command": "node install.mjs --kit-iterate",
+          "status": "passed",
+          "evidence": "kit 自身：current，Akashyc/dsh-agent-soul-kit@d517bf04190b66703b25e6a10895fe605b52c444；上游：main 下载得 6ea60a28...，与基线同一提交，0 新增/0 修改/0 删除，契约提示 0 项"
+        },
+        {
+          "id": "backup-roundtrip",
+          "scope": "simulated",
+          "command": "node install.mjs --backup --dsh-home TMP/fake-home --out TMP/backup-out --confirm-quit（随后解包核对 manifest 与 tar 清单）",
+          "status": "passed",
+          "evidence": "合计 5 个文件、sha1 逐个核对通过；tar 含 soul/10-空目录（空目录）、soul/65-声音/大肥鱼-声音.md（中文路径）、sessions/session-aaa/session.jsonl、state/dsh-huanqi.json、config/soul-settings.json；不含 memory/hub/index"
+        },
+        {
+          "id": "restore-plan",
+          "scope": "simulated",
+          "command": "node install.mjs --restore TMP/backup-out/*.tar.gz --dsh-home TMP/fake-home2 --source logs/kit-iterations/<本轮>/target --dry-run --no-heartbeat",
+          "status": "passed",
+          "evidence": "干跑完成到第 13 步无报错；日志明确写出把记忆中枢配置里的路径从 TMP/fake-home 换成 TMP/fake-home2，并计划重跑 memindex build 与 self.mjs；未真跑安装与恢复"
+        }
+      ],
+      "limitations": [
+        "只验证了 macOS（Node 24.22.0），Windows 未做桌面验收",
+        "没有在真实 DSH profile 上重跑安装/更新；桌面端启动、会话工具、压缩门牌与心跳验收未做",
+        "恢复流程只做到干跑计划与路径替换核对，没有真执行跨目录恢复（真跑需要联网装包并改临时 profile）",
+        "VERIFIED 保持 6ea60a28：本轮只有代码审查与隔离验证，没有端到端桌面证据，不更新它",
+        "本轮 kit 修改（tests/home-paths.test.mjs、lib/kit-iterate.mjs）尚未提交 Git，按约定由用户决定提交与推送"
+      ]
     }
   ]
 }
