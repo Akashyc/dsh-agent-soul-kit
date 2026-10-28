@@ -142,7 +142,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
-- 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset ptc-soul-flash`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
+- 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset yanqing`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
 - **称呼替换**：上游代码里写着作者本人的称呼「爀曦」，其中一处是换气熔断时注入给 agent 的指令「告诉爀曦『需要手动压缩』」。方案的 `nameMap`（大肥鱼方案是 `爀曦 → Boss`）决定装进 DSH 的插件代码和文档里换成什么；书房和账本不动。它记进安装记录，以后更新、备份、恢复都照做。
 
 **B5. 脚本做的事**（每一步都会先备份；已经做过的会跳过，重复跑安全）：
@@ -187,7 +187,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 **而且必须是装完、重开 DSH 之后新建的会话。** 会话的 preset 在新建会话时就定了：装之前开的会话（包括在 DSH 里跑这次安装的那个）不会自己换成 Soul preset，在里面做门牌实测，压缩走的是内置那套，只会看到「没有门牌」的假结论；主导也应该是用 Soul preset 跑的那个会话。
 
-**D1.** 请用户新建会话，先看会话顶部的 preset：应该是方案的默认 Soul preset（大肥鱼方案是「PTC · Soul · Flash 模式」）。不是的话，在新建会话时手动选上再开始。
+**D1.** 请用户新建会话，先看会话顶部的 preset：应该是方案的默认 Soul preset（大肥鱼方案是「砚青」）。不是的话，在新建会话时手动选上再开始。
 
 然后把安装脚本最后打印的那段话（「┌─ 贴进新会话的话」到「└─」之间）原样贴进这个新会话。里面的路径、称呼、代数都已经按这台电脑填好了，**不要自己拼路径**（DSH 家目录不一定是 `~/.dsh`，Windows 上也可能在别处）。把 `<今天日期>` 换成今天的日期。那段话依次让 agent：
 
@@ -367,7 +367,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **改方案**：想让以后装出来的不一样，改 `setups/<方案名>/` 里的文件（`setup.json` 管零件、preset、心跳；另外两个是权威源册和自我层模板）。已经装好的电脑不受影响，要改就改书房和中枢里的那份。
 - **换电脑、换用户名、挪 DSH 家目录**：memory 的配置和路径类补丁不带用户名，跟着家目录走；但中枢主配置 `echo.config.json`、心跳、mcp-hub 里 echo 的命令是按这台电脑写的绝对路径，搬到别处要用第十节的备份恢复，或者在新位置重跑一次安装。
 - **改配置**：只改主配置 `memory/hub/echo.config.json`，再复制到 `profile/node_modules/dsh-agent-soul/kit/echo.config.json`（`--update` 也会照主配置重写副本）。
-- **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset ptc-soul-flash`（只能选这台电脑生成了的 preset）。
+- **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset yanqing`（只能选这台电脑生成了的 preset）。
 
 ## 十四、平台说明
 
