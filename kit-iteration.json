@@ -459,6 +459,135 @@
         "上游 README 里的 /compact-region 与砚青 preset 修正属于 dsh-agent-organs 和作者本机，本仓库零件不用，kit 不采纳，也没有验证",
         "这一轮的 kit 修改还没有提交 Git，提交和推送等 Boss 决定"
       ]
+    },
+    {
+      "completedAt": "2026-10-28T17:12:34.893Z",
+      "reportCreatedAt": "2026-10-28T17:10:23.609Z",
+      "base": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "target": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "kitVersion": "2.9",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "79577e0ee50a613b5ab484b89cb71d6ab9268995",
+        "targetSha": "79577e0ee50a613b5ab484b89cb71d6ab9268995",
+        "changes": [],
+        "status": "current",
+        "ready": true,
+        "directory": null,
+        "message": "kit 自身已包含发布源 Akashyc/dsh-agent-soul-kit@79577e0ee50a613b5ab484b89cb71d6ab9268995；保留本地修改，继续检查插件上游。"
+      },
+      "summary": "上游 cyanwell/dsh-agent-soul 从审查基线 504d2d0 到 main 的 504d2d0 没有任何文件差异，四流程未发现需要跟进的上游契约变化。本轮对 kit 自身做了一次隔离安装核对，发现并修好 --dsh-home 的两处缺陷：显式指定的家目录缺少 profile 时以前会静默回落到 ~/.dsh（真跑会把文件写进另一份家目录），现在明确失败；--dsh-home / DSH_HOME 给相对路径时以前会在预设解析阶段抛 ERR_INVALID_ARG_VALUE 崩溃，现在先解析成绝对路径。补了 tests/dsh-home.test.mjs 两条回归，版本升到 2.10，README 与 AGENT-INSTALL.md 同步。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "上游发布文件、零件包名、工具参数和补丁锚点相对基线没有变化，安装策略无需跟进上游。本轮改的是安装入口的预检：--dsh-home 指向没有 profiles/<profile>/package.json 的目录时不再静默改用 ~/.dsh，直接停下并给出试过的路径；--dsh-home 与 DSH_HOME 的相对路径先解析成绝对路径，避免 yamlParser 的 createRequire 崩溃。隔离干跑用 fake profile 验证计划全部落在指定目录内。",
+          "evidence": [
+            "install.mjs:1486 显式 --dsh-home 解析为绝对路径并作为第一优先候选；install.mjs:1556 之后新增显式目录校验",
+            "install.mjs:724 yamlParser 的 createRequire 改为 path.resolve(prof/package.json)",
+            "report.json：base 与 target 均为 504d2d0，treeDigest 相同，changes 为空，findings 为空"
+          ],
+          "checks": [
+            "static-syntax",
+            "unit-tests",
+            "install-dry-isolated",
+            "dsh-home-guard"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "unchanged",
+          "reason": "上游无文件变化，PART_NAMES、ADDED_PARTS、partDiff、三方比对、renameInLocks 与安装记录逻辑没有受上游影响的调用点变化。nameMap 已贯通安装、setup.json、安装记录与恢复；本轮未改更新路径，只在未安装的隔离 profile 上确认 --update 仍明确拒绝并提示改用全新安装。",
+          "evidence": [
+            "report.json：changes 为空，没有按路径命中更新的上游变化",
+            "install.mjs:2191-2209、2411-2456：NAME_PARSED/NAME_DIFF_RB 与 state0.nameMap 的处理未改",
+            "隔离 home 上 node install.mjs --update --dry-run 输出「还没装 dsh-agent-soul（profile 的 node_modules 里没有）」并以非零退出"
+          ],
+          "checks": [
+            "unit-tests",
+            "update-dry-guard"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "上游没有新增持久数据、插件设置或状态文件，makeBackup、STATE_RE、soulEntryIds、manifest 的备份范围不需要调整。本轮未改备份逻辑；在未安装的隔离 profile 上确认备份会明确拒绝而不是产出空包。",
+          "evidence": [
+            "report.json：上游变化 0 个文件，exclusions 与基线一致",
+            "install.mjs:1666 附近的 manifest 写入与 kitVersion 字段未改",
+            "隔离 home 上 node install.mjs --backup --dry-run 输出「这台电脑上还没装 dsh-agent-soul，没什么可备份的」"
+          ],
+          "checks": [
+            "unit-tests",
+            "backup-dry-guard"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "上游没有备份格式或持久数据变化，RESTORE、pathPairs、rewritePaths、copyTree 与恢复收尾不需要兼容新格式；nameMap 在恢复时已有 sameNameMap / NAME_DIFF_RB 处理（install.mjs:2194）。本轮未改恢复逻辑，也没有完整安装环境可做备份→恢复真跑往返，这一项保留为未验证范围。",
+          "evidence": [
+            "report.json：上游 0 文件变化，不存在新备份字段或新路径格式",
+            "install.mjs:2194、2599-2601、2620-2649：恢复时按备份记录对 pathPairs 与 nameMap 的处理未改",
+            "tests/uninstall.test.mjs、tests/home-paths.test.mjs 覆盖备份包解析与路径替换的既有回归仍通过"
+          ],
+          "checks": [
+            "unit-tests",
+            "static-syntax"
+          ]
+        }
+      ],
+      "findings": [],
+      "checks": [
+        {
+          "id": "static-syntax",
+          "scope": "static",
+          "command": "node --check install.mjs && node --check lib/kit-iterate.mjs && node --check lib/kit-update.mjs && node --check lib/package-contract.mjs && git diff --check",
+          "status": "passed",
+          "evidence": "全部语法检查通过；git diff --check 无空白错误，输出 DIFF_OK"
+        },
+        {
+          "id": "unit-tests",
+          "scope": "simulated",
+          "command": "node --test tests/*.test.mjs",
+          "status": "passed",
+          "evidence": "66 个测试全部通过、0 失败，包含新增 tests/dsh-home.test.mjs 的 2 条；原 64 条无回归"
+        },
+        {
+          "id": "install-dry-isolated",
+          "scope": "simulated",
+          "command": "node install.mjs --setup 大肥鱼 --dry-run --source logs/kit-iterations/2026-10-28T17-10-23-609Z-2BC66Z/target --dsh-home TMP/iter-home --no-heartbeat",
+          "status": "passed",
+          "evidence": "用只含 profiles/desktop/package.json 的 fake home 与相对 --dsh-home 跑完 11 个步骤的干跑计划；所有路径落在 TMP/iter-home 内；相对路径不再触发 createRequire 崩溃"
+        },
+        {
+          "id": "dsh-home-guard",
+          "scope": "simulated",
+          "command": "node --test tests/dsh-home.test.mjs",
+          "status": "passed",
+          "evidence": "空目录与不存在的路径两种输入都以非零退出，输出含「--dsh-home 指的是」「profiles/desktop」「不回落」，未触碰真实 ~/.dsh"
+        },
+        {
+          "id": "backup-dry-guard",
+          "scope": "simulated",
+          "command": "node install.mjs --backup --dry-run --dsh-home TMP/iter-home",
+          "status": "passed",
+          "evidence": "未安装的隔离 profile 上明确拒绝备份并以非零退出，没有生成备份包"
+        },
+        {
+          "id": "update-dry-guard",
+          "scope": "simulated",
+          "command": "node install.mjs --update --dry-run --source logs/kit-iterations/2026-10-28T17-10-23-609Z-2BC66Z/target --dsh-home TMP/iter-home",
+          "status": "passed",
+          "evidence": "未安装的隔离 profile 上明确拒绝更新并提示去掉 --update 做全新安装"
+        }
+      ],
+      "limitations": [
+        "未做真实 DSH 安装、重启与新会话验收；安装相关验证都是隔离 fake profile 上的干跑",
+        "未做 Windows 桌面验收，本轮只在 macOS 上运行",
+        "备份 → 恢复的完整往返未在真实安装环境执行，只验证了未安装时的拒绝路径与既有单元测试"
+      ]
     }
   ]
 }
