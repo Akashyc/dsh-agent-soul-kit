@@ -588,6 +588,66 @@
         "未做 Windows 桌面验收，本轮只在 macOS 上运行",
         "备份 → 恢复的完整往返未在真实安装环境执行，只验证了未安装时的拒绝路径与既有单元测试"
       ]
+    },
+    {
+      "completedAt": "2026-10-28T17:36:04.286Z",
+      "reportCreatedAt": "2026-10-28T17:36:04.286Z",
+      "base": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "target": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "kitVersion": "2.11",
+      "summary": "按 Boss 的决策改 kit 的 preset 口径：本 kit 不再自己派生五套 Soul preset，只造 PTC · Soul · Flash，砚青四套（yanqing / yanqing-cordis / yanqing-ptc / yanqing-distill）逐字搬上游 presets/；压缩三件套按上游 preset 的引用统一成 dsh-yanqing-compaction / dsh-yanqing-pruner / dsh-yanqing-compact-region，拷包时把 package.json 与 cordis.patch.yml 的 name 一起改；compact-region 改从零件仓 cyanwell/dsh-agent-organs 取，离线回落 assets/parts 快照；上游用 # @include $DIR/_shared/compaction.yml 共享压缩组，安装时按缩进展开；卸载映射与文档同步。",
+      "flows": [
+        {
+          "id": "preset-source",
+          "decision": "changed",
+          "reason": "上游已经自己发布 presets/preset-yanqing*.yml 与 presets/_manifest.json，kit 里那四份 assets/presets/preset-*.yml 只是当时上游没发时的临时替代；kit 的设计本来就是「读上游包来安装」，所以砚青四套改成逐字搬上游，kit 只保留自己那套 PTC · Soul · Flash。",
+          "evidence": [
+            "lib/soul-presets.mjs：YANQING_IDS / PRESET_IDS / PRESET_SOURCE / verbatim() / presetSources() 优先读 upstreamDir/presets，缺了回落 assets 快照",
+            "install.mjs：presetSources(NM, { upstreamDir: SRC.dir })；buildPresetBundle 校验五个 id 与压缩组",
+            "dry-run 输出：Soul preset 的源 5 行，砚青 ← 上游 presets/preset-yanqing.yml 等"
+          ]
+        },
+        {
+          "id": "part-names",
+          "decision": "changed",
+          "reason": "上游 preset 已经把压缩 / 裁剪 / 范围压缩引用成 dsh-yanqing-*，而三个包的 package.json 还写着 dsh-agent-*（上游处于 preset 先改名、包名后跟的中间态）。kit 按 preset 的引用来，拷包时统一改名，保证装完 preset 找得到。",
+          "evidence": [
+            "install.mjs：PART_NAMES 加 dsh-yanqing-* 新名；checkSource 用 PART_NAMES[p][0]；installPackage(src, dst, label, keep, wantName) 改写 package.json 与 cordis.patch.yml 的 name",
+            "隔离 home 真跑后 node_modules 里是 dsh-yanqing-compaction / dsh-yanqing-pruner / dsh-yanqing-compact-region，三个 package.json 的 name 也一致"
+          ]
+        },
+        {
+          "id": "organ-source",
+          "decision": "added",
+          "reason": "compact-region 只在零件仓 cyanwell/dsh-agent-organs，主仓 plugins/ 没有；离线安装（--source）时回落安装包自带快照。",
+          "evidence": [
+            "install.mjs：ORGAN_REPO / ORGAN_PARTS / getOrganSource() / partSrc()",
+            "assets/parts/compact-region/ 四个文件；dry-run 提示「零件仓没拿到（离线安装）……用安装包自带快照」",
+            "lib/soul-presets.mjs：expandIncludes() 按 include 行缩进展开 _shared/compaction.yml"
+          ]
+        },
+        {
+          "id": "uninstall-map",
+          "decision": "changed",
+          "reason": "Soul preset 换名字以后，卸载时改写旧会话的映射也要跟着换，否则旧会话指不到官方 preset。",
+          "evidence": [
+            "lib/uninstall.mjs：SOUL_TO_OFFICIAL = { yanqing: standard, yanqing-cordis: cordis, yanqing-ptc: ptc, yanqing-distill: minimal }",
+            "tests/uninstall.test.mjs：四条映射断言 + 空壳只留 ptc-soul-flash"
+          ]
+        },
+        {
+          "id": "verification",
+          "decision": "passed",
+          "scope": "simulated",
+          "command": "node --test tests/*.test.mjs; node install.mjs --source <target> --dsh-home TMP/iter-home --setup 大肥鱼 --confirm-quit --yes",
+          "evidence": "单元测试 66/66 通过；隔离 fake home 上真跑完成，生成 5 个 preset：砚青四套都带 dsh-yanqing-compaction + dsh-yanqing-compact-region + dsh-yanqing-pruner 且 isolate.compaction: true，Flash 只带 compaction + pruner（DSH 自带 PTC 源就没有范围压缩）"
+        }
+      ],
+      "limitations": [
+        "未做真实 DSH 安装、重启与新会话验收；安装验证是在隔离 fake home 上真跑，产物只做了静态断言",
+        "未做 Windows 桌面验收，本轮只在 macOS 上运行",
+        "从旧名（dsh-agent-compaction 等）迁移的 --update 实跑未做，只覆盖了全新安装路径"
+      ]
     }
   ]
 }

@@ -13,8 +13,10 @@ import { presetSources, buildPresetBundle, buildShellBundle, PRESET_IDS } from '
 const OURS = ['dsh-agent-soul', 'dsh-agent-memory', 'dsh-soul-preset']
 
 test('Soul preset 换回对应的官方 preset；Flash 版看 dsh-flash-presets 装没装', () => {
-  assert.equal(officialPresetFor('ptc-soul'), 'ptc')
-  assert.equal(officialPresetFor('standard-soul'), 'standard')
+  assert.equal(officialPresetFor('yanqing'), 'standard')
+  assert.equal(officialPresetFor('yanqing-cordis'), 'cordis')
+  assert.equal(officialPresetFor('yanqing-ptc'), 'ptc')
+  assert.equal(officialPresetFor('yanqing-distill'), 'minimal')
   assert.equal(officialPresetFor('ptc-soul-flash'), 'ptc')
   assert.equal(officialPresetFor('ptc-soul-flash', { flashInstalled: true }), 'flash-lean-ptc-v3')
   assert.equal(officialPresetFor('flash-lean-ptc-v3-soul'), 'ptc')
@@ -213,12 +215,12 @@ test('心跳 plist：认标签，或者认书房里的心跳脚本', () => {
 test('空壳 preset：id 不变、名字标「（已卸载）」、换回官方压缩和裁剪、不引用本架构的包', () => {
   const src = presetSources(path.join(os.tmpdir(), 'no-such-profile-node_modules'), { appAsar: path.join(os.tmpdir(), 'no-such.asar') })
   const real = buildPresetBundle(src, PRESET_IDS).files['cordis.patch.yml']
-  assert.ok(real.includes("name: 'dsh-agent-compaction'"))
+  assert.ok(real.includes("name: 'dsh-yanqing-compaction'"))
   const shell = buildShellBundle(real)
-  assert.deepEqual(shell.ids, PRESET_IDS)
+  assert.deepEqual(shell.ids, ['ptc-soul-flash'])
   const y = shell.files['cordis.patch.yml']
   assert.ok(!/name: '(dsh-agent-|dsh-yanqing-)/.test(y))
-  assert.equal((y.match(/（已卸载）"/g) || []).length, PRESET_IDS.length)
+  assert.equal((y.match(/（已卸载）"/g) || []).length, shell.ids.length)
   assert.ok(y.includes("name: '@deepseek-ai/dsh-compaction-basic'"))
   assert.equal(JSON.parse(shell.files['package.json']).dshSoulShell, true)
   // 再做一次空壳：名字不会叠两个「（已卸载）」
