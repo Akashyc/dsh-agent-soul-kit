@@ -32,11 +32,13 @@
 //   --data-dir <目录>            mnemon 数据根目录（热记忆在 <目录>/runtime；代替默认的 ~/.mnemon）
 //   --confirm-quit               无法自动判断 DSH 是否已退出时，由你确认它已完全退出
 //   --skip-part <目录名,…>       不装某个可选零件（例如 mcp-hub）；更新时用它拒掉的，以后也不再补
+//   --rename <上游称呼=称呼|none>  称呼替换：把上游代码里作者的称呼（爀曦）换成这台的用户称呼，例如 --rename 爀曦=Boss；
+//                                记进安装记录和备份，以后更新、恢复自动照做；none 关掉。不给就安装按方案、更新按安装记录
 //   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
 //   --heartbeat-time HH:MM       心跳时间（仅安装；默认按方案）
 //   --out <目录>                 备份或 kit 报告父目录，默认 backups/、logs/kit-updates/ 或 logs/kit-iterations/
 //   --base-ref <提交>             kit 迭代的对比基线，默认上次完成迭代的提交或 VERIFIED
-//   --base-source <目录|.tar.gz>   kit 迭代的本地基线，和 --source 配合可离线检查
+//   --base-source <目录|.tar.gz>   kit 迭代的本地基线，和 --source 配合可离线检查；离线更新时给「已装那一版」的上游源码
 //   --kit-repo <owner/repo>       kit 自身 GitHub 仓库，默认 Akashyc/dsh-agent-soul-kit
 //   --kit-ref <分支|标签|提交>    kit 自身目标，默认 main；不影响插件上游的 --ref
 //   --kit-source <Git 目录>      kit 自身的离线更新源，默认读取该目录 HEAD
@@ -65,13 +67,15 @@ import { createInterface } from 'node:readline/promises'
 import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
 import { personaRulesMissing, dedupeLines } from './lib/persona.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
+import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
+import { AUTHOR_NAMES, parseNameMap, validateNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
 import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle } from './lib/soul-presets.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.7'
+const KIT_VERSION = '2.9'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -119,6 +123,8 @@ const KIT_ITERATE = flag('--kit-iterate')
 const KIT_ACCEPT = flag('--kit-accept')
 const KIT_UPDATE = flag('--kit-update')
 const FORCE = flag('--force')
+const RENAME_OPT = opt('--rename')
+if (flag('--rename') && RENAME_OPT === undefined) { console.log('--rename 后面要跟「上游称呼=你的称呼」（例如 --rename 爀曦=Boss），或者 none'); process.exit(2) }
 const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : UNINSTALL ? 'uninstall' : 'install'
 let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
@@ -147,8 +153,16 @@ if (KIT_ACCEPT && !opt('--kit-accept')) {
   console.log('--kit-accept 需要给出报告目录')
   process.exit(2)
 }
-if ((flag('--base-ref') || flag('--base-source')) && !KIT_ITERATE) {
-  console.log('--base-ref、--base-source 只用于 --kit-iterate')
+if (flag('--base-ref') && !KIT_ITERATE) {
+  console.log('--base-ref 只用于 --kit-iterate')
+  process.exit(2)
+}
+if (flag('--base-source') && !KIT_ITERATE && !UPDATE) {
+  console.log('--base-source 只用于 --kit-iterate，或离线 --update 时给「已装那一版」的上游源码')
+  process.exit(2)
+}
+if (flag('--base-source') && !opt('--base-source')) {
+  console.log('--base-source 需要给出参数值')
   process.exit(2)
 }
 if (KIT_ITERATE) {
@@ -501,7 +515,7 @@ function rewritePaths(t, pairs) {
  * @param options ref 为上游版本；source 为本地来源，null 表示下载
  * @returns 源码目录、提交号及来源说明；失败时停止当前流程
  */
-async function getSource({ ref = REF, source = SOURCE } = {}) {
+async function getSource({ ref = REF, source = SOURCE, soft = false } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-src-'))
   TMP_DIRS.push(tmp)
   if (source) {
@@ -524,12 +538,13 @@ async function getSource({ ref = REF, source = SOURCE } = {}) {
   const file = path.join(tmp, 'upstream.tar.gz')
   info(`下载 ${url}`)
   const d = await download(url, file)
+  if (!d.ok && soft) { info(`没下载到（${d.errs.join('；')}），这一份先不用`); return null }
   if (!d.ok) {
     const tip1 = d.proxy ? `① 代理 ${showProxy(d.proxy)} 这次没连上 GitHub：过一会儿重跑，或者换个代理地址加 --proxy <地址> 重跑` : '① 加 --proxy http://127.0.0.1:<端口> 走代理重跑'
     die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${REPO}/archive/${ref}.tar.gz 下载，再加 --source <下载的文件> 重跑（基线用 --base-source；也可以是 git clone 下来的文件夹）`)
   }
   let r
-  try { r = extractTarGz(file, tmp) } catch (e) { die(`解压失败：${e.message}`) }
+  try { r = extractTarGz(file, tmp) } catch (e) { if (soft) { info(`解压失败（${e.message}），这一份先不用`); return null } die(`解压失败：${e.message}`) }
   return { ...r, from: `GitHub ${REPO}@${ref}（${d.via}）` }
 }
 
@@ -834,6 +849,7 @@ const fillUser = (t, u) => tightUser(t, u).split('{{USER}}').join(u)
 const QUESTIONS = [
   { id: 'name', group: '身份', type: 'text', required: true, ask: 'agent 叫什么名字？', hint: '写进自我层「我是谁」和权威源册。例：小鲸' },
   { id: 'user', group: '身份', type: 'text', required: true, ask: '它怎么称呼你？', hint: '例：Boss、老师、你的名字' },
+  { id: 'replaceAuthor', group: '身份', type: 'bool', ask: `上游代码里写着作者本人的称呼「${AUTHOR_NAMES.join('、')}」（例如换气熔断时会让 agent「告诉${AUTHOR_NAMES[0]}『需要手动压缩』」），要都换成你的称呼吗？`, hint: '换的是装进 DSH 的插件代码和文档，书房、账本不动；以后更新、迁移会自动照做。称呼里有引号、反斜杠、$ 的换不了，这题答 false。', default: true },
   { id: 'userNote', group: '身份', type: 'text', ask: '关于你还要补充什么？（可空）', hint: '写在称呼后面的括号里，例：真名：张三' },
   { id: 'purpose', group: '身份', type: 'text', ask: '它主要用来做什么？一句话（可空）', hint: '写进自我层和权威源册开头' },
   { id: 'hardLines', group: '硬线', type: 'multi', ask: '要哪几条硬线？', hint: '硬线是「必须先问你」级别的规矩，agent 不许自己评估、不许绕。至少一条。', options: BUILTIN_LINES.map((l) => ({ value: l.name, desc: fillUser(l.rule, '你') })), default: DEFAULT_LINES },
@@ -877,6 +893,9 @@ function normalizeAnswers(raw, ctx) {
   s.name = str('name'); if (!s.name) e.push('name：agent 的名字没填')
   s.user = str('user'); if (!s.user) e.push('user：怎么称呼用户没填')
   s.userNote = str('userNote'); s.purpose = str('purpose')
+  const ra = parseBool(raw.replaceAuthor, true); if (ra === null) e.push('replaceAuthor：要是 true / false')
+  s.nameMap = ra === false || !s.user ? {} : Object.fromEntries(AUTHOR_NAMES.map((n) => [n, s.user]))
+  if (hasNames(s.nameMap) && validateNameMap(s.nameMap).length) e.push(`replaceAuthor：称呼「${s.user}」换不进代码（${validateNameMap(s.nameMap)[0]}）；这一题答 false，或者换个称呼`)
   const known = BUILTIN_LINES.map((l) => l.name)
   const picked = raw.hardLines === undefined ? DEFAULT_LINES : listOf(raw.hardLines)
   for (const n of picked) if (!known.includes(n)) e.push(`hardLines：没有叫「${n}」的内置硬线（可选：${known.join('、')}）；自己的硬线写进 customHardLines`)
@@ -946,7 +965,7 @@ function buildSetupFiles(s) {
   const self = tidy(render(tightUser(readText(path.join(TPL, 'SELF.src.md.tpl')), s.user), vars, conds))
   const json = {
     _说明: `全新安装生成的方案（安装包 ${KIT_VERSION}，${new Date().toISOString()}）。同目录的权威源册、自我层模板可以直接改；路径和心跳时间这类 {{…}} 记号留给安装时按电脑填。`,
-    format: 1, kind: 'generated', name: s.name, user: s.user, userNote: s.userNote, purpose: s.purpose,
+    format: 1, kind: 'generated', name: s.name, user: s.user, userNote: s.userNote, purpose: s.purpose, nameMap: s.nameMap || {},
     hardLines: s.hardLines, persona: s.persona, personaBrief: s.personaBrief, multiSession: s.multiSession, windowSize: s.windowSize,
     parts: s.parts, presets: s.presets, defaultPreset: s.defaultPreset, heartbeat: s.heartbeat,
     files: { authority: '00-authority.md', self: 'SELF.src.md.tpl', ...(voiceFile ? { voice: voiceFile } : {}) },
@@ -973,6 +992,8 @@ function loadSetup(name) {
   s.defaultPreset = s.defaultPreset || (s.presets.includes('ptc-soul-flash') ? 'ptc-soul-flash' : s.presets[0])
   if (!s.presets.includes(s.defaultPreset)) e.push(`setup.json：defaultPreset ${s.defaultPreset} 不在 presets 里`)
   s.heartbeat = { enabled: !(s.heartbeat && s.heartbeat.enabled === false), time: (s.heartbeat && s.heartbeat.time) || '12:00' }
+  for (const x of parseNameMap(s.nameMap).errors) e.push(`setup.json 的 nameMap：${x}`)
+  s.nameMap = s.nameMap && typeof s.nameMap === 'object' ? s.nameMap : {}
   s.files = s.files || {}
   for (const k of ['authority', 'self']) if (!s.files[k] || !exists(path.join(dir, s.files[k]))) e.push(`方案里缺${k === 'authority' ? '权威源册' : '自我层模板'}（setup.json 的 files.${k}）`)
   if (s.files.voice && !exists(path.join(dir, s.files.voice))) e.push(`方案里缺人设文件 ${s.files.voice}`)
@@ -1002,6 +1023,7 @@ function describeSetup(s, dirName) {
   lines.push(`  零件：必装 ${REQUIRED_PARTS.join('、')}；可选装 ${s.parts.filter((p) => OPTIONAL_PARTS.includes(p)).join('、') || '无'}；不装 ${OPTIONAL_PARTS.filter((p) => !s.parts.includes(p)).join('、') || '无'}`)
   lines.push(`  Soul preset：${s.presets.map((p) => PRESET_LABEL[p]).join('、')}；新会话默认 ${PRESET_LABEL[s.defaultPreset]}`)
   lines.push(`  心跳：${s.heartbeat.enabled ? `每天 ${s.heartbeat.time}` : '不开'}`)
+  lines.push(`  称呼替换：${hasNames(s.nameMap) ? `上游代码里的${nameMapLabel(s.nameMap)}` : '不换（插件代码里保留上游作者的称呼）'}`)
   return lines
 }
 // 终端里一问一答（只在真有终端时用；agent 走 --questions + --answers）
@@ -1035,6 +1057,7 @@ async function askTerminal(rl, ctx) {
   console.log('\n全新安装：下面分五组问几个问题，回车用括号里的默认值。最后会给一份总结，确认后才动手。')
   raw.name = await text('name', { required: true })
   raw.user = await text('user', { required: true })
+  raw.replaceAuthor = await yesno('replaceAuthor', true)
   raw.userNote = await text('userNote')
   raw.purpose = await text('purpose')
   raw.hardLines = await multi('hardLines', BUILTIN_LINES.map((l) => ({ value: l.name, desc: fillUser(l.rule, raw.user) })), DEFAULT_LINES)
@@ -1445,7 +1468,7 @@ if (KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) {
         ref: REF, source: SOURCE, baseRef: opt('--base-ref'), baseSource: opt('--base-source'),
         output: opt('--out'), dryRun: DRY, kitUpdate,
         contract: { requiredFiles: REQUIRED_SOURCE_FILES, partNames: PART_NAMES, optionalSource: OPTIONAL_SRC },
-        helpers: { getSource, hashDir, diffMaps, patchList }
+        helpers: { getSource, hashDir, diffMaps, patchList, packFiles }
       })
       console.log(result.message)
     } else {
@@ -2163,8 +2186,27 @@ if (UPDATE && TTY && !DRY) {
   }
 }
 
-const SRC = await getSource()
-ok(`上游源码：${SRC.from}`)
+// ═══ 称呼替换（lib/name-map.mjs）：--rename 优先；不给就安装按方案、更新按安装记录、恢复按备份里的安装记录 ═══
+const NAME_FROM = RENAME_OPT !== undefined ? '--rename' : MODE === 'install' ? '方案' : MODE === 'update' ? '安装记录' : '备份里的安装记录'
+const NAME_PARSED = parseNameMap(RENAME_OPT !== undefined ? RENAME_OPT : MODE === 'install' ? SETUP && SETUP.nameMap : MODE === 'update' ? state0 && state0.nameMap : RB && RB.state && RB.state.nameMap)
+if (NAME_PARSED.errors.length) die(`称呼替换（来自${NAME_FROM}）有问题：\n      ${NAME_PARSED.errors.join('\n      ')}`)
+const NAME_MAP = NAME_PARSED.map
+const NAME_DIFF_RB = MODE === 'restore' && RB && RB.state && !sameNameMap(RB.state.nameMap, NAME_MAP)
+if (RENAME_OPT !== undefined && (!hasNames(NAME_MAP) || NAME_DIFF_RB)) ok(`称呼替换按 --rename：${hasNames(NAME_MAP) ? `上游代码里的${nameMapLabel(NAME_MAP)}` : '不换'}${NAME_DIFF_RB ? '（和备份里记的不一样，以这次为准）' : ''}`)
+// 在上游源码的临时副本上做称呼替换；后面比对、安装、中枢同步都用这份，替换就不会被当成上游改动，也不会被下次更新冲掉
+function withNames(s) {
+  if (!s || !hasNames(NAME_MAP)) return s
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-names-')); TMP_DIRS.push(dir)
+  const out = path.join(dir, 'src')
+  const renamed = renameTree(s.dir, out, NAME_MAP, SKIP_RE)
+  return { ...s, dir: out, raw: s.dir, renamed }
+}
+if (MODE === 'install' && installed && state0 && !sameNameMap(state0.nameMap, NAME_MAP)) die(`这台电脑已经装过，${NAME_FROM === '--rename' ? '--rename 指定' : NAME_FROM + '里'}的称呼替换（${nameMapLabel(NAME_MAP) || '不换'}）和安装记录里的（${nameMapLabel(state0.nameMap) || '不换'}）不一样。重跑安装只补缺的步骤、不重装已有的零件，换不全；要改称呼替换请用 --update --rename ${hasNames(NAME_MAP) ? Object.entries(NAME_MAP).map(([a, b]) => `${a}=${b}`).join(',') : 'none'}。`)
+
+const SRC0 = await getSource()
+ok(`上游源码：${SRC0.from}`)
+const SRC = withNames(SRC0)
+if (SRC !== SRC0) { const shipped = new Set(packFiles(SRC.dir)); ok(`称呼替换（按${NAME_FROM === '--rename' ? ' --rename' : NAME_FROM}）：上游代码里的${nameMapLabel(NAME_MAP)}，会装进 DSH 的有 ${SRC.renamed.filter((f) => shipped.has(f)).length} 个文件；后面比对、安装、中枢同步都按替换后的来`) }
 const srcVer = (readJson(path.join(SRC.dir, 'package.json')) || {}).version
 ok(`版本：提交 ${short(SRC.sha)}${srcVer ? `（v${srcVer}）` : ''}${SRC.sha === VERIFIED.sha ? '，就是安装包验证过的版本' : `，安装包验证过的是 ${VERIFIED.sha.slice(0, 7)}（${VERIFIED.date}）`}`)
 const src = checkSource(SRC.dir)
@@ -2177,6 +2219,17 @@ const PKGS = AP.map((p) => src.names[p])
 const INST = AP.map((p) => PART_NAMES[p].find((n) => exists(path.join(NM, n, 'package.json'))) || null)
 const RENAMES = AP.map((p, i) => (INST[i] && INST[i] !== PKGS[i] ? { part: p, from: INST[i], to: PKGS[i] } : null)).filter(Boolean)
 const RENAME_MAP = Object.fromEntries(RENAMES.map((r) => [r.from, r.to]))
+// 发布清单自洽（lib/package-contract.mjs）：本体和这次要装的零件，入口 import 到的文件都得在 files 里，
+// 否则按清单拷完就缺文件、零件加载失败 → 在动手前停下。用到的 @deepseek-ai/* 没在 peerDependencies 里声明的只提示：
+// 宿主拦不拦随 DSH 版本，上游 v2.0.0 的 compaction、huanqi 都漏过，桌面实测仍能加载。
+const PKG_ISSUES = [['本体 dsh-agent-soul', SRC.dir, null], ...AP.map((p, i) => [PKGS[i], path.join(SRC.dir, 'plugins', p), p])]
+  .flatMap(([label, dir, part]) => inspectPackage(dir, packFiles(dir)).map((issue) => ({ label, part, issue })))
+const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer')
+if (PKG_BROKEN.length) {
+  const optional = [...new Set(PKG_BROKEN.map((x) => x.part).filter((p) => p && OPTIONAL_PARTS.includes(p)))]
+  die(`上游包的发布清单不自洽，照清单装上后会缺文件、加载失败：\n      ${PKG_BROKEN.map((x) => describeIssue(x.label, x.issue)).join('\n      ')}\n    这是上游打包的问题，安装包不替它补文件。先用 --ref ${VERIFIED.sha.slice(0, 7)} 装验证过的版本${optional.length ? `，或加 --skip-part ${optional.join(',')} 先跳过${optional.length > 1 ? '这几个' : '这个'}可选零件` : ''}，并告诉用户。`)
+}
+for (const x of PKG_ISSUES.filter((x) => x.issue.kind === 'peer')) info(`${describeIssue(x.label, x.issue)}；装完在新会话里确认它确实加载了，没加载再报给上游`)
 const stateKit = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
 const TO_ADD = new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || (ADDED_PARTS[p] && stateKit < ADDED_PARTS[p]))))
 if (!UPDATE && RENAMES.length) die(`这台电脑装的是旧包名（${RENAMES.map((r) => r.from).join('、')}），请用 --update 迁移。`)
@@ -2186,6 +2239,31 @@ if (!UPDATE && installed) {
   const same = diffMaps(hashInstalled(BODY, bodyKeep), hashFiles(SRC.dir, packFiles(SRC.dir))).same
   if (!same && !(state0 && state0.upstream && SRC.sha && state0.upstream.sha === SRC.sha)) die(`这台电脑已经装过 dsh-agent-soul，而且和要装的版本不一样。要升级请用 --update；要按已装的版本补全，加 --ref <已装的提交>。`)
   ok('检测到已经装过同一版本：按「补全」处理，做过的步骤会跳过')
+}
+
+// 已装那一版的上游（同样做过称呼替换）：分清哪些是本机改过的，中枢三方比对也拿它当基准。
+// 以前拿 profile 里的本体当「旧版上游」，本体自己被改过（例如手工改名、中枢跟着一起改）就认不出来，会把本机改动当成「没改过」换掉
+let BASE = null
+if (UPDATE && installed) {
+  const oldSha = state0 && state0.upstream && state0.upstream.sha
+  if (oldSha && oldSha === SRC0.sha) BASE = SRC
+  else if (opt('--base-source')) BASE = withNames(await getSource({ ref: oldSha || REF, source: opt('--base-source') }))
+  else if (oldSha && /^[0-9a-f]{40}$/.test(oldSha) && !SOURCE) BASE = withNames(await getSource({ ref: oldSha, source: null, soft: true }))
+  if (BASE) ok(`已装那一版的上游：${short(oldSha)}（${BASE === SRC ? '和要装的是同一版' : BASE.from}），用来分清哪些是本机改过的`)
+  else warn(`取不到已装那一版的上游源码（${!oldSha ? '安装记录里没有提交号' : SOURCE ? '离线更新没给 --base-source' : '下载失败'}）：中枢脚本是不是本机改过，只能按 profile 里的本体判断；本体自己也被改过的话认不出来，会当成没改过换掉`)
+}
+// 「和新版不一样」拆成上游改的、本机改过的：有已装那一版的上游才拆得开
+const baseMap = (...rel) => { if (!BASE) return null; const d = path.join(BASE.dir, ...rel); return exists(path.join(d, 'package.json')) ? hashFiles(d, packFiles(d)) : new Map() }
+function splitDiff(d, base) {
+  if (!d || !base) return null
+  const up = { changed: [], added: [], removed: [] }, local = [], extra = [], missing = [], both = []
+  for (const f of d.changed) {
+    if (base.get(f) === d.next.get(f)) local.push(f) // 上游这一版没动它 → 是本机改的
+    else { up.changed.push(f); if (base.has(f) && d.inst.get(f) !== base.get(f)) both.push(f) }
+  }
+  for (const f of d.removed) (base.has(f) ? up.removed : extra).push(f) // 旧版上游也没有 → 本机多出来的
+  for (const f of d.added) (base.has(f) && base.get(f) === d.next.get(f) ? missing : up.added).push(f) // 旧版上游就有 → 本机删掉的
+  return { up, local, extra, missing, both, localCount: local.length + extra.length + missing.length + both.length }
 }
 
 const SRC_PRESETS = presetSources(NM)
@@ -2243,12 +2321,13 @@ function partDiff(i) {
     const t = readText(path.join(dst, f)), u = unpatchText(t, list)
     if (u !== t) oldM.set(f, sha1(Buffer.from(u, 'utf8')))
   }
-  return diffMaps(oldM, hashFiles(s, packFiles(s)))
+  const newM = hashFiles(s, packFiles(s))
+  return { ...diffMaps(oldM, newM), inst: oldM, next: newM }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
 // 中枢脚本三方比对：中枢里的 = 旧版上游（本体 kit/echo 里那份）→ 没被本机改过，换新；不一样 → 本机改过，不动
 const HUB_FULL = exists(path.join(HUB, 'memq.mjs'))
-const OLD_KIT = path.join(BODY, 'kit', 'echo'), NEW_KIT = path.join(SRC.dir, 'kit', 'echo')
+const OLD_KIT = path.join(BASE ? BASE.dir : BODY, 'kit', 'echo'), NEW_KIT = path.join(SRC.dir, 'kit', 'echo')
 const fh = (f) => (exists(f) ? sha1(fs.readFileSync(f)) : null)
 const HUB_PLAN = !installed ? [] : fs.readdirSync(NEW_KIT).filter((f) => /\.(mjs|json)$/.test(f) && !HUB_EXCLUDE.includes(f) && !KIT_SET.includes(f)).map((f) => {
   const h = fh(path.join(HUB, f)), nw = fh(path.join(NEW_KIT, f)), od = fh(path.join(OLD_KIT, f))
@@ -2256,7 +2335,28 @@ const HUB_PLAN = !installed ? [] : fs.readdirSync(NEW_KIT).filter((f) => /\.(mjs
   return { f, action }
 }).filter((x) => x.action)
 const hubOf = (a) => HUB_PLAN.filter((x) => x.action === a).map((x) => x.f)
-const bodyDiff = installed ? diffMaps(hashInstalled(BODY, bodyKeep), hashFiles(SRC.dir, packFiles(SRC.dir))) : null
+const bodyDiff = installed ? (() => { const inst = hashInstalled(BODY, bodyKeep), next = hashFiles(SRC.dir, packFiles(SRC.dir)); return { ...diffMaps(inst, next), inst, next } })() : null
+const BODY_SPLIT = splitDiff(bodyDiff, baseMap())
+const PART_SPLIT = AP.map((p, i) => splitDiff(PART_DIFF[i], baseMap('plugins', AP[i])))
+// 本机手工改过称呼、安装记录里却没记：提醒加 --rename，别默默换回去
+const TEXT_FILE = /\.(?:m?js|cjs|ts|md|json|ya?ml|txt)$/i
+let NAME_GUESS = null
+if (!hasNames(NAME_MAP)) {
+  const pairs = []
+  if (UPDATE && installed) for (const f of bodyDiff.changed.filter((x) => TEXT_FILE.test(x))) pairs.push({ local: readText(path.join(BODY, f)), raw: readText(path.join(SRC.dir, f)) })
+  if (RESTORE) {
+    const hubDir = path.join(RB.root, 'memory', 'hub'), kitDir = path.join(SRC.dir, 'kit', 'echo')
+    if (exists(hubDir)) for (const f of fs.readdirSync(hubDir).filter((x) => x.endsWith('.mjs') && exists(path.join(kitDir, x)))) pairs.push({ local: readText(path.join(hubDir, f)), raw: readText(path.join(kitDir, f)) })
+  }
+  const users = [state0 && state0.setup && state0.setup.user, RB && RB.state && RB.state.setup && RB.state.setup.user, SETUP_INFO && SETUP_INFO.user, SETUP && SETUP.user]
+  NAME_GUESS = pairs.length ? guessNameMap(pairs, users) : null
+  if (NAME_GUESS) {
+    const flagTxt = `--rename ${NAME_GUESS.from}=${NAME_GUESS.to}`
+    warn(RESTORE
+      ? `备份里的中枢脚本把上游作者的称呼「${NAME_GUESS.from}」换成了「${NAME_GUESS.to}」（${NAME_GUESS.count} 个文件），备份的安装记录里却没记：照现在恢复，本体和零件里会是上游原文「${NAME_GUESS.from}」。要一致就加 ${flagTxt} 重跑，会记进安装记录`
+      : `本机代码看起来手工把上游作者的称呼「${NAME_GUESS.from}」换成了「${NAME_GUESS.to}」（本体里认出 ${NAME_GUESS.count} 个文件），安装记录里却没记。不加 --rename，本体和零件会换回上游原文「${NAME_GUESS.from}」${BASE ? '（中枢脚本按本机改过保留）' : ''}。要保留就加 ${flagTxt} 重跑，会记进安装记录，以后自动保留`)
+  }
+}
 
 // ═══ 更新：变化报告 ═══════════════════════════════════════════════════
 const presetDir = path.join(NM, PRESET_PKG)
@@ -2269,7 +2369,7 @@ if (UPDATE) {
     TMP_DIRS.push(tmpJson)
     const d = await download(`https://api.github.com/repos/${REPO}/compare/${oldSha}...${SRC.sha}`, tmpJson)
     const cmp = d.ok ? readJson(tmpJson) : null
-    const gl = !cmp && exists(path.join(SRC.dir, '.git')) ? spawnSync('git', ['-C', SRC.dir, 'log', '--reverse', '--format=%h %s', `${oldSha}..${SRC.sha}`], { encoding: 'utf8', windowsHide: true }) : null
+    const gl = !cmp && exists(path.join(SRC0.dir, '.git')) ? spawnSync('git', ['-C', SRC0.dir, 'log', '--reverse', '--format=%h %s', `${oldSha}..${SRC.sha}`], { encoding: 'utf8', windowsHide: true }) : null
     if (cmp && Array.isArray(cmp.commits)) {
       out(`  ${short(oldSha)} → ${short(SRC.sha)}，共 ${cmp.commits.length} 个提交：`)
       for (const c of cmp.commits.slice(-40)) info(`${c.sha.slice(0, 7)} ${String(c.commit.message).split('\n')[0]}`)
@@ -2279,21 +2379,45 @@ if (UPDATE) {
       for (const l of ls.slice(-40)) info(l)
     } else info('（取不到提交列表，下面按文件比对）')
   }
-  const readme = exists(path.join(SRC.dir, 'README.md')) ? readText(path.join(SRC.dir, 'README.md')) : ''
+  const readme = exists(path.join(SRC0.dir, 'README.md')) ? readText(path.join(SRC0.dir, 'README.md')) : ''
   const sec = readme.split(/\n## /).find((s) => s.startsWith('更新记录'))
-  if (sec) { out('  上游 README「更新记录」最近几条：'); for (const h of sec.split('\n').filter((l) => l.startsWith('### '))) info(h.slice(4)) }
+  const heads = sec ? sec.split('\n').filter((l) => l.startsWith('### ')) : []
+  if (heads.length) {
+    // 更新记录是上游作者的开发日志（新的在前），有的写的是作者本机或别的仓库的东西；这次实际换什么，以下面的文件变化为准
+    out(`  上游 README「更新记录」最近 ${Math.min(heads.length, 8)} 条（共 ${heads.length} 条；这是上游的开发日志，不全是这次会装上的东西，实际换什么看下面的文件变化）：`)
+    for (const h of heads.slice(0, 8)) info(h.slice(4))
+  }
 
   const list = (d) => [...d.changed.map((f) => '改 ' + f), ...d.added.map((f) => '增 ' + f), ...d.removed.map((f) => '删 ' + f)]
-  out(`  本体：${bodyDiff.same ? '没有变化' : `${bodyDiff.changed.length} 改 / ${bodyDiff.added.length} 增 / ${bodyDiff.removed.length} 删`}`)
-  for (const l of list(bodyDiff).slice(0, 40)) info(l)
-  if (list(bodyDiff).length > 40) info(`……另有 ${list(bodyDiff).length - 40} 项`)
+  // 有已装那一版的上游时，分开报「上游改的」和「本机改过、这次会换回上游版的」，不再把本机改动算成上游改动
+  const showDiff = (label, d, sp, max) => {
+    if (d.same) { out(`  ${label}：没有变化`); return }
+    if (!sp) {
+      out(`  ${label}：${list(d).length} 处变化（取不到已装那一版的上游，分不清哪些是本机改的）`)
+      for (const l of list(d).slice(0, max)) info(l)
+      if (list(d).length > max) info(`……另有 ${list(d).length - max} 项`)
+      return
+    }
+    const n = list(sp.up).length
+    out(`  ${label}：${n ? `上游 ${sp.up.changed.length} 改 / ${sp.up.added.length} 增 / ${sp.up.removed.length} 删` : '上游没有变化'}${sp.localCount ? `；本机改过的 ${sp.localCount} 处会换回上游版` : ''}`)
+    for (const l of list(sp.up).slice(0, max)) info(l)
+    if (n > max) info(`……另有 ${n - max} 项`)
+    for (const f of sp.local.slice(0, max)) info(`本机改过（上游这版没动）→ 换回上游版：${f}`)
+    if (sp.local.length > max) info(`……另有 ${sp.local.length - max} 个本机改过的`)
+    for (const f of sp.both) info(`上游改了、本机也改过 → 用上游新版：${f}`)
+    for (const f of sp.extra) info(`本机多出来的文件 → 删掉：${f}`)
+    for (const f of sp.missing) info(`本机删掉的 → 补回来：${f}`)
+  }
+  if (state0 && !sameNameMap(state0.nameMap, NAME_MAP)) out(`  称呼替换：${nameMapLabel(state0.nameMap) || '不换'} → ${nameMapLabel(NAME_MAP) || '不换'}（下面「本机改过」里换称呼的那些，就是这个原因）`)
+  showDiff('本体', bodyDiff, BODY_SPLIT, 40)
   for (let i = 0; i < AP.length; i++) {
     const d = PART_DIFF[i]
     if (!d) { out(`  零件 ${PKGS[i]}：${TO_ADD.has(AP[i]) ? `本机没有，安装包新加的零件，会装上；不要就加 --skip-part ${AP[i]}（会记下来，以后更新不再补）` : '本机没装，跳过'}`); continue }
     const rn = RENAMES.find((r) => r.part === AP[i])
-    out(`  零件 ${PKGS[i]}${rn ? `（改名，本机是 ${rn.from}）` : ''}：${d.same ? '没有变化' : `${list(d).length} 处变化`}`)
-    for (const l of list(d).slice(0, 15)) info(l)
+    showDiff(`零件 ${PKGS[i]}${rn ? `（改名，本机是 ${rn.from}）` : ''}`, d, PART_SPLIT[i], 15)
   }
+  const localTotal = [BODY_SPLIT, ...PART_SPLIT].reduce((n, x) => n + (x ? x.localCount : 0), 0)
+  if (localTotal) warn(`本体和零件里有 ${localTotal} 处本机改动，这次会换回上游版（明细见「上游改了什么」）${NAME_GUESS ? '；改称呼的那部分可以用 --rename 保留' : ''}。要保留别的改动，先停下`)
   for (const r of RENAMES) out(`  零件改名 ${r.from} → ${r.to}：会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）`)
   for (const f of KIT_SET) {
     const a = path.join(HUB, f), b = path.join(SRC.dir, 'kit', 'echo', f)
@@ -2326,7 +2450,10 @@ if (UPDATE) {
     out('\n已经是最新，什么都不用改。')
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
     const shaMoved = state0.upstream && SRC.sha && state0.upstream.sha !== SRC.sha
-    if (!DRY && (shaMoved || newDecl.length)) {
+    const namesMoved = !sameNameMap(state0.nameMap, NAME_MAP)
+    if (namesMoved) out(`称呼替换记成：${nameMapLabel(NAME_MAP) || '不换'}${DRY ? '（干跑，不写）' : ''}`)
+    if (!DRY && (shaMoved || newDecl.length || namesMoved)) {
+      if (namesMoved) state0.nameMap = NAME_MAP
       if (shaMoved) state0.upstream.sha = SRC.sha
       if (newDecl.length) { state0.declined = [...DECLINED0, ...newDecl]; out(`记下了：${newDecl.join('、')} 不装，以后更新不再补。`) }
       fs.writeFileSync(STATE_PATH, JSON.stringify(state0, null, 2), 'utf8')
@@ -2746,6 +2873,7 @@ if (!DRY) {
     updatedAt: now,
     dsh: SRC_PRESETS.ptc.dsh,
     setup: SETUP_INFO,
+    nameMap: NAME_MAP,
     presetIds: PRESET_CHOICE,
     presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
     defaultPreset: finalDefault,

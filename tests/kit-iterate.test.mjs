@@ -124,6 +124,26 @@ test('新零件、未知包名、包契约变化、失效补丁和缺失文件�
   }
 })
 
+test('发布清单自洽：只把目标里新出现的漏列 files、漏声明 peerDependencies 列为契约提示', (t) => {
+  const f = fixture(t)
+  for (const source of [f.base, f.target]) {
+    put(source, 'plugins/compaction/package.json', { name: 'dsh-agent-compaction', main: 'index.js', files: ['index.js'] })
+    put(source, 'plugins/compaction/index.js', "import { toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'\n")
+  }
+  put(f.target, 'plugins/memory/package.json', { name: 'dsh-agent-memory', main: 'lib/index.js', files: ['lib'] })
+  put(f.target, 'plugins/memory/lib/index.js', "import { createUserMessage } from '@deepseek-ai/dsh-llm'\n")
+  put(f.target, 'index.js', "import './lib/helper.js'\n")
+  put(f.target, 'lib/helper.js', 'export {}\n')
+  const { report } = f.prepare()
+  const peer = report.findings.filter((finding) => finding.kind === 'package-peer')
+  const integrity = report.findings.filter((finding) => finding.kind === 'package-integrity')
+  assert.deepEqual(peer.map((finding) => finding.file), ['plugins/memory/package.json'])
+  assert.match(peer[0].message, /@deepseek-ai\/dsh-llm/)
+  assert.deepEqual(integrity.map((finding) => finding.file), ['package.json'])
+  assert.match(integrity[0].message, /lib\/helper\.js/)
+  assert.ok(!report.findings.some((finding) => /@deepseek-ai\/dsh-compaction\b/.test(finding.message)), '基线已有的漏声明不重复列出')
+})
+
 test('目标清单损坏会报告问题，不把迭代检查变成安装器的提前退出', (t) => {
   const f = fixture(t)
   put(f.target, 'plugins/clock/package.json', '{invalid')

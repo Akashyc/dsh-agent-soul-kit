@@ -2,8 +2,8 @@
   "format": 1,
   "repo": "cyanwell/dsh-agent-soul",
   "baseline": {
-    "sha": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
-    "treeDigest": "e22a81a6db22d83d6e26bc21ecfc627302e082f993c9ffb443df87b7b399f1d8"
+    "sha": "504d2d0029050941429e942bda31e4ca7c102aa4",
+    "treeDigest": "38e1caeb88c65818c0bca2ad1b5bbe70255fbfc302828ba8d7b4eb57e44da8c0"
   },
   "history": [
     {
@@ -233,6 +233,231 @@
         "恢复流程只做到干跑计划与路径替换核对，没有真执行跨目录恢复（真跑需要联网装包并改临时 profile）",
         "VERIFIED 保持 6ea60a28：本轮只有代码审查与隔离验证，没有端到端桌面证据，不更新它",
         "本轮 kit 修改（tests/home-paths.test.mjs、lib/kit-iterate.mjs）尚未提交 Git，按约定由用户决定提交与推送"
+      ]
+    },
+    {
+      "completedAt": "2026-10-28T09:01:07.528Z",
+      "reportCreatedAt": "2026-10-28T08:46:26.620Z",
+      "base": "6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9",
+      "target": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "kitVersion": "2.7",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "d8d5889b79a4248a98944ec4c5e449f3411ceec2",
+        "targetSha": "d8d5889b79a4248a98944ec4c5e449f3411ceec2",
+        "changes": [],
+        "status": "current",
+        "ready": true,
+        "directory": null,
+        "message": "kit 自身已包含发布源 Akashyc/dsh-agent-soul-kit@d8d5889b79a4248a98944ec4c5e449f3411ceec2；保留本地修改，继续检查插件上游。"
+      },
+      "summary": "kit 自身：本地 main 与发布源 Akashyc/dsh-agent-soul-kit@d8d5889 一致（current），无需拉取或合入，工作区干净，本地方案全部保留。插件上游 cyanwell/dsh-agent-soul：6ea60a2 → 504d2d0 共 10 个提交、14 个文件（新增 12、修改 2）。实质变化只有两类：① plugins/compaction/package.json 补声明 peerDependencies @deepseek-ai/dsh-compaction（index.js 一直在 import 它）；kit 按 files 原样拷包，更新时随包带上，无需适配。② 作者新增自己的安装层：仓库根目录同名的 install.mjs、AGENT-INSTALL.md，加上 tools/soul-doctor.mjs、tools/soul-preset.mjs、presets/（砚青 preset 与 _shared）、soul-version.json，服务对象是作者本机的 dsh-yanqing-* 零件（不在本仓库）和砚青 preset，默认家目录 D:/AI/dsh/home。其中根目录文件、presets/、soul-version.json 不在本体 files 内，不会装进 node_modules；tools/ 两个脚本会随本体装上，但对 kit 装的 profile 固定误报 4 项失败。README 记载的 /compact-region 与砚青 preset 修正属于 dsh-agent-organs 和作者本机，本仓库的 huanqi 不调用 /compact-region，kit 不采纳。kit 2.8 据此修正：新增 lib/package-contract.mjs，安装/更新/恢复在拷包前核对发布清单（入口沿相对导入走到的文件必须在 files 里，否则停下且不改任何文件；用到 @deepseek-ai/* 却未声明 peerDependencies 的只提示），kit 迭代报告列出目标里新出现的同类问题；更新时上游更新记录只列最近 8 条并注明以文件变化为准；README、AGENT-INSTALL.md、AGENT-ITERATE.md 写清作者同名安装层不适用于 kit。新检查顺带发现 dsh-huanqi 的 lib/index.js 也 import @deepseek-ai/dsh-compaction 却没声明（上游 doctor 只扫 dsh-yanqing-*/dsh-agent-* 漏掉了），kit 只提示、不替上游改包。四流程在隔离假家目录里实跑安装、重复安装、基线升级、无变化更新、拒绝坏包、备份往返、跨目录恢复、冲突保护、强制恢复和损坏包拒绝，均通过；VERIFIED 保持 6ea60a2。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "上游没有改零件结构、包名、必需文件或 kit 补丁的锚点，安装流程本身不需要为 504d2d0 适配，目标版本照常安装，输出与 kit 2.7 逐文件一致（只差家目录路径和时间戳）。需要修的是两处由这次上游变化暴露的缺口：一是作者把发布清单漏项当成反复出现的问题（peerDependencies 漏声明、files 漏列 lib），而 kit 按 files 拷包，漏列的文件装完就没了，以前要到 DSH 里才看得出来；现在拷包前核对，确定会缺文件的停下，漏声明的提示。二是作者仓库根目录多了同名的 install.mjs、AGENT-INSTALL.md 和 soul-doctor/soul-preset，对 kit 装的 profile 固定报 L1/parts、L2/presets 等失败，容易让 agent 照着去「修」，文档里写清楚不适用。",
+          "evidence": [
+            "上游 504d2d0：plugins/compaction/package.json peerDependencies 新增 @deepseek-ai/dsh-compaction；plugins/compaction/index.js 第 91 行 import { toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'",
+            "上游 504d2d0：package.json files 只列 index.js、client.js、install.js、cordis.patch.yml、kit-bridge.mjs、probe-kit-tools.mjs、install-desktop.ps1、README.md、INSTALL.md、LICENSE、soul/、skeleton/、kit/、plugins/、tools/；根目录 install.mjs、AGENT-INSTALL.md、presets/、soul-version.json 不在内",
+            "上游 504d2d0：install.mjs 的 HOME 默认 'D:/AI/dsh/home'；tools/soul-doctor.mjs SOUL_PARTS 与 tools/soul-preset.mjs REQUIRED 都是 dsh-yanqing-*；presets/_manifest.json 的 parts 为 dsh-yanqing-compaction / dsh-yanqing-compact-region / dsh-yanqing-pruner",
+            "上游 504d2d0：plugins/huanqi/lib/index.js 第 179 行 import from '@deepseek-ai/dsh-compaction'，package.json peerDependencies 只有 cordis、dsh-agent、dsh-llm；全仓库 plugins/ 内没有任何 compact-region 调用",
+            "kit：新增 lib/package-contract.mjs（entryFiles、inspectPackage、describeIssue）；install.mjs 在 RENAME_MAP 之后对本体和本次要装的零件（AP）跑检查，unshipped/missing 走 die，peer 走 info",
+            "kit：install.mjs 的 packFiles/installPackage 按 files 清单拷包；KIT_VERSION 2.7 → 2.8",
+            "kit：AGENT-INSTALL.md 第一节规矩 4、README.md「注意」新增「作者仓库里的同名文件」"
+          ],
+          "checks": [
+            "kit-self-check",
+            "upstream-compare",
+            "snapshot-identity",
+            "syntax",
+            "unit-regression",
+            "contract-scan",
+            "install-fresh-target",
+            "install-repeat",
+            "upstream-doctor-on-kit-install",
+            "package-contract-refusal"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "从 6ea60a2 升到 504d2d0 时，本体变化为 2 改 2 增（README.md、plugins/compaction/package.json、tools/soul-doctor.mjs、tools/soul-preset.mjs），零件只有 dsh-agent-compaction 的 package.json 变化；三方比对、本机补丁、中枢脚本、拒绝项、安装记录都照常工作，升级后 compaction 带上新的 peerDependencies，书房、账本、会话、换气账本、profile 配置和中枢里本机改过的 memq.mjs 都没被动过，再跑一次报「已经是最新」。改动有两处：拷包前的发布清单核对同样作用于更新，坏包会在备份和替换之前停下；另外上游更新记录从 12 条涨到 21 条，而且大半写的是作者本机的砚青 preset 和 dsh-agent-organs 的 /compact-region，kit 用户装不到，以前这些全部列在「最近几条」里，现在只列最近 8 条，并注明实际换什么以文件变化为准。",
+          "evidence": [
+            "上游 504d2d0：README.md「更新记录」21 条标题（基线 12 条），新增 9 条均为 2026-10-28，内容涉及 soul-preset、presets/、soul-doctor、上游 install.mjs、dsh-agent-organs 6735d72 的 compact-region",
+            "kit：install.mjs 更新报告里的 heads.slice(0, 8) 及「这是上游的开发日志，不全是这次会装上的东西」提示",
+            "kit：install.mjs partDiff、HUB_PLAN、PATCHES 重打与 .install-state.json 写入未改动；新检查在 step('上游改了什么') 之前执行，失败时 die 不写文件",
+            "kit：AGENT-INSTALL.md 第九节步骤 2、「要停下」「要报给用户但不用停」两段同步更新"
+          ],
+          "checks": [
+            "syntax",
+            "unit-regression",
+            "update-base-to-target",
+            "update-repeat",
+            "package-contract-refusal"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "上游这次没有新增需要随用户迁移的持久数据：soul-version.json 和 presets/ 是仓库里的源文件，不会装到用户机器；soul-preset.mjs 写的 .bak-before-* 只出现在作者那套流程里。kit 装的零件没有改状态文件位置，dsh-huanqi.json、huanqi-turns.jsonl 仍由现有规则带走。备份范围、manifest 格式、文件校验都不用改。用升级到目标版本后的假家目录实跑了一次备份往返。",
+          "evidence": [
+            "上游 504d2d0 与基线相比：plugins/huanqi、plugins/echo、plugins/memory、kit/echo 零差异；变化文件只有 14 个（见 report.json changes）",
+            "kit：install.mjs makeBackup、STATE_RE、soulEntryIds、writeTarGz、manifest 写法未改",
+            "上游 504d2d0：tools/soul-preset.mjs 只写目标 profile 的 cordis.patch.yml 及其 .bak-before-*，kit 流程不调用它"
+          ],
+          "checks": [
+            "syntax",
+            "backup-roundtrip"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "备份格式和数据范围没有变化，旧备份按原逻辑读取；恢复内部复用的安装路径会经过新的发布清单核对，但恢复本身的路径改写、冲突保护、--force 先备份、会话只补不覆盖、索引和自我层重建都无需改。在另一个假家目录里用目标版本源码实跑了恢复、冲突拒绝、强制恢复和损坏包拒绝。",
+          "evidence": [
+            "kit：install.mjs RESTORE 分支、pathPairs、rewritePaths、copyTree（会话 overwrite:false）、install-kit / memindex build / self.mjs 收尾未改",
+            "上游 504d2d0：kit/echo/（install-kit、memindex、self、echo-config）与基线逐字节相同"
+          ],
+          "checks": [
+            "syntax",
+            "restore-crossdir",
+            "restore-conflict-force",
+            "restore-corrupt"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "contract:plugins/compaction/package.json",
+          "decision": "not-applicable",
+          "reason": "变化只是在 peerDependencies 补上 @deepseek-ai/dsh-compaction（index.js 本来就 import 它），files、入口、包名都没变。kit 不改写零件的 package.json，按 files 原样拷包，dependencies 里写的是 file:node_modules/dsh-agent-compaction，没有锁文件条目需要跟着改；隔离升级验证了更新后 node_modules/dsh-agent-compaction/package.json 已带两个 peer 声明。kit 不需要为它改代码，这次新增的发布清单检查是由同类问题引出的独立加固。"
+        }
+      ],
+      "checks": [
+        {
+          "id": "kit-self-check",
+          "scope": "static",
+          "command": "git status --short --branch; git ls-remote https://github.com/Akashyc/dsh-agent-soul-kit.git; node install.mjs --kit-iterate（kit 自身部分）",
+          "status": "passed",
+          "evidence": "本地 main 与 origin/main 一致、工作区干净；远端 main = d8d5889b79a4248a98944ec4c5e449f3411ceec2 = 本地 HEAD；kit-iterate 输出「kit 自身已包含发布源 Akashyc/dsh-agent-soul-kit@d8d5889…；保留本地修改」，report.json kitUpdate.status=current"
+        },
+        {
+          "id": "upstream-compare",
+          "scope": "static",
+          "command": "node install.mjs --kit-iterate；git -C <上游 clone> log 6ea60a28..504d2d00；git diff --stat",
+          "status": "passed",
+          "evidence": "基线 6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9 → 目标 main=504d2d0029050941429e942bda31e4ca7c102aa4；10 个提交（215ba29…504d2d0）；新增 12、修改 2、删除 0，2620 行增 2 行删；契约提示 1 项 contract:plugins/compaction/package.json（peerDependencies）"
+        },
+        {
+          "id": "snapshot-identity",
+          "scope": "static",
+          "command": "git worktree add up-base 6ea60a28…；git worktree add up-target 504d2d00…；diff -rq --exclude=.git up-base <报告>/base；diff -rq --exclude=.git up-target <报告>/target",
+          "status": "passed",
+          "evidence": "两份 worktree 的 HEAD 分别是基线和目标完整提交号；与报告快照相比只差 plugins/yantai/demo/intro-v3.mp4（报告与安装器都按规则排除视频），其余文件逐字节一致，后续模拟验证使用这两个 worktree"
+        },
+        {
+          "id": "syntax",
+          "scope": "static",
+          "command": "node --check install.mjs && node --check lib/kit-iterate.mjs && node --check lib/kit-update.mjs && node --check lib/package-contract.mjs && git diff --check",
+          "status": "passed",
+          "evidence": "输出 SYNTAX-OK 与 DIFFCHECK-OK，退出码 0"
+        },
+        {
+          "id": "unit-regression",
+          "scope": "simulated",
+          "command": "node --test tests/*.test.mjs",
+          "status": "passed",
+          "evidence": "tests 59 / pass 57 / fail 0 / skipped 2（修改前 53 项：51 过、2 跳过）。新增 tests/package-contract.test.mjs 5 项（入口识别、files 漏列与源码缺失、入口本身未发布、peer 漏声明且注释与子路径不误报、导入链外文件不参与）和 kit-iterate 1 项（只报目标新出现的 package-peer / package-integrity，基线已有的不重复）。跳过的 2 项需要本机真实装好的换气面板，这台 Linux VM 没有 ~/.dsh"
+        },
+        {
+          "id": "contract-scan",
+          "scope": "static",
+          "command": "node contract-scan.mjs <kit> up-base；node contract-scan.mjs <kit> up-target；node install.mjs --kit-iterate --dry-run --base-source up-target --source up-base",
+          "status": "passed",
+          "evidence": "15 个包（本体 + 14 零件）：基线 2 项（compaction、huanqi 漏声明 @deepseek-ai/dsh-compaction），目标 1 项（只剩 huanqi），0 项 files 漏列。正向 dry-run 不新增契约提示；把基线当目标的反向 dry-run 产生 package-peer:plugins/compaction/index.js:@deepseek-ai/dsh-compaction，证明迭代报告能抓到这类回退"
+        },
+        {
+          "id": "install-fresh-target",
+          "scope": "simulated",
+          "command": "node install.mjs --setup 大肥鱼 --dsh-home <假家目录 home-b / home-c> --source up-target --no-heartbeat --confirm-quit --no-input（home-b 用 kit 2.7、home-c 用 kit 2.8）",
+          "status": "passed",
+          "evidence": "均退出 0；11 个包到位、注册 id 不撞车、安装记录 504d2d0；dsh-agent-compaction 的 peerDependencies 为 dsh-compaction-basic 与 dsh-compaction；本体里有 tools/soul-doctor.mjs、soul-preset.mjs，没有根目录 install.mjs、AGENT-INSTALL.md、presets/、soul-version.json。kit 2.8 只多一行 huanqi 漏声明提示；两者 node_modules 只差 kit/echo.config.json 里的家目录路径，package.json、cordis.patch.yml 完全相同，dsh-soul 只差家目录路径和时间戳"
+        },
+        {
+          "id": "install-repeat",
+          "scope": "simulated",
+          "command": "同一条安装命令在 home-b 上再跑一次",
+          "status": "passed",
+          "evidence": "退出 0；输出「检测到已经装过同一版本：按补全处理」，本体、Soul preset、package.json、cordis.patch.yml、init（跳过 5 份）、scaffold（跳过 29 项）全部跳过；前后整树哈希只有 .install-state.json 和 .bak/_backup 变化"
+        },
+        {
+          "id": "upstream-doctor-on-kit-install",
+          "scope": "simulated",
+          "command": "DSH_HOME=<home-b> node <home-b>/profiles/desktop/node_modules/dsh-agent-soul/tools/soul-doctor.mjs --json；不设 DSH_HOME 再跑一次",
+          "status": "passed",
+          "evidence": "对 kit 正确装好的 profile 退出 1，failed = L1/parts（解析不到 dsh-yanqing-compaction/compact-region/pruner/memory）、L2/presets（0 个）、L2/threeparts、L2/presetresolve；L0 全过，L1/pkgintegrity「扫描 8 个包，入口与 files 自洽」、L1/peerdeps「扫描 8 个零件，齐全」（它按名字只扫 dsh-agent-*，漏掉 dsh-huanqi）。不设 DSH_HOME 时 home 落到 D:/AI/dsh/home、L0/home 失败。据此在文档里写清不适用"
+        },
+        {
+          "id": "update-base-to-target",
+          "scope": "simulated",
+          "command": "kit 2.8：--setup 大肥鱼 --source up-base 装到 home-d → prep.mjs 写入中文笔记、空目录、SELF.src.md 手改、会话、换气账本、dsh-mnemon bundle 与自有配置块、中枢 memq.mjs 手改，mo.mjs add fact 记一条账 → --update --source up-target --dry-run 再真跑（kit 2.7 也在 home-a 上做过同样一轮）",
+          "status": "passed",
+          "evidence": "退出 0；提交列表 10 个，更新记录「最近 8 条（共 21 条…）」；本体 2 改 2 增，零件只有 compaction 改 package.json，其余 8 个零件没有变化，补丁全部「已打过」，中枢 memq.mjs 列为本机改过不动；整份备份到 dsh-soul/_backup/<时间>-update。升级前后 dsh-soul（除安装记录、_backup、.kit-origin.json）、sessions、state 的哈希完全相同，package.json 与 cordis.patch.yml 字节相同（保留 dsh-mnemon 与自有块），拒掉的 5 个零件仍在 declined；安装记录 504d2d0。基线安装时提示 compaction、huanqi 漏声明，升级后只剩 huanqi"
+        },
+        {
+          "id": "update-repeat",
+          "scope": "simulated",
+          "command": "在 home-d（及 home-a）上对 up-target 再跑一次 --update",
+          "status": "passed",
+          "evidence": "退出 0；本体和 9 个零件都「没有变化」，Soul preset「和源一致」，最后输出「已经是最新，什么都不用改」；dsh-soul 哈希快照前后一致"
+        },
+        {
+          "id": "package-contract-refusal",
+          "scope": "simulated",
+          "command": "复制 up-target 为 broken-req（memory 的 files 去掉 lib）和 broken-opt（mcp-hub 的 files 去掉 client.js），分别对 home-d 跑 --update；broken-opt 再加 --skip-part mcp-hub --dry-run",
+          "status": "passed",
+          "evidence": "两次都退出 1：「✗ 上游包的发布清单不自洽…dsh-agent-memory：入口 lib/index.js 不在 package.json 的 files 里」并建议 --ref 6ea60a2；可选零件那次额外建议 --skip-part mcp-hub；都输出「已停止。还没有改任何文件」，home-d 整树哈希前后一致。加 --skip-part 的干跑退出 0"
+        },
+        {
+          "id": "backup-roundtrip",
+          "scope": "simulated",
+          "command": "node install.mjs --backup --dsh-home <home-d，已升级到目标并含测试数据> --out <sim/bk> --confirm-quit --no-input；tar -xzf 后按 manifest 逐个核对 sha1，并与源文件 cmp",
+          "status": "passed",
+          "evidence": "退出 0；书房 25 / 记忆中枢 24 / 会话 1 / 换气账本 2，共 54 个文件，manifest kitVersion 2.8、upstream 504d2d0；解包后 54/54 sha1 一致；包含 soul/65-声音/自定义-笔记.md（中文路径）、soul/70-空目录/（空目录）、sessions/session-sim/session.jsonl、state/dsh-huanqi.json、state/huanqi-turns.jsonl；不含 memory/hub/index；抽查 4 个文件及会话、换气账本与源文件逐字节相同；不含 dsh-mnemon 配置"
+        },
+        {
+          "id": "restore-crossdir",
+          "scope": "simulated",
+          "command": "node install.mjs --restore <备份包> --dsh-home <全新 home-e> --source up-target --no-heartbeat --confirm-quit --no-input",
+          "status": "passed",
+          "evidence": "退出 0；校验全部通过；记忆中枢配置路径 home-d → home-e；书房、账本、memq.mjs 手改、会话、两个换气账本文件与源逐字节相同，空目录已恢复，SELF.src.md 只差被改写的家目录路径；hub 配置、SELF.md、本体 kit/echo.config.json、mcp-hub/servers.json、cordis.patch.yml 里没有残留 home-d；memindex 重建出 index/；dsh-agent-compaction/package.json 与源机一致；Soul preset 5 个、默认 ptc-soul-flash"
+        },
+        {
+          "id": "restore-conflict-force",
+          "scope": "simulated",
+          "command": "对已恢复的 home-e 再跑同一条 --restore；之后改书房文件、追加会话，再加 --force 真跑",
+          "status": "passed",
+          "evidence": "不加 --force：退出 1，「这台电脑上已经有灵魂数据…确认要覆盖就加 --force」，未改文件；--force 干跑报先整份备份；--force 真跑退出 0，原数据整份备份到 _backup/<时间>-pre-restore（内含本机新加的那一行），书房文件恢复成备份内容，会话「本机已有同名的 1 个，保留本机的」，本机追加的 seq 2 与新会话文件都保留"
+        },
+        {
+          "id": "restore-corrupt",
+          "scope": "simulated",
+          "command": "head -c 60000 截断备份包，对全新 home-f 跑 --restore",
+          "status": "passed",
+          "evidence": "退出 1：「备份包解不开：unexpected end of file」「已停止。还没有改任何文件」；home-f 里仍只有原来的 package.json 和 cordis.patch.yml"
+        }
+      ],
+      "limitations": [
+        "全部模拟验证都在 Cowork 挂在 Boss Mac 上的 Linux 虚拟机里完成（Node 22.23.4，假 DSH 家目录），不是 macOS 原生环境，也没有在 Windows 上跑",
+        "没有真实 DSH：找不到 app.asar，四个 Soul preset 按 kit 自带的官方预设快照生成；没装 dsh-mnemon",
+        "没做桌面验收：DSH 启动、preset 列表、门牌压缩、MCP、心跳；也没确认宿主在新的 peerDependencies 声明下加载 dsh-agent-compaction 的表现",
+        "dsh-huanqi 的 lib/index.js import @deepseek-ai/dsh-compaction 却没声明 peerDependencies，这是上游问题。kit 只提示不补包，宿主会不会因此不加载换气要在桌面上确认，建议报给上游",
+        "tests/huanqi-panel-patch.test.mjs 有 2 项依赖本机真实装好的换气面板，这次跳过",
+        "VERIFIED 保持 6ea60a2：这一轮只有代码审查和隔离验证，没有端到端桌面证据",
+        "上游 README 里的 /compact-region 与砚青 preset 修正属于 dsh-agent-organs 和作者本机，本仓库零件不用，kit 不采纳，也没有验证",
+        "这一轮的 kit 修改还没有提交 Git，提交和推送等 Boss 决定"
       ]
     }
   ]
