@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 2.14**（2026-10-29）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
+**版本 2.15**（2026-10-29）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
 
 > **这不是 DSH 插件，不要往插件市场里装。**
 > 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
@@ -215,6 +215,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.15 | 2026-10-29 | `assets/parts/compact-region` 快照跟上本机修好的那版：命令参数不再只认 `invocation.rawInput`（实机证明人打的参数到 handler 会是空串），改成依次试 `rawInput / args / argsText / input / text` 并去掉行首命令名 —— 换气程序化调用传的是整行（`commands.execute(agent, line, [], signal)`），两种形状都要接住；诊断日志顺带打出 `invocation` 的键名，下次失败能直接看到参数藏在哪 |
 | 2.14 | 2026-10-29 | 装、更新、卸载三处写配置前统一做一遍「布尔消毒」：换气配置里的 `fullCompactOnBreaker: 'true'` / `postCompactRecallHint: 'true'` 是字符串，过不了 Schemastery 的 `z.boolean()`，cordis 记一条 ValidationError 之后**整段配置静默退回默认值** —— 插件照跑，所以一直没人发现改的配置根本没生效。只在 `- id: huanqi` 这一段里、只掰已读过 schema 的两个布尔键（别的插件、别的键一律不碰），修了会在输出里报一行 |
 | 2.13 | 2026-10-29 | Soul preset 的默认方案只装砚青四套，去掉 PTC · Soul · Flash；新会话默认 preset 从 Flash 模式改成砚青；安装问卷的默认项、`--default-preset` 参数示例和不指定时的兜底值一起改。已经装过的电脑照安装记录来，不会被强制重装 |
 | 2.12 | 2026-10-29 | 修 2.11 更新到一半停下、DSH 起不来的问题：更新时必装零件和 Soul preset 要调用的零件（compact-region 等）本机没有就补装，不能跳过，恢复旧备份时也一样；安装包版本号按数字比（以前按字符串，`2.9` 比 `2.11` 算大）；按新名落地的包不再被下次更新当成「本机改过」；package.json 只写真的在的零件；以前的 Soul preset id（standard-soul、cordis-soul 等）还有会话在用的，留一个和对应砚青 preset 一样的别名，旧会话照常打开；去掉还有会话在用的 preset 会报出来；`--dsh-home` 指的目录没有 profile 时不管别处有没有都停下 |
