@@ -75,7 +75,7 @@ import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonR
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.9'
+const KIT_VERSION = '2.10'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -721,7 +721,7 @@ function patchNamesMissing(nm, pkgDirs, parse) {
 
 // ── Soul preset ───────────────────────────────────────────────────────
 function yamlParser(prof) {
-  const req = createRequire(path.join(prof, 'package.json'))
+  const req = createRequire(path.resolve(path.join(prof, 'package.json')))
   try {
     const y = req('js-yaml')
     const JS = new y.Type('tag:yaml.org,2002:js', { kind: 'scalar', construct: (s) => ({ js: s }) })
@@ -1483,7 +1483,9 @@ if (KIT_ITERATE || KIT_ACCEPT || KIT_UPDATE) {
 }
 
 // ═══ 0. 预检 ═══════════════════════════════════════════════════════════
-const homeCands = [opt('--dsh-home'), process.env.DSH_HOME, path.join(os.homedir(), '.dsh'), process.platform === 'win32' && process.env.APPDATA ? path.join(process.env.APPDATA, 'dsh') : null].filter(Boolean)
+const explicitDshHome = opt('--dsh-home') && path.resolve(opt('--dsh-home'))
+const envDshHome = process.env.DSH_HOME && path.resolve(process.env.DSH_HOME)
+const homeCands = [explicitDshHome, envDshHome, path.join(os.homedir(), '.dsh'), process.platform === 'win32' && process.env.APPDATA ? path.join(process.env.APPDATA, 'dsh') : null].filter(Boolean)
 // ═══ 问题清单（--questions）：给 agent 用，只输出 JSON ═════════════════════
 if (QUESTIONS_MODE) {
   const home = homeCands.find((h) => exists(path.join(h, 'profiles', PROFILE, 'package.json')))
@@ -1555,6 +1557,7 @@ ok('安装包素材齐全')
 
 const DSH_HOME = homeCands.find((h) => exists(path.join(h, 'profiles', PROFILE, 'package.json')))
 if (!DSH_HOME) die(`找不到 DSH 的 ${PROFILE} profile。试过：\n      ${homeCands.map((h) => path.join(h, 'profiles', PROFILE)).join('\n      ')}\n    先把 DSH 打开一次让它生成 profile，或用 --dsh-home 指定 DSH 家目录。`)
+if (explicitDshHome && path.resolve(DSH_HOME) !== path.resolve(explicitDshHome)) die(`--dsh-home 指的是 ${posix(path.resolve(explicitDshHome))}，那里没有 profiles/${PROFILE}/package.json。为免把东西写进另一份 DSH 家目录（${posix(DSH_HOME)}），这次不回落，直接停下。\n    确认路径；目录是新建的，先打开一次 DSH 让它生成 profile，再用 --dsh-home 指向它。`)
 const PROF = path.join(DSH_HOME, 'profiles', PROFILE)
 const NM = path.join(PROF, 'node_modules')
 ok(`profile：${PROF}`)
