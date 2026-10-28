@@ -77,3 +77,12 @@ test('BOOLEAN_KEYS 只收真读过的布尔键', () => {
   // 这个清单是白名单：多加一个键等于替别人的 schema 做主
   assert.deepEqual([...BOOLEAN_KEYS].sort(), ['fullCompactOnBreaker', 'postCompactRecallHint'])
 })
+
+test('卸载路径也过一遍消毒（不让卸载又把字符串布尔写回去）', async () => {
+  const { planCordisRemoval } = await import('../lib/uninstall.mjs')
+  const src = yml(["    fullCompactOnBreaker: 'true'", "    postCompactRecallHint: 'false'"])
+  // ids 里故意不放 huanqi：让这一节留着，考验的是「写回前有没有消毒」
+  const out = planCordisRemoval(src, { ids: ['dsh-agent-soul'], flashInstalled: false })
+  assert.match(out.text, /^ {4}fullCompactOnBreaker: true$/m)
+  assert.match(out.text, /^ {4}postCompactRecallHint: false$/m)
+})
