@@ -927,7 +927,7 @@ const QUESTIONS = [
   { id: 'multiSession', group: '运行', type: 'bool', ask: '会不会同时开好几个会话一起干活？', hint: '会 → 自我层里写「谁是主导」的判据（看账本里最后一条 lead）。', default: true },
   { id: 'windowSize', group: '运行', type: 'number', ask: '模型的上下文窗口多大？（token 数）', hint: '用来算水位分段；不知道就用默认。', default: 1000000 },
   { id: 'presets', group: '运行', type: 'multi', ask: '生成哪几个 Soul preset？', hint: '都带门牌压缩和裁剪，区别在省不省 token。', options: Object.keys(PRESET_LABEL).map((k) => ({ value: k, label: PRESET_LABEL[k], desc: PRESET_INFO[k] })), default: Object.keys(PRESET_LABEL) },
-  { id: 'defaultPreset', group: '运行', type: 'choice', ask: '新会话默认用哪个？', hint: '只能从上一题选中的里挑。', optionsFrom: 'presets', default: 'ptc-soul-flash' },
+  { id: 'defaultPreset', group: '运行', type: 'choice', ask: '新会话默认用哪个？', hint: '只能从上一题选中的里挑。', optionsFrom: 'presets', default: 'yanqing' },
   { id: 'heartbeat', group: '运行', type: 'bool', ask: '要不要每天定时自检（心跳）？', hint: '每天一次：重建索引、刷新自我层、跑体检。', default: true },
   { id: 'heartbeatTime', group: '运行', type: 'time', askIf: 'heartbeat 为 true', ask: '心跳每天几点跑？（HH:MM）', default: '12:00' },
   { id: 'parts', group: '零件', type: 'multi', ask: `可选零件装哪些？（必装的 ${REQUIRED_PARTS.join('、')} 不用选）`, hint: 'mnemon-probe 只有装了 dsh-mnemon 才能选；huanqi-panel 要和 huanqi 一起装。新加的 5 个（model-statusbar、mobile-adapt、riji、splash、yantai）是面板件，默认不勾；model-statusbar 要有本机模型服务才有读数。', options: OPTIONAL_PARTS.map((p) => ({ value: p, desc: `${PART_INFO[p].what}；不装：${PART_INFO[p].without}` })), default: DEFAULT_PARTS, defaultNote: '新加的 5 个面板件默认不勾；没装 dsh-mnemon 时默认不含 mnemon-probe' },
@@ -994,7 +994,7 @@ function normalizeAnswers(raw, ctx) {
   for (const p of s.presets) if (!PRESET_LABEL[p]) e.push(`presets：不认识 ${p}（可选：${Object.keys(PRESET_LABEL).join('、')}）`)
   s.presets = Object.keys(PRESET_LABEL).filter((p) => s.presets.includes(p))
   if (!s.presets.length) e.push('presets：至少生成一个 Soul preset')
-  s.defaultPreset = str('defaultPreset') || (s.presets.includes('ptc-soul-flash') ? 'ptc-soul-flash' : s.presets[0])
+  s.defaultPreset = str('defaultPreset') || (s.presets.includes('yanqing') ? 'yanqing' : s.presets[0])
   if (s.presets.length && !s.presets.includes(s.defaultPreset)) e.push(`defaultPreset：${s.defaultPreset} 不在要生成的 preset 里`)
   const hb = parseBool(raw.heartbeat, true); if (hb === null) e.push('heartbeat：要是 true / false')
   const ht = str('heartbeatTime') || '12:00'
@@ -1056,7 +1056,7 @@ function loadSetup(name) {
   if (Array.isArray(s.parts) && s.parts.includes('huanqi-panel') && !s.parts.includes('huanqi')) e.push('setup.json：huanqi-panel 要和 huanqi 一起装')
   s.presets = Array.isArray(s.presets) && s.presets.length ? s.presets : Object.keys(PRESET_LABEL)
   for (const p of s.presets) if (!PRESET_LABEL[p]) e.push(`setup.json 的 presets 里有不认识的 ${p}`)
-  s.defaultPreset = s.defaultPreset || (s.presets.includes('ptc-soul-flash') ? 'ptc-soul-flash' : s.presets[0])
+  s.defaultPreset = s.defaultPreset || (s.presets.includes('yanqing') ? 'yanqing' : s.presets[0])
   if (!s.presets.includes(s.defaultPreset)) e.push(`setup.json：defaultPreset ${s.defaultPreset} 不在 presets 里`)
   s.heartbeat = { enabled: !(s.heartbeat && s.heartbeat.enabled === false), time: (s.heartbeat && s.heartbeat.time) || '12:00' }
   for (const x of parseNameMap(s.nameMap).errors) e.push(`setup.json 的 nameMap：${x}`)
@@ -1153,7 +1153,7 @@ async function askTerminal(rl, ctx) {
   for (;;) { const v = await q('  > （回车 = 1000000）'); if (!v) { raw.windowSize = 1000000; break } if (/^\d+$/.test(v) && Number(v) >= 1000) { raw.windowSize = Number(v); break } console.log('  填一个正整数。') }
   raw.presets = await multi('presets', byId.presets.options, Object.keys(PRESET_LABEL))
   if (!raw.presets.length) { console.log('  至少要一个，先两个都生成。'); raw.presets = Object.keys(PRESET_LABEL) }
-  raw.defaultPreset = raw.presets.length === 1 ? raw.presets[0] : await choice('defaultPreset', raw.presets.map((p) => ({ value: p, label: PRESET_LABEL[p] })), raw.presets.includes('ptc-soul-flash') ? 'ptc-soul-flash' : raw.presets[0])
+  raw.defaultPreset = raw.presets.length === 1 ? raw.presets[0] : await choice('defaultPreset', raw.presets.map((p) => ({ value: p, label: PRESET_LABEL[p] })), raw.presets.includes('yanqing') ? 'yanqing' : raw.presets[0])
   raw.heartbeat = await yesno('heartbeat', true)
   if (raw.heartbeat) { show(byId.heartbeatTime); for (;;) { const v = await q('  > （回车 = 12:00）'); if (!v) { raw.heartbeatTime = '12:00'; break } if (/^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) { raw.heartbeatTime = v; break } console.log('  格式是 HH:MM，例如 09:30。') } }
   show(byId.parts)
@@ -2242,7 +2242,7 @@ const mapOldPresetIds = (list) => {
 const PRESET_CHOICE = MODE === 'install' ? SETUP.presets
   : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : PRESET_IDS)
   : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : PRESET_IDS)
-if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('ptc-soul-flash') ? 'ptc-soul-flash' : PRESET_CHOICE[0]
+if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('yanqing') ? 'yanqing' : PRESET_CHOICE[0]
 if (PRESET_IDS.includes(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
 if (MODE === 'install' || MODE === 'restore') {
   const hb = MODE === 'install' ? SETUP.heartbeat : RB.state.heartbeat
