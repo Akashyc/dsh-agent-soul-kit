@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 2.7**（2026-10-27）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
+**版本 2.9**（2026-10-28）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
 
 > **这不是 DSH 插件，不要往插件市场里装。**
 > 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
@@ -140,6 +140,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
 | `lib/soul-presets.mjs` | 从官方预设派生 Soul preset；卸载时做空壳 preset |
 | `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
+| `lib/name-map.mjs` | 称呼替换：在上游源码的临时副本上把作者的称呼换成用户称呼；认出手工改过却没记下的情况 |
+| `lib/package-contract.mjs` | 上游包发布清单核对：入口导入的文件要在 `files` 里，用到的 `@deepseek-ai/*` 要声明 `peerDependencies`；拷包前和 kit 迭代报告共用 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
 | `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
@@ -162,6 +164,12 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 **不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
 
+**称呼替换**：上游代码里写着作者本人的称呼「爀曦」（例如换气熔断时让 agent「告诉爀曦」）。方案里的 `nameMap` 决定换成谁（大肥鱼方案是 Boss），记进安装记录，更新、备份、恢复都照做，不会被冲掉。临时要改加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`。
+
+**哪些是本机改的**：更新时会额外下载「已装那一版」的上游当基准，报告里分开列「上游改的」和「本机改过、这次会换回上游版的」；中枢脚本是不是本机改过也按它判断。
+
+拷包之前会先核对上游每个包的发布清单：入口导入到的文件没列进 `files`（照清单装上就缺文件）时停下，不动任何东西；用到 `@deepseek-ai/*` 却没声明 `peerDependencies` 的只提示，装完验收时看那个零件有没有加载。
+
 更新前会把要换的东西整份备份到 `dsh-soul/_backup/`，附还原方法。
 
 ## 备份带什么
@@ -182,7 +190,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 ## 想改内容
 
 - **改大肥鱼**：改 `setups/大肥鱼/` 里的文件：
-  - `setup.json`：管零件、preset、心跳；
+  - `setup.json`：管零件、preset、心跳、称呼替换（`nameMap`）；
   - `00-authority.md`：权威源册；
   - `SELF.src.md.tpl`：自我层；
   - `大肥鱼-声音.md`：完整人设。
@@ -194,6 +202,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 ## 注意
 
 - **平台**：macOS、Windows 都实际装过、验过，测试通过。脚本每一步都有校验，出错就停，并且留有备份。
+- **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。它们管的是作者本机的「砚青」preset 和 `dsh-yanqing-*` 零件，这些零件不在仓库里，和本安装包装的不是一套。拿它们查本安装包装好的 profile 会报「零件缺失、没有 preset」，这是口径不同，不要照着修。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：dsh-agent-compaction、dsh-agent-pruner 显示「已停用」是正常的，它们由 Soul preset 调用。不要打开，也不要卸载。
 - **上游 v2.0.0 的加载名**：回声面板、换气面板改名时漏改了一处加载名，原样装会加载失败。安装包会自动修好，并在收尾时检查每个包要加载的插件都找得到。
 - **路径不带用户名**：memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录，Mac、Windows 同一份。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
@@ -206,6 +215,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.9 | 2026-10-28 | 称呼替换（方案 `nameMap`、`--rename`，记进安装记录和备份；全新安装问卷加一题，默认换成用户称呼）；更新时下载已装那一版上游当基准，分开报「上游改的」和「本机改过的」，修好中枢三方比对把本体和中枢一起改过的脚本误判成「没改过」；`--base-source` 也可用于离线更新 |
+| 2.8 | 2026-10-28 | 跟进上游 `504d2d0`：拷包前核对发布清单（入口导入的文件漏列进 `files` 就停下，`@deepseek-ai/*` 漏声明 `peerDependencies` 只提示），kit 迭代报告也会列出新出现的这两类问题；更新时上游更新记录只列最近 8 条，并说明实际换什么以文件变化为准；说明里分清作者仓库新加的同名 `install.mjs`、`AGENT-INSTALL.md` 和体检工具不适用于本安装包 |
 | 2.7 | 2026-10-27 | 新增卸载（`--uninstall`）：先打备份包，再收回本体、零件、Soul preset、配置、锁文件、心跳和书房；用 Soul preset 建的旧会话可以留空壳、改写或不管 |
 | 2.6 | 2026-10-27 | 路径改成运行时自动定位，配置和补丁里不再写死用户名；「说话与样子」不再重复补三条规矩；装完在新会话里验收，干跑给出现成的终端命令 |
 | 2.5 | 2026-10-26 | kit 自身仓库更新与双源迭代（`--kit-update`）；新增标准、极简、Cordis 三个 Soul preset |

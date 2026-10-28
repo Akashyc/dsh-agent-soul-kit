@@ -76,6 +76,8 @@ node install.mjs --kit-iterate --dry-run
 
 先阅读变化涉及的上游说明、包清单和源码，再追踪它们在 kit 中的调用点。自动提示只识别已编码的契约：路径没有命中提示，不代表行为兼容；零文件差异也可能暴露 kit 的已有适配遗漏。
 
+已编码的契约包括必需文件、零件包名、`package.json` 关键字段、本机补丁锚点，以及发布清单自洽（`lib/package-contract.mjs`，与安装器拷包前的检查同一份）：目标里新出现的「入口导入的文件不在 `files` 里」记为 `package-integrity`，「用到 `@deepseek-ai/*` 却没声明 `peerDependencies`」记为 `package-peer`；基线已有的同类问题不重复列出，由安装器每次提示。
+
 | 流程 | 必须回答的问题 |
 |---|---|
 | 安装 | 发布文件、工具参数、插件名称、配置结构或前置条件是否变化？是否要调整可选项、Node 探测、本机补丁、preset、模板、MCP 与心跳？ |
@@ -105,6 +107,7 @@ node install.mjs --kit-iterate --dry-run
 node --check install.mjs
 node --check lib/kit-iterate.mjs
 node --check lib/kit-update.mjs
+node --check lib/package-contract.mjs
 node --test tests/*.test.mjs
 git diff --check
 ```
