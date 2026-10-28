@@ -2200,9 +2200,18 @@ const setupText = (key) => (SETUP_NEW ? SETUP_NEW.files[SETUP.files[key]] : read
 
 // 要生成的 Soul preset、默认 preset、心跳
 const presetsOnDisk = (() => { try { return Object.keys(presetSummary(readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')))).filter((x) => PRESET_IDS.includes(x)) } catch { return [] } })()
+// 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul → 砚青 PTC 之类）：先映射再过滤，认不出的丢掉
+const mapOldPresetIds = (list) => {
+  const out = []
+  for (const x of Array.isArray(list) ? list : []) {
+    const id = OLD_PRESET_IDS[x] || x
+    if (PRESET_IDS.includes(id) && !out.includes(id)) out.push(id)
+  }
+  return out
+}
 const PRESET_CHOICE = MODE === 'install' ? SETUP.presets
-  : MODE === 'restore' ? (Array.isArray(RB.state.presetIds) && RB.state.presetIds.length ? RB.state.presetIds : PRESET_IDS)
-  : (state0 && Array.isArray(state0.presetIds) && state0.presetIds.length ? state0.presetIds : presetsOnDisk.length ? presetsOnDisk : PRESET_IDS)
+  : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : PRESET_IDS)
+  : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : PRESET_IDS)
 if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('ptc-soul-flash') ? 'ptc-soul-flash' : PRESET_CHOICE[0]
 if (PRESET_IDS.includes(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
 if (MODE === 'install' || MODE === 'restore') {
