@@ -69,7 +69,7 @@ import { personaRulesMissing, dedupeLines } from './lib/persona.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { AUTHOR_NAMES, parseNameMap, validateNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle } from './lib/soul-presets.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL } from './lib/soul-presets.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
@@ -77,7 +77,7 @@ const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
 // 零件仓：compact-region 不在主仓，在上游的 organs 仓库
 const ORGAN_REPO = 'cyanwell/dsh-agent-organs'
-const KIT_VERSION = '2.11'
+const KIT_VERSION = '2.12'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -104,6 +104,12 @@ const partSrc = (p) => ORGAN_PARTS.includes(p)
 const partProto = (p) => ORGAN_PARTS.includes(p) ? (ORG || null) : SRC.dir
 // 安装包后来才加的零件：更新时本机没有也会补装（不想要就加 --skip-part <目录名>）
 const ADDED_PARTS = { 'mcp-hub': '2.1', 'model-statusbar': '2.3', 'mobile-adapt': '2.3', riji: '2.3', splash: '2.3', yantai: '2.3' }
+// 安装包版本号按数字逐段比（字符串比的话 '2.9' < '2.11' 是 false，2.10 以后加的零件就永远补不上）
+function verLess(a, b) {
+  const x = String(a || '0').split('.').map((n) => parseInt(n, 10) || 0), y = String(b || '0').split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) }
+  return false
+}
 // 上游旧版本里还没有的零件（用 --ref 装旧版时不算错）
 const OPTIONAL_SRC = ['mcp-hub']
 // 中枢同步时不碰的：安装器自己、带写死日志名的测试脚本
@@ -322,6 +328,34 @@ function diffMaps(oldM, newM) {
   for (const f of oldM.keys()) if (!newM.has(f)) removed.push(f)
   return { added, removed, changed, same: !added.length && !removed.length && !changed.length }
 }
+// 上游仓库里还叫旧名的包（例如 dsh-agent-compaction），装的时候按 preset 里的新名落地：只改 package.json 的 name
+// 和 cordis.patch.yml 里第一个 name。安装和更新比对共用这一份，比对时才不会把自己改的名当成「本机改过」
+const NAME_FILES = ['package.json', 'cordis.patch.yml']
+function fixNameText(f, t, wantName) {
+  if (!wantName) return t
+  if (f === 'package.json') {
+    let pj = null
+    try { pj = JSON.parse(String(t).replace(/^\uFEFF/, '')) } catch { return t }
+    if (!pj || pj.name === wantName) return t
+    pj.name = wantName
+    return JSON.stringify(pj, null, 2) + '\n'
+  }
+  if (f === 'cordis.patch.yml') {
+    const m = t.match(/(^\s*name:\s*['"]?)([\w@/.\-]+)(['"]?)/m)
+    return m && m[2] !== wantName ? t.slice(0, m.index) + m[1] + wantName + m[3] + t.slice(m.index + m[0].length) : t
+  }
+  return t
+}
+function nameFixedFiles(src, wantName) {
+  const out = {}
+  if (!wantName) return out
+  for (const f of NAME_FILES) {
+    if (!exists(path.join(src, f))) continue
+    const t = readText(path.join(src, f)), u = fixNameText(f, t, wantName)
+    if (u !== t) out[f] = u
+  }
+  return out
+}
 // 把源包按 files 清单装到 dst：先拷进旁边的暂存目录、核对过再换上，失败不留半截
 function installPackage(src, dst, label, keep = [], wantName = null) {
   const files = packFiles(src)
@@ -330,21 +364,10 @@ function installPackage(src, dst, label, keep = [], wantName = null) {
   fs.rmSync(stage, { recursive: true, force: true })
   for (const f of files) { const t = path.join(stage, ...f.split('/')); fs.mkdirSync(path.dirname(t), { recursive: true }); fs.copyFileSync(path.join(src, ...f.split('/')), t) }
   // 名字以上游 preset 为准：上游仓库里还叫旧名，这里拷完把 package.json / cordis.patch.yml 的 name 改成新名
-  if (wantName) {
-    const pjf = path.join(stage, 'package.json')
-    const pj = readJson(pjf)
-    if (pj && pj.name !== wantName) { pj.name = wantName; fs.writeFileSync(pjf, JSON.stringify(pj, null, 2) + '\n') }
-    const cy = path.join(stage, 'cordis.patch.yml')
-    if (exists(cy)) {
-      let t = readText(cy)
-      const re = /(^\s*name:\s*['"]?)([\w@/.\-]+)(['"]?)/m
-      const m = t.match(re)
-      if (m && m[2] !== wantName) t = t.slice(0, m.index) + m[1] + wantName + m[3] + t.slice(m.index + m[0].length)
-      fs.writeFileSync(cy, t)
-    }
-  }
+  const fixed = nameFixedFiles(src, wantName)
+  for (const [f, t] of Object.entries(fixed)) fs.writeFileSync(path.join(stage, f), t)
   const want = hashFiles(src, files), got = hashDir(stage)
-  if (wantName) for (const f of ['package.json', 'cordis.patch.yml']) { const p = path.join(stage, f); if (exists(p)) want.set(f, sha1(fs.readFileSync(p))) }
+  for (const [f, t] of Object.entries(fixed)) want.set(f, sha1(Buffer.from(t, 'utf8')))
   if (!diffMaps(want, got).same) { fs.rmSync(stage, { recursive: true, force: true }); die(`${label} 拷贝不完整`) }
   if (exists(dst)) {
     for (const k of keep) { const from = path.join(dst, k); if (exists(from)) { fs.mkdirSync(path.dirname(path.join(stage, k)), { recursive: true }); fs.copyFileSync(from, path.join(stage, k)) } }
@@ -853,6 +876,8 @@ function planCordis(text, { hub, defaultPreset, dshHome, memRelative }) {
 const SETUPS = path.join(KIT, 'setups')
 const TPL = path.join(ASSETS, 'templates')
 const REQUIRED_PARTS = ['compaction', 'pruner', 'memory', 'echo']
+// 必须有的零件：必装零件，加上 Soul preset 要调用的（PRESET_ONLY 里的包）
+const MUST_HAVE = (p) => REQUIRED_PARTS.includes(p) || PRESET_ONLY.includes(PART_NAMES[p][0])
 const OPTIONAL_PARTS = ['mnemon-probe', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub', 'model-statusbar', 'mobile-adapt', 'riji', 'splash', 'yantai']
 // 默认勾选的还是原来那 5 个；新加的 5 个面板件默认不勾（没配数据源就是空面板）
 const DEFAULT_PARTS = ['mnemon-probe', 'clock', 'huanqi', 'huanqi-panel', 'mcp-hub']
@@ -1597,6 +1622,11 @@ if (dshNode) {
 for (const f of ['templates/00-authority.md.tpl', 'templates/SELF.src.md.tpl', 'templates/heartbeat.mjs.tpl', 'presets/ptc.patch.yml', 'presets/flash-lean-ptc-v3.patch.yml']) if (!exists(path.join(ASSETS, f))) die(`安装包不完整：assets/${f} 不存在`)
 ok('安装包素材齐全')
 
+// 显式给了 --dsh-home：那里没有 profile 就停下，不管别处有没有（以前要等别处找到了才报，这台电脑上没有 ~/.dsh 时报的是另一句）
+if (explicitDshHome && !exists(path.join(explicitDshHome, 'profiles', PROFILE, 'package.json'))) {
+  const other = homeCands.slice(1).find((h) => exists(path.join(h, 'profiles', PROFILE, 'package.json')))
+  die(`--dsh-home 指的是 ${posix(explicitDshHome)}，那里没有 profiles/${PROFILE}/package.json。${other ? `为免把东西写进另一份 DSH 家目录（${posix(other)}），` : ''}这次不回落，直接停下。\n    确认路径；目录是新建的，先打开一次 DSH 让它生成 profile，再用 --dsh-home 指向它。`)
+}
 const DSH_HOME = homeCands.find((h) => exists(path.join(h, 'profiles', PROFILE, 'package.json')))
 if (!DSH_HOME) die(`找不到 DSH 的 ${PROFILE} profile。试过：\n      ${homeCands.map((h) => path.join(h, 'profiles', PROFILE)).join('\n      ')}\n    先把 DSH 打开一次让它生成 profile，或用 --dsh-home 指定 DSH 家目录。`)
 if (explicitDshHome && path.resolve(DSH_HOME) !== path.resolve(explicitDshHome)) die(`--dsh-home 指的是 ${posix(path.resolve(explicitDshHome))}，那里没有 profiles/${PROFILE}/package.json。为免把东西写进另一份 DSH 家目录（${posix(DSH_HOME)}），这次不回落，直接停下。\n    确认路径；目录是新建的，先打开一次 DSH 让它生成 profile，再用 --dsh-home 指向它。`)
@@ -2231,10 +2261,16 @@ if (MODE === 'install') {
 const DECLINED0 = (state0 && Array.isArray(state0.declined) && state0.declined) || []
 if (UPDATE) for (const p of DECLINED0) if (!SKIP_PARTS.includes(p)) SKIP_PARTS.push(p)
 const isInstalledPart = (p) => PART_NAMES[p].some((n) => exists(path.join(NM, n, 'package.json')))
+// 不能跳过的零件：恢复旧备份（那时还没有这个零件）、以前拒掉过、或者命令行 --skip-part 了都一样
+{
+  const must = SKIP_PARTS.filter((p) => MUST_HAVE(p))
+  if (must.length && opt('--skip-part') && must.some((p) => String(opt('--skip-part')).split(',').map((x) => x.trim()).includes(p))) die(`这些零件不能跳过：${must.join('、')}（必装零件，或者 Soul preset 要调用它，缺了 DSH 起不来）`)
+  if (must.length) { SKIP_PARTS = SKIP_PARTS.filter((p) => !MUST_HAVE(p)); info(`${must.join('、')} 不能不装（必装零件，或者 Soul preset 要调用它），照装`) }
+}
 if (UPDATE && TTY && !DRY) {
   // 安装包后来才加的零件：终端里问一句；agent 那条路在下面的变化报告里提示
   const kit0 = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
-  for (const p of PARTS.filter((x) => ADDED_PARTS[x] && kit0 < ADDED_PARTS[x] && !SKIP_PARTS.includes(x) && !isInstalledPart(x))) {
+  for (const p of PARTS.filter((x) => ADDED_PARTS[x] && verLess(kit0, ADDED_PARTS[x]) && !MUST_HAVE(x) && !SKIP_PARTS.includes(x) && !isInstalledPart(x))) {
     const i = PART_INFO[p] || {}
     if (!parseBool(await askLine(`\n安装包新加了零件 ${p}：${i.what || ''}；不装：${i.without || ''}。装吗？(Y/n) `), true)) { SKIP_PARTS.push(p); info(`不装 ${p}，记下来，以后更新也不再问`) }
   }
@@ -2289,7 +2325,10 @@ if (PKG_BROKEN.length) {
 }
 for (const x of PKG_ISSUES.filter((x) => x.issue.kind === 'peer')) info(`${describeIssue(x.label, x.issue)}；装完在新会话里确认它确实加载了，没加载再报给上游`)
 const stateKit = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
-const TO_ADD = new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || (ADDED_PARTS[p] && stateKit < ADDED_PARTS[p]))))
+// 更新时本机没有也必须补上的：必装零件、Soul preset 要调用的零件（压缩三件套，缺一个 preset 就加载失败、DSH 起不来）
+const TO_ADD = new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || MUST_HAVE(p) || (ADDED_PARTS[p] && verLess(stateKit, ADDED_PARTS[p])))))
+// package.json 里只写这次之后真的在 node_modules 里的零件：写了不存在的 file: 依赖，插件市场一跑 pnpm 就报 ENOENT
+const PKGS_LIVE = PKGS.filter((n, i) => !UPDATE || INST[i] || TO_ADD.has(AP[i]))
 if (!UPDATE && RENAMES.length) die(`这台电脑装的是旧包名（${RENAMES.map((r) => r.from).join('、')}），请用 --update 迁移。`)
 const bodyKeep = ['kit/echo.config.json']
 
@@ -2325,18 +2364,53 @@ function splitDiff(d, base) {
 }
 
 const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir })
+// 旧会话用的别名：会话开头记着建会话时的 preset id（例如 2.10 以前的 standard-soul、cordis-soul），id 没了会话就打不开。
+// 还有会话在用的旧 id、已装的 preset 里已经有的别名，都留一个和对应新 preset 一样的别名；会话读不了时按安装记录里的旧 id 全留
+function sessionPresetCounts(dirs) {
+  const counts = {}
+  let unreadable = 0
+  const zstdOk = typeof zlib.zstdDecompressSync === 'function'
+  const walk = (d, depth) => {
+    let ents = []
+    try { ents = fs.readdirSync(d, { withFileTypes: true }) } catch { return }
+    for (const e of ents) {
+      const full = path.join(d, e.name)
+      if (e.isDirectory()) { if (depth < 4) walk(full, depth + 1); continue }
+      if (!/^session\.v\d+\.jsonl(\.zstd)?$/.test(e.name)) continue
+      if (full.endsWith('.zstd') && !zstdOk) { unreadable++; continue }
+      try { const b = fs.readFileSync(full); const id = sessionPreset(full.endsWith('.zstd') ? zlib.zstdDecompressSync(b).toString('utf8') : b.toString('utf8')); if (id) counts[id] = (counts[id] || 0) + 1 } catch { unreadable++ }
+    }
+  }
+  for (const d of dirs) if (exists(d)) walk(d, 0)
+  return { counts, unreadable }
+}
+const PRESET_ALIASES = {}
+let SESS = null // 会话在用的 preset id → 个数
+{
+  const cands = Object.entries(OLD_PRESET_IDS).filter(([o, n]) => !PRESET_IDS.includes(o) && PRESET_CHOICE.includes(n))
+  if (cands.length) {
+    const sess = SESS = sessionPresetCounts([SESSIONS, ...(RESTORE ? [path.join(RB.root, 'sessions')] : [])])
+    let onDisk = []
+    try { onDisk = Object.keys(presetSummary(readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')))) } catch { /* 还没装 */ }
+    const recorded = [...((state0 && state0.presetIds) || []), ...((RESTORE && RB.state && RB.state.presetIds) || []), ...Object.keys((state0 && state0.presetAliases) || {})]
+    for (const [o, n] of cands) if (sess.counts[o] || onDisk.includes(o) || (sess.unreadable && recorded.includes(o))) PRESET_ALIASES[o] = n
+    const kept = Object.keys(PRESET_ALIASES)
+    if (kept.length) ok(`旧会话用的 preset 别名：${kept.map((o) => `${OLD_PRESET_LABEL[o] || o}（${o}${sess.counts[o] ? `，${sess.counts[o]} 个会话在用` : ''}）→ 同「${PRESET_LABEL[PRESET_ALIASES[o]]}」`).join('；')}。以前用它们建的会话照常能打开，新会话别选`)
+    if (sess.unreadable) warn(`有 ${sess.unreadable} 个会话文件读不了（node 不支持 zstd 或文件损坏），按安装记录里的旧 preset 全留了别名`)
+  }
+}
 let BUNDLE
-try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
+try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
 const parseYaml = yamlParser(PROF)
 if (parseYaml) {
   try {
     const d = parseYaml(BUNDLE.files['cordis.patch.yml'])
     const ids = d[0].insert.map((r) => r.config.id)
-    if (ids.join() !== PRESET_IDS.filter((x) => PRESET_CHOICE.includes(x)).join()) throw new Error('preset id 不对：' + ids.join())
+    if (ids.join() !== [...PRESET_IDS.filter((x) => PRESET_CHOICE.includes(x)), ...Object.keys(BUNDLE.aliases)].join()) throw new Error('preset id 不对：' + ids.join())
     for (const r of d[0].insert) {
       const comp = r.config.plugins.find((p) => p.id === 'compaction')
       const names = comp && Array.isArray(comp.config) ? comp.config.map((x) => x.name) : []
-      const srcText = SRC_PRESETS[PRESET_SOURCE[r.config.id]].text
+      const srcText = SRC_PRESETS[PRESET_SOURCE[BUNDLE.aliases[r.config.id] || r.config.id]].text
       const needPruner = srcText.indexOf('dsh-compaction-tool-result-pruner') >= 0
       const needRegion = srcText.indexOf('command-compact-region') >= 0
       if (!names.includes('dsh-yanqing-compaction') || (needPruner && !names.includes('dsh-yanqing-pruner')) || (needRegion && !names.includes('dsh-yanqing-compact-region'))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
@@ -2381,6 +2455,12 @@ function partDiff(i) {
     if (u !== t) oldM.set(f, sha1(Buffer.from(u, 'utf8')))
   }
   const newM = hashFiles(s, packFiles(s))
+  // 按新名落地的那两个文件，两边都化成同一种样子再比：已装的先还原本机补丁（加载名补丁和改名改的是同一行）再改名，
+  // 新版直接改名。不然打过加载名补丁的、按新名装的、上游原样的，三种写法会被互相当成「本机改过」
+  for (const f of NAME_FILES) {
+    if (oldM.has(f) && exists(path.join(dst, f))) { const t = readText(path.join(dst, f)); oldM.set(f, sha1(Buffer.from(fixNameText(f, byFile.has(f) ? unpatchText(t, byFile.get(f)) : t, PKGS[i]), 'utf8'))) }
+    if (newM.has(f)) newM.set(f, sha1(Buffer.from(fixNameText(f, readText(path.join(s, f)), PKGS[i]), 'utf8')))
+  }
   return { ...diffMaps(oldM, newM), inst: oldM, next: newM }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
@@ -2396,7 +2476,12 @@ const HUB_PLAN = !installed ? [] : fs.readdirSync(NEW_KIT).filter((f) => /\.(mjs
 const hubOf = (a) => HUB_PLAN.filter((x) => x.action === a).map((x) => x.f)
 const bodyDiff = installed ? (() => { const inst = hashInstalled(BODY, bodyKeep), next = hashFiles(SRC.dir, packFiles(SRC.dir)); return { ...diffMaps(inst, next), inst, next } })() : null
 const BODY_SPLIT = splitDiff(bodyDiff, baseMap())
-const PART_SPLIT = AP.map((p, i) => splitDiff(PART_DIFF[i], baseMap('plugins', AP[i])))
+const PART_SPLIT = AP.map((p, i) => {
+  if (ORGAN_PARTS.includes(p)) return null // 零件仓的零件没有「已装那一版」可比
+  const bm = baseMap('plugins', p)
+  if (bm) for (const [f, t] of Object.entries(nameFixedFiles(path.join(BASE.dir, 'plugins', p), PKGS[i]))) bm.set(f, sha1(Buffer.from(t, 'utf8')))
+  return splitDiff(PART_DIFF[i], bm)
+})
 // 本机手工改过称呼、安装记录里却没记：提醒加 --rename，别默默换回去
 const TEXT_FILE = /\.(?:m?js|cjs|ts|md|json|ya?ml|txt)$/i
 let NAME_GUESS = null
@@ -2471,7 +2556,7 @@ if (UPDATE) {
   showDiff('本体', bodyDiff, BODY_SPLIT, 40)
   for (let i = 0; i < AP.length; i++) {
     const d = PART_DIFF[i]
-    if (!d) { out(`  零件 ${PKGS[i]}：${TO_ADD.has(AP[i]) ? `本机没有，安装包新加的零件，会装上；不要就加 --skip-part ${AP[i]}（会记下来，以后更新不再补）` : '本机没装，跳过'}`); continue }
+    if (!d) { out(`  零件 ${PKGS[i]}：${!TO_ADD.has(AP[i]) ? '本机没装，跳过' : MUST_HAVE(AP[i]) ? '本机没有，会装上（必装零件，或者 Soul preset 要调用它，不能跳过）' : `本机没有，安装包新加的零件，会装上；不要就加 --skip-part ${AP[i]}（会记下来，以后更新不再补）`}`); continue }
     const rn = RENAMES.find((r) => r.part === AP[i])
     showDiff(`零件 ${PKGS[i]}${rn ? `（改名，本机是 ${rn.from}）` : ''}`, d, PART_SPLIT[i], 15)
   }
@@ -2489,16 +2574,25 @@ if (UPDATE) {
     const oldText = exists(path.join(presetDir, 'cordis.patch.yml')) ? readText(path.join(presetDir, 'cordis.patch.yml')) : ''
     const so = presetSummary(oldText), sn = presetSummary(BUNDLE.files['cordis.patch.yml'])
     out('  Soul preset：会重新生成')
-    for (const id of PRESET_CHOICE) {
+    // 按块比：只是多了别名、或者文件头注释变了的，不把别的 preset 说成「有变化」
+    const blocks = (t) => Object.fromEntries(String(t).replace(/\r\n/g, '\n').split(/\n(?= {4}- id: preset-)/).map((b) => [(b.match(/^ {8}id: ([\w-]+)$/m) || [])[1], b.replace(/\s+$/, '')]).filter(([k]) => k))
+    const ob = blocks(oldText), nb = blocks(BUNDLE.files['cordis.patch.yml'])
+    for (const id of [...PRESET_CHOICE, ...Object.keys(BUNDLE.aliases)]) {
       const a = so[id] || [], b = sn[id] || []
       const add = b.filter((x) => !a.includes(x)), rem = a.filter((x) => !b.includes(x))
-      info(`${id}：${!a.length ? '新建' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : '插件没变，参数或提示词有变化'}`)
+      const tag = BUNDLE.aliases[id] ? `（旧会话别名，同 ${BUNDLE.aliases[id]}${SESS && SESS.counts[id] ? `，${SESS.counts[id]} 个会话在用` : ''}）` : ''
+      info(`${id}${tag}：${!ob[id] ? '新建' : ob[id] === nb[id] ? '没变' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : '插件没变，参数或提示词有变化'}`)
+    }
+    for (const id of Object.keys(ob).filter((x) => !nb[x])) {
+      const n = SESS && SESS.counts[id]
+      if (n) warn(`Soul preset ${id} 会被去掉，但还有 ${n} 个会话是用它建的，去掉后这些会话打不开。先停下`)
+      else info(`${id}：去掉（没有会话在用）`)
     }
     const body = (t) => t.split('\n').filter((l) => !l.startsWith('#')).join('\n')
     if (body(oldText) === body(BUNDLE.files['cordis.patch.yml'])) info('（preset 正文完全一样，只有文件开头的注释变了）')
   } else out('  Soul preset：和源一致，不用重新生成')
   const cfgPlan = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET, dshHome: DSH_HOME, memRelative: memRelativePredict() })
-  const pkgPlan = planPackageJson(readText(pkgPath), PKGS, RENAME_MAP)
+  const pkgPlan = planPackageJson(readText(pkgPath), PKGS_LIVE, RENAME_MAP)
   const hubStale = KIT_SET.some((f) => exists(path.join(SRC.dir, 'kit', 'echo', f)) && (!exists(path.join(HUB, f)) || sha1(fs.readFileSync(path.join(HUB, f))) !== sha1(fs.readFileSync(path.join(SRC.dir, 'kit', 'echo', f)))))
   const patchPending = PATCHES.some((p) => {
     if (!p.needed || !exists(path.join(NM, p.pkg, p.file))) return false
@@ -2619,7 +2713,7 @@ else if (DRY) info(`[干跑] 将生成 node_modules/${PRESET_PKG}（${PRESET_CHO
 else {
   fs.mkdirSync(presetDir, { recursive: true })
   for (const [f, t] of Object.entries(BUNDLE.files)) fs.writeFileSync(path.join(presetDir, f), t, 'utf8')
-  ok(`${PRESET_PKG}：已生成（${PRESET_CHOICE.join('、')}）`)
+  ok(`${PRESET_PKG}：已生成（${PRESET_CHOICE.join('、')}${Object.keys(BUNDLE.aliases).length ? `；旧会话别名 ${Object.entries(BUNDLE.aliases).map(([o, n]) => `${o} → ${n}`).join('、')}` : ''}）`)
 }
 
 // ═══ 恢复：放回备份里的数据 ═══════════════════════════════════════════
@@ -2693,7 +2787,7 @@ if (RESTORE) {
 step(`profile 配置（bundles、dependencies、默认 preset）`)
 let finalDefault = null
 {
-  const plan = planPackageJson(readText(pkgPath), PKGS, RENAME_MAP)
+  const plan = planPackageJson(readText(pkgPath), PKGS_LIVE, RENAME_MAP)
   if (plan.changed) { JSON.parse(plan.text); write(pkgPath, plan.text, 'package.json') } else ok('package.json 不用改')
   if (RENAMES.length) ok(`bundles、dependencies 里换名：${RENAMES.map((r) => `${r.from} → ${r.to}`).join('；')}`)
   if (plan.removed.length) ok(`bundles 去掉 ${plan.removed.join('、')}（它们由 Soul preset 调用；插件市场会显示「已停用」，属正常）`)
@@ -2920,7 +3014,7 @@ if (!DRY) {
   ok('注册 id 没有撞车，面板 id 都等于包名')
   if (parseYaml) {
     const bad = patchNamesMissing(NM, ['dsh-agent-soul', ...partsDone, PRESET_PKG], parseYaml)
-    if (bad.length) die('有包要加载的插件在 node_modules 里找不到（DSH 启动时会 import 失败），先别启动 DSH：\n      ' + bad.join('\n      '))
+    if (bad.length) die('有包要加载的插件在 node_modules 里找不到（DSH 启动时会 import 失败），先别启动 DSH：\n      ' + [...new Set(bad)].join('\n      '))
     ok('每个包要加载的插件都找得到')
   } else info('profile 里没有 YAML 解析器，跳过「要加载的插件找不找得到」这项校验')
   const now = new Date().toISOString()
@@ -2934,6 +3028,7 @@ if (!DRY) {
     setup: SETUP_INFO,
     nameMap: NAME_MAP,
     presetIds: PRESET_CHOICE,
+    presetAliases: BUNDLE.aliases,
     presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
     defaultPreset: finalDefault,
     parts: partsDone,
