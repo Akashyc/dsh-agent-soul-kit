@@ -66,6 +66,7 @@ import { once } from 'node:events'
 import { createInterface } from 'node:readline/promises'
 import { OLD as HUANQI_PANEL_OLD, NEW as HUANQI_PANEL_NEW, ANY as HUANQI_PANEL_ANY, FIXED as HUANQI_PANEL_FIXED } from './lib/huanqi-panel-patch.mjs'
 import { personaRulesMissing, dedupeLines } from './lib/persona.mjs'
+import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { AUTHOR_NAMES, parseNameMap, validateNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
@@ -864,6 +865,14 @@ function planCordis(text, { hub, defaultPreset, dshHome, memRelative }) {
       y += ['- id: agent-preset-registry', '  name: "@deepseek-ai/dsh-agent-preset-registry"', '  config:', '    default: standard', `    selectedDefault: ${want}`].join('\n') + '\n'
     }
     notes.push(`新会话默认 preset：${current || '（未设）'} → ${want}`)
+  }
+  // ★ 布尔被写成字符串：'true' 过不了 Schemastery 的 z.boolean()，换气会整段配置被拒、静默退回默认值
+  //   （2026-10-29 实机：每次启动都报 ValidationError，插件却照跑，所以没人发现配置根本没生效）。
+  //   写回去之前统一掰一遍；面板以后再写坏，下次安装/更新也会被这里纠正。
+  const boolFix = fixQuotedBooleans(y)
+  if (boolFix.fixed.length) {
+    y = boolFix.text
+    notes.push(`换气配置的 ${boolFix.fixed.map((f) => f.key).join('、')} 被写成字符串（${boolFix.fixed[0].from}），已改回真布尔 —— 否则整段配置校验失败、静默退回默认值`)
   }
   return { text: y, notes, memoryNote, defaultPreset: want || current, changed: y !== text.replace(/\r\n/g, '\n') }
 }
