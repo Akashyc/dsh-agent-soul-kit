@@ -75,20 +75,33 @@ import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonR
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '2.10'
+// 零件仓：compact-region 不在主仓，在上游的 organs 仓库
+const ORGAN_REPO = 'cyanwell/dsh-agent-organs'
+const KIT_VERSION = '2.11'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
 // 零件：上游 plugins/ 下的目录名，顺序就是装配顺序
-const PARTS = ['compaction', 'pruner', 'memory', 'mnemon-probe', 'echo', 'clock', 'model-statusbar', 'huanqi', 'huanqi-panel', 'mobile-adapt', 'mcp-hub', 'riji', 'splash', 'yantai']
-// 每个零件认得的包名：第一个是现在的，后面是上游用过的旧名（更新时自动迁移）
+const PARTS = ['compaction', 'pruner', 'memory', 'mnemon-probe', 'echo', 'clock', 'model-statusbar', 'huanqi', 'huanqi-panel', 'mobile-adapt', 'mcp-hub', 'riji', 'splash', 'yantai', 'compact-region']
+// 每个零件认得的包名：第一个是现在的（以上游 preset 里的写法为准），后面是上游用过的旧名（更新时自动迁移）
+// 上游正在把压缩三件套从 dsh-agent-* 改名成 dsh-yanqing-*（echo / huanqi-panel 已经改完），kit 跟上。
 const PART_NAMES = {
-  compaction: ['dsh-agent-compaction'], pruner: ['dsh-agent-pruner'], memory: ['dsh-agent-memory'], 'mnemon-probe': ['dsh-agent-mnemon-probe'],
+  compaction: ['dsh-yanqing-compaction', 'dsh-agent-compaction'], pruner: ['dsh-yanqing-pruner', 'dsh-agent-pruner'],
+  memory: ['dsh-agent-memory'], 'mnemon-probe': ['dsh-agent-mnemon-probe'],
   echo: ['dsh-yanqing-echo', 'dsh-agent-echo'], clock: ['dsh-agent-clock'], huanqi: ['dsh-huanqi'],
   'huanqi-panel': ['dsh-yanqing-huanqi-panel', 'dsh-agent-huanqi-panel'], 'mcp-hub': ['dsh-mcp-hub'],
   'model-statusbar': ['dsh-agent-model-statusbar'], 'mobile-adapt': ['dsh-agent-mobile-adapt'],
   riji: ['dsh-agent-riji'], splash: ['dsh-agent-splash'], yantai: ['dsh-agent-yantai'],
+  'compact-region': ['dsh-yanqing-compact-region', 'dsh-agent-compact-region'],
 }
+// 从另一条上游（ORGAN_REPO）取的零件；其余从主仓 plugins/ 取
+const ORGAN_PARTS = ['compact-region']
+// 零件源：ORG 在线拿到就用上游最新的，没网就用安装包里带的快照（assets/parts/<零件>）
+let ORG = null
+const partSrc = (p) => ORGAN_PARTS.includes(p)
+  ? (ORG && exists(path.join(ORG, p, 'package.json')) ? path.join(ORG, p) : path.join(ASSETS, 'parts', p))
+  : path.join(SRC.dir, 'plugins', p)
+const partProto = (p) => ORGAN_PARTS.includes(p) ? (ORG || null) : SRC.dir
 // 安装包后来才加的零件：更新时本机没有也会补装（不想要就加 --skip-part <目录名>）
 const ADDED_PARTS = { 'mcp-hub': '2.1', 'model-statusbar': '2.3', 'mobile-adapt': '2.3', riji: '2.3', splash: '2.3', yantai: '2.3' }
 // 上游旧版本里还没有的零件（用 --ref 装旧版时不算错）
@@ -96,7 +109,7 @@ const OPTIONAL_SRC = ['mcp-hub']
 // 中枢同步时不碰的：安装器自己、带写死日志名的测试脚本
 const HUB_EXCLUDE = ['install-kit.mjs', 'test-self-check.mjs']
 // 这两个由 Soul preset 调用，只进 dependencies，不进 bundles（进了 bundles 会挂到根层，和内置压缩抢名字）
-const PRESET_ONLY = ['dsh-agent-compaction', 'dsh-agent-pruner']
+const PRESET_ONLY = ['dsh-yanqing-compaction', 'dsh-yanqing-pruner', 'dsh-yanqing-compact-region']
 const PRESET_PKG = 'dsh-soul-preset'
 const PREDECESSORS = ['dsh-loop-guard', 'dsh-reasoning-only-guard', 'dsh-stalled-turn-continue']
 const KIT_SET = ['echo-doctor.mjs', 'echo-config.mjs'] // 中枢里归仓库管的两个脚本，其余按本机演化
@@ -310,13 +323,28 @@ function diffMaps(oldM, newM) {
   return { added, removed, changed, same: !added.length && !removed.length && !changed.length }
 }
 // 把源包按 files 清单装到 dst：先拷进旁边的暂存目录、核对过再换上，失败不留半截
-function installPackage(src, dst, label, keep = []) {
+function installPackage(src, dst, label, keep = [], wantName = null) {
   const files = packFiles(src)
   if (DRY) { info(`[干跑] 将安装 ${label}（${files.length} 个文件）→ ${dst}`); return }
   const stage = dst + `.stage-${TS}`
   fs.rmSync(stage, { recursive: true, force: true })
   for (const f of files) { const t = path.join(stage, ...f.split('/')); fs.mkdirSync(path.dirname(t), { recursive: true }); fs.copyFileSync(path.join(src, ...f.split('/')), t) }
+  // 名字以上游 preset 为准：上游仓库里还叫旧名，这里拷完把 package.json / cordis.patch.yml 的 name 改成新名
+  if (wantName) {
+    const pjf = path.join(stage, 'package.json')
+    const pj = readJson(pjf)
+    if (pj && pj.name !== wantName) { pj.name = wantName; fs.writeFileSync(pjf, JSON.stringify(pj, null, 2) + '\n') }
+    const cy = path.join(stage, 'cordis.patch.yml')
+    if (exists(cy)) {
+      let t = readText(cy)
+      const re = /(^\s*name:\s*['"]?)([\w@/.\-]+)(['"]?)/m
+      const m = t.match(re)
+      if (m && m[2] !== wantName) t = t.slice(0, m.index) + m[1] + wantName + m[3] + t.slice(m.index + m[0].length)
+      fs.writeFileSync(cy, t)
+    }
+  }
   const want = hashFiles(src, files), got = hashDir(stage)
+  if (wantName) for (const f of ['package.json', 'cordis.patch.yml']) { const p = path.join(stage, f); if (exists(p)) want.set(f, sha1(fs.readFileSync(p))) }
   if (!diffMaps(want, got).same) { fs.rmSync(stage, { recursive: true, force: true }); die(`${label} 拷贝不完整`) }
   if (exists(dst)) {
     for (const k of keep) { const from = path.join(dst, k); if (exists(from)) { fs.mkdirSync(path.dirname(path.join(stage, k)), { recursive: true }); fs.copyFileSync(from, path.join(stage, k)) } }
@@ -515,6 +543,18 @@ function rewritePaths(t, pairs) {
  * @param options ref 为上游版本；source 为本地来源，null 表示下载
  * @returns 源码目录、提交号及来源说明；失败时停止当前流程
  */
+async function getOrganSource() {
+  if (SOURCE && !/\.(tar\.gz|tgz)$/i.test(SOURCE)) return null // 离线目录安装：没有零件仓，用快照
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-organ-src-')); TMP_DIRS.push(tmp)
+  const url = `https://codeload.github.com/${ORGAN_REPO}/tar.gz/main`
+  const file = path.join(tmp, 'organs.tar.gz')
+  try {
+    const d = await download(url, file)
+    if (!d.ok) return null
+    return extractTarGz(file, tmp).dir
+  } catch { return null }
+}
+
 async function getSource({ ref = REF, source = SOURCE, soft = false } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-src-'))
   TMP_DIRS.push(tmp)
@@ -555,13 +595,15 @@ function checkSource(dir) {
   if (missing.length) die(`上游源码里缺这些文件：${missing.join('、')}。可能是仓库结构改了，这份安装包还没跟上。\n    先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包验证过的版本，并告诉用户。`)
   const names = {}, absent = []
   for (const p of PARTS) {
+    if (ORGAN_PARTS.includes(p)) { names[p] = PART_NAMES[p][0]; continue } // 不在主仓，另从 organs 取，装的时候按新名落地
     const pj = readJson(path.join(dir, 'plugins', p, 'package.json'))
     if (!pj || !pj.name) {
       if (OPTIONAL_SRC.includes(p)) { absent.push(p); continue }
       die(`上游源码里找不到零件 plugins/${p}。可能是零件改名或删掉了，这份安装包还没跟上。\n    先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包验证过的版本，并告诉用户。`)
     }
     if (!PART_NAMES[p].includes(pj.name)) die(`上游把零件 ${p} 的包名改成了 ${pj.name}，这份安装包还不认识这个名字（认得的：${PART_NAMES[p].join('、')}）。包名牵连 bundles、dependencies、锁文件和 Soul preset，要先更新安装包，先停下告诉用户。\n    想先装回验证过的版本：--ref ${VERIFIED.sha.slice(0, 7)}`)
-    names[p] = pj.name
+    // 上游 preset 已经按新名引用（dsh-yanqing-*），包里还留着旧名时也按新名落地，保证 preset 找得到
+    names[p] = PART_NAMES[p][0]
   }
   const extra = fs.readdirSync(path.join(dir, 'plugins'), { withFileTypes: true }).filter((e) => e.isDirectory() && !PARTS.includes(e.name) && exists(path.join(dir, 'plugins', e.name, 'package.json'))).map((e) => e.name)
   return { names, extra, absent }
@@ -2208,6 +2250,10 @@ if (MODE === 'install' && installed && state0 && !sameNameMap(state0.nameMap, NA
 
 const SRC0 = await getSource()
 ok(`上游源码：${SRC0.from}`)
+// 零件仓（organs）：compact-region 只在那儿。拿不到就退回安装包快照，不因为这一条卡住整装
+ORG = await getOrganSource()
+if (ORG) ok(`零件仓：${ORGAN_REPO}（${ORGAN_PARTS.join('、')} 从这儿取）`)
+else info(`零件仓没拿到（离线安装，或用 --source 装的），${ORGAN_PARTS.join('、')} 用安装包自带快照 assets/parts/`)
 const SRC = withNames(SRC0)
 if (SRC !== SRC0) { const shipped = new Set(packFiles(SRC.dir)); ok(`称呼替换（按${NAME_FROM === '--rename' ? ' --rename' : NAME_FROM}）：上游代码里的${nameMapLabel(NAME_MAP)}，会装进 DSH 的有 ${SRC.renamed.filter((f) => shipped.has(f)).length} 个文件；后面比对、安装、中枢同步都按替换后的来`) }
 const srcVer = (readJson(path.join(SRC.dir, 'package.json')) || {}).version
@@ -2225,7 +2271,7 @@ const RENAME_MAP = Object.fromEntries(RENAMES.map((r) => [r.from, r.to]))
 // 发布清单自洽（lib/package-contract.mjs）：本体和这次要装的零件，入口 import 到的文件都得在 files 里，
 // 否则按清单拷完就缺文件、零件加载失败 → 在动手前停下。用到的 @deepseek-ai/* 没在 peerDependencies 里声明的只提示：
 // 宿主拦不拦随 DSH 版本，上游 v2.0.0 的 compaction、huanqi 都漏过，桌面实测仍能加载。
-const PKG_ISSUES = [['本体 dsh-agent-soul', SRC.dir, null], ...AP.map((p, i) => [PKGS[i], path.join(SRC.dir, 'plugins', p), p])]
+const PKG_ISSUES = [['本体 dsh-agent-soul', SRC.dir, null], ...AP.map((p, i) => [PKGS[i], partSrc(p), p])]
   .flatMap(([label, dir, part]) => inspectPackage(dir, packFiles(dir)).map((issue) => ({ label, part, issue })))
 const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer')
 if (PKG_BROKEN.length) {
@@ -2269,7 +2315,7 @@ function splitDiff(d, base) {
   return { up, local, extra, missing, both, localCount: local.length + extra.length + missing.length + both.length }
 }
 
-const SRC_PRESETS = presetSources(NM)
+const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir })
 let BUNDLE
 try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
 const parseYaml = yamlParser(PROF)
@@ -2283,7 +2329,8 @@ if (parseYaml) {
       const names = comp && Array.isArray(comp.config) ? comp.config.map((x) => x.name) : []
       const srcText = SRC_PRESETS[PRESET_SOURCE[r.config.id]].text
       const needPruner = srcText.indexOf('dsh-compaction-tool-result-pruner') >= 0
-      if (!names.includes('dsh-agent-compaction') || (needPruner && !names.includes('dsh-agent-pruner'))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
+      const needRegion = srcText.indexOf('command-compact-region') >= 0
+      if (!names.includes('dsh-yanqing-compaction') || (needPruner && !names.includes('dsh-yanqing-pruner')) || (needRegion && !names.includes('dsh-yanqing-compact-region'))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
     }
   } catch (e) { die(`生成的 Soul preset 校验没过：${e.message}`) }
 }
@@ -2312,7 +2359,7 @@ function unpatchText(t, list) {
   return t
 }
 function partDiff(i) {
-  const s = path.join(SRC.dir, 'plugins', AP[i]), dst = path.join(NM, INST[i])
+  const s = partSrc(AP[i]), dst = path.join(NM, INST[i])
   const oldM = hashInstalled(dst)
   const byFile = new Map()
   for (const p of PATCHES) {
@@ -2502,29 +2549,29 @@ else installPackage(SRC.dir, BODY, 'dsh-agent-soul（本体）', bodyKeep)
 const partsDone = []
 const replaced = new Set()
 for (let i = 0; i < AP.length; i++) {
-  const s = path.join(SRC.dir, 'plugins', AP[i]), dst = path.join(NM, PKGS[i])
+  const s = partSrc(AP[i]), dst = path.join(NM, PKGS[i])
   if (UPDATE) {
     if (!INST[i]) {
       if (!TO_ADD.has(AP[i])) { info(`${PKGS[i]}：本机没装，跳过`); continue }
       partsDone.push(PKGS[i]); replaced.add(PKGS[i])
-      installPackage(s, dst, `${PKGS[i]}（新装）`)
+      installPackage(s, dst, `${PKGS[i]}（新装）`, [], PKGS[i])
       continue
     }
     partsDone.push(PKGS[i])
     if (INST[i] !== PKGS[i]) {
       replaced.add(PKGS[i])
-      installPackage(s, dst, `${PKGS[i]}（由 ${INST[i]} 改名）`)
+      installPackage(s, dst, `${PKGS[i]}（由 ${INST[i]} 改名）`, [], PKGS[i])
       if (DRY) info(`[干跑] 将删掉旧目录 node_modules/${INST[i]}`)
       else { fs.rmSync(path.join(NM, INST[i]), { recursive: true, force: true }); ok(`旧目录 node_modules/${INST[i]} 已删（备份里有）`) }
       continue
     }
     if (PART_DIFF[i].same) { ok(`${PKGS[i]}：没有变化`); continue }
     replaced.add(PKGS[i])
-    installPackage(s, dst, PKGS[i])
+    installPackage(s, dst, PKGS[i], [], PKGS[i])
   } else {
     partsDone.push(PKGS[i])
     if (exists(dst)) { ok(`${PKGS[i]}：已存在，保留（补丁在下一步核对）`); continue }
-    installPackage(s, dst, PKGS[i])
+    installPackage(s, dst, PKGS[i], [], PKGS[i])
   }
 }
 

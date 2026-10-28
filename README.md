@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 2.10**（2026-10-29）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
+**版本 2.11**（2026-10-29）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
 
 > **这不是 DSH 插件，不要往插件市场里装。**
 > 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
@@ -215,6 +215,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.11 | 2026-10-29 | Soul preset 改成「kit 只造 PTC · Soul · Flash，砚青四套逐字搬上游 `presets/`」（以前是自己派生五套）；上游四套用 `# @include $DIR/_shared/compaction.yml` 共享压缩组，安装时按缩进展开；压缩三件套按上游 preset 的引用统一成 `dsh-yanqing-compaction` / `dsh-yanqing-pruner` / `dsh-yanqing-compact-region`，拷包时把 `package.json` 和 `cordis.patch.yml` 的 name 一起改；`compact-region` 从零件仓 `cyanwell/dsh-agent-organs` 取，离线用 `assets/parts/` 快照；卸载映射改成砚青四套 |
 | 2.10 | 2026-10-29 | 修 `--dsh-home` 两处：指定的家目录里没有 `profiles/<profile>/package.json` 时明确失败，不再静默回落到 `~/.dsh`（以前真跑会把文件写进另一份家目录）；`--dsh-home` 和环境变量 `DSH_HOME` 给相对路径时先解析成绝对路径，修好预设解析阶段 `createRequire` 抛 `ERR_INVALID_ARG_VALUE` 的崩溃；补两条回归测试 |
 | 2.9 | 2026-10-28 | 称呼替换（方案 `nameMap`、`--rename`，记进安装记录和备份；全新安装问卷加一题，默认换成用户称呼）；更新时下载已装那一版上游当基准，分开报「上游改的」和「本机改过的」，修好中枢三方比对把本体和中枢一起改过的脚本误判成「没改过」；`--base-source` 也可用于离线更新 |
 | 2.8 | 2026-10-28 | 跟进上游 `504d2d0`：拷包前核对发布清单（入口导入的文件漏列进 `files` 就停下，`@deepseek-ai/*` 漏声明 `peerDependencies` 只提示），kit 迭代报告也会列出新出现的这两类问题；更新时上游更新记录只列最近 8 条，并说明实际换什么以文件变化为准；说明里分清作者仓库新加的同名 `install.mjs`、`AGENT-INSTALL.md` 和体检工具不适用于本安装包 |

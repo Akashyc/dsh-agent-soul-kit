@@ -142,7 +142,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
-- 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset ptc-soul`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
+- 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset ptc-soul-flash`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
 - **称呼替换**：上游代码里写着作者本人的称呼「爀曦」，其中一处是换气熔断时注入给 agent 的指令「告诉爀曦『需要手动压缩』」。方案的 `nameMap`（大肥鱼方案是 `爀曦 → Boss`）决定装进 DSH 的插件代码和文档里换成什么；书房和账本不动。它记进安装记录，以后更新、备份、恢复都照做。
 
 **B5. 脚本做的事**（每一步都会先备份；已经做过的会跳过，重复跑安全）：
@@ -313,7 +313,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 21 | 上游 `agent_soul_install` 的 scan 报 dsh-agent-compaction、dsh-agent-pruner「在 node_modules 但不在 bundles —— 等于没启用」，agent 据此以为压缩是内置那套在做，要去「接管」 | scan 只看 bundles，认不出路 B。这两个按设计就不进 bundles，由 Soul preset 在 compaction 组里同 id 换 name 接管（上游源码也把它们列为只能走路 B 的零件） | 误报，不用动配置：别把它们加进 bundles（会和内置的抢名字），也别去改 `~/.dsh/.agent-presets`（DSH NEXT 不读）。判断压缩是谁做的看产物：摘要第一行是「⛬ 压缩索引（非原文）」、被裁的工具输出写着「原文在 append-only 会话日志 seq N」的，是我们的两个包；换气触发的清理压缩走内置，没有这个开头，属正常 |
 | 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
-| 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`ptc-soul`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
+| 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`yanqing`、`yanqing-ptc`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
 
 ## 十二、卸载与回滚
 
@@ -322,7 +322,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 1. **先干跑**：`"$NODE" install.mjs --uninstall --dry-run`。把「清点要卸的东西」「打算怎么做」两段原样报给用户，特别是这几项：要删哪些包、新会话默认 preset 改成哪个、书房和中枢删不删、多少个会话是用 Soul preset 建的。
 2. **旧会话问用户**（有用 Soul preset 建的会话时才问）。会话文件开头记着建会话时的 preset id，preset 删了，这些会话多半打不开。三个选项原样给用户选，不要替用户定：
    - `shell` 留空壳 preset：dsh-soul-preset 留着，id 不变，名字后面标「（已卸载）」；压缩和裁剪换回官方原版，不依赖本架构的任何包。旧会话照常打开。
-   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（ptc-soul → ptc、standard-soul → standard、minimal-soul → minimal、cordis-soul → cordis；Flash 版回到 flash-lean-ptc-v3，没装 dsh-flash-presets 就回到 ptc）。只改这一个值，会话原样在备份包里。
+   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（yanqing → standard、yanqing-cordis → cordis、yanqing-ptc → ptc、yanqing-distill → minimal；Flash 版回到 flash-lean-ptc-v3，没装 dsh-flash-presets 就回到 ptc）。只改这一个值，会话原样在备份包里。
    - `keep` 不管：preset 全删，旧会话可能打不开；要看时用备份包装回来。
 3. **书房和记忆中枢**默认一起删（备份包里有）。用户想留着，就加 `--keep-data`；以后用 `--setup <方案>` 重装，会接着用原来的书房和账本。
 4. **真跑**：用户确认后，请用户**完全退出 DSH**，在终端里跑 `"$NODE" install.mjs --uninstall --old-sessions <用户选的>`（要保留书房的照加 `--keep-data`）。你本身是 DSH 里的 agent 时自己跑不了：干跑最后会打印现成的终端命令，交给用户。用户在终端里直接跑 `--uninstall` 的，脚本会一步步问，最后确认才动手。
@@ -366,7 +366,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **改方案**：想让以后装出来的不一样，改 `setups/<方案名>/` 里的文件（`setup.json` 管零件、preset、心跳；另外两个是权威源册和自我层模板）。已经装好的电脑不受影响，要改就改书房和中枢里的那份。
 - **换电脑、换用户名、挪 DSH 家目录**：memory 的配置和路径类补丁不带用户名，跟着家目录走；但中枢主配置 `echo.config.json`、心跳、mcp-hub 里 echo 的命令是按这台电脑写的绝对路径，搬到别处要用第十节的备份恢复，或者在新位置重跑一次安装。
 - **改配置**：只改主配置 `memory/hub/echo.config.json`，再复制到 `profile/node_modules/dsh-agent-soul/kit/echo.config.json`（`--update` 也会照主配置重写副本）。
-- **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset ptc-soul`（只能选这台电脑生成了的 preset）。
+- **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset ptc-soul-flash`（只能选这台电脑生成了的 preset）。
 
 ## 十四、平台说明
 
