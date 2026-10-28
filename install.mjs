@@ -78,7 +78,7 @@ const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
 // 零件仓：compact-region 不在主仓，在上游的 organs 仓库
 const ORGAN_REPO = 'cyanwell/dsh-agent-organs'
-const KIT_VERSION = '2.13'
+const KIT_VERSION = '2.14'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
