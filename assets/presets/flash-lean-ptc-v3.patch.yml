@@ -115,12 +115,16 @@
                 # FLASH TUNING: 该路由声明 1,000,000 窗口，0.8 默认要到 800k 才压缩；
                 # 实测：长会话里大量步数停在 300k 以上，本预设取 0.25 阈值 / 保留 20000 近期轮次。
                 config:
+                  summarizationProvider: deepseek-official
+                  summarizationModel: deepseek-flash
                   thresholdRatio: 0.25
                   retainTokens: 20000
                   compactionRetries: 1
                   auto: true
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
+              - id: command-compact-region
+                name: '@deepseek-ai/dsh-command-compact-region'
               - id: tool-result-pruner
                 name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
                 config:
@@ -168,12 +172,10 @@
                   maxDepth: provider-managed
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'
-                disabled: true
                 config:
                   provider: spawn
               - id: tool-workflow
                 name: '@deepseek-ai/dsh-tool-workflow'
-                disabled: true
               - id: tool-ralph
                 name: '@deepseek-ai/dsh-tool-ralph'
                 disabled: true
