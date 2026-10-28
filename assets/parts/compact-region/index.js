@@ -47,6 +47,8 @@
  *    诊断本身绝不抛。
  */
 import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 export const name = 'dsh-yanqing-compact-region'
 
@@ -57,7 +59,7 @@ export const name = 'dsh-yanqing-compact-region'
  */
 export const inject = ['commands', 'compaction']
 
-const LOG = 'D:\\AI\\memory\\hub\\_plugin-diag.log'
+const LOG = join(homedir(), '.dsh', 'logs', 'compact-region-diag.log')
 const USAGE = 'Usage: /compact-region <startSeq> <endSeq>'
 
 /** 诊断写文件，不走 console.error —— 主进程的 stderr 抓不到。 */
@@ -91,6 +93,32 @@ function parseRange(rawInput) {
   if (!Number.isInteger(start) || !Number.isInteger(end)) return null
   if (start <= 0 || end <= 0 || end < start) return null
   return { start, end }
+}
+
+/**
+ * ★ 2026-10-29：**人打的参数到不了 handler。**
+ *
+ *   实机：在输入框打 `/compact-region 600 1000`，handler 收到的 rawInput 是 ""。
+ *   （诊断日志连打两次都是 `参数无法解析: ""`。）
+ *   而换气的程序化调用是 `commands.execute(agent, line, [], signal)` ——
+ *   第二个参数是**整行字符串**，第三个才是拆好的 argv。
+ *
+ *   所以不能只认 rawInput：三个来源都试，谁先能解析出两个正整数就用谁。
+ *   顺序 = 从最具体的到最笼统的；解析不出来就如实失败，不猜范围。
+ */
+function pickArgs(invocation) {
+  const cands = []
+  if (typeof invocation.rawInput === 'string') cands.push(invocation.rawInput)
+  if (Array.isArray(invocation.args)) cands.push(invocation.args.join(' '))
+  if (typeof invocation.argsText === 'string') cands.push(invocation.argsText)
+  if (typeof invocation.input === 'string') cands.push(invocation.input)
+  if (typeof invocation.text === 'string') cands.push(invocation.text)
+  for (const c of cands) {
+    const s = c.trim().replace(/^\/\S+\s*/, '') // 去掉行首的命令名（程序化调用传的是整行）
+    const r = parseRange(s)
+    if (r !== null) return s
+  }
+  return cands.find(function (c) { return String(c).trim() !== '' }) || ''
 }
 
 export function apply(ctx) {
@@ -135,9 +163,11 @@ export function apply(ctx) {
   }
 
   const handler = async (invocation) => {
-    const range = parseRange(invocation.rawInput)
+    const range = parseRange(pickArgs(invocation))
     if (range === null) {
-      diag('参数无法解析: ' + JSON.stringify(String(invocation.rawInput)))
+      let keys = '?'
+      try { keys = Object.keys(invocation || {}).join(',') } catch { /* 诊断绝不影响主流程 */ }
+      diag('参数无法解析: ' + JSON.stringify(String(pickArgs(invocation))) + ' · invocation 键: ' + keys)
       return { kind: 'error', text: USAGE }
     }
 
