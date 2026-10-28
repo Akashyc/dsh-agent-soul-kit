@@ -226,7 +226,8 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 **更新会动的**：
 - profile 里的本体、已装的零件（只换有变化的，换完重打本机补丁）、dsh-soul-preset（只重新生成原来装的那几个 preset）；
 - **零件改名时自动迁移**：装新名字的目录、删旧目录（先整份备份），`package.json` 的 bundles 原位换名、dependencies 换名，三个锁文件（`pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml`）同步换名；
-- **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补；
+- **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补。必装零件和 Soul preset 要调用的零件（压缩三件套 compaction、pruner、compact-region）不问、不能跳过，本机没有就补上，缺了 preset 加载失败、DSH 起不来；
+- **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
@@ -301,7 +302,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 9 | 插件市场把 dsh-agent-compaction、dsh-agent-pruner 显示成「已停用」 | 市场按 bundles 判断启用，这两个只在 dependencies 里 | 正常，不要打开（会挂回根层和内置压缩抢名字）、不要卸载（Soul preset 会加载失败） |
 | 10 | 插件市场装 / 卸插件报 `ENOENT … .tgz` | 某个插件当初从本地 .tgz 装、之后 .tgz 被删了；pnpm 每次都按锁文件去找它 | 把那个插件的来源改成 `file:node_modules/<包名>`，`pnpm-lock.yaml` 和 `node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml` 里的对应条目一起改（Boss 的 Mac 上是 dsh-img-block） |
 | 11 | 会话中途切换 preset，日志报 `tool "subagent" is already registered in this scope` | DSH 重组 preset 时的问题 | 不影响对话；把常用的 preset 设成默认，新会话就不用切 |
-| 12 | 改了 preset 的 id 以后，用旧 id 建的会话打不开 | 会话按 id 找 preset，找不到直接报错 | 别改已经在用的 preset id；要改就提前告诉用户哪些会话会受影响 |
+| 12 | 改了 preset 的 id 以后，用旧 id 建的会话打不开 | 会话按 id 找 preset，找不到直接报错 | 别改已经在用的 preset id；非改不可时（2.11 换成砚青四套），脚本给还有会话在用的旧 id 留别名（2.12 起） |
 | 13 | 日志里一串「重复加载 / 路由重复」警告 | 在插件市场把某个插件关了又开，市场会用热加载再挂一份 | 重启 DSH 就会消失，与本安装无关 |
 | 14 | Windows 建软链接失败 | 普通用户没有建软链接的权限 | 改写成只含 memory 一项的指针文件 |
 | 15 | Windows 上 PowerShell 脚本里的中文路径乱码；计划任务插电池时不跑 | PowerShell 5.1 读无 BOM 脚本按本地代码页解码；计划任务默认「用电池时不启动」 | 注册脚本带 BOM；计划任务设成用电池也跑、错过补跑 |
