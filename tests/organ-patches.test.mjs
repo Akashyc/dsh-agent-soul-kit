@@ -73,7 +73,7 @@ test('路径补丁算出来的是 DSH 家目录下的记忆中枢', async () => 
   delete process.env.DSH_HOME
   try {
     const { v } = await import(pathToFileURL(f).href)
-    assert.equal(v, home.replace(/\\/g, '/') + '/dsh-soul/memory/hub/_plugin-diag.log')
+    assert.equal(v, fs.realpathSync(home).replace(/\\/g, '/') + '/dsh-soul/memory/hub/_plugin-diag.log')
   } finally {
     if (saved !== undefined) process.env.DSH_HOME = saved
     fs.rmSync(home, { recursive: true, force: true })

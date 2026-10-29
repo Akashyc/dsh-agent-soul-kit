@@ -76,7 +76,7 @@ node install.mjs --kit-iterate --dry-run
 
 先阅读变化涉及的上游说明、包清单和源码，再追踪它们在 kit 中的调用点。自动提示只识别已编码的契约：路径没有命中提示，不代表行为兼容；零文件差异也可能暴露 kit 的已有适配遗漏。
 
-已编码的契约包括必需文件、零件包名、`package.json` 关键字段、本机补丁锚点，以及发布清单自洽（`lib/package-contract.mjs`，与安装器拷包前的检查同一份）：目标里新出现的「入口导入的文件不在 `files` 里」记为 `package-integrity`，「用到 `@deepseek-ai/*` 却没声明 `peerDependencies`」记为 `package-peer`；基线已有的同类问题不重复列出，由安装器每次提示。
+已编码的契约包括必需文件、零件包名、`package.json` 关键字段、修复清单（见下面「修复清单」），以及发布清单自洽（`lib/package-contract.mjs`，与安装器拷包前的检查同一份）：目标里新出现的「入口导入的文件不在 `files` 里」记为 `package-integrity`，「用到 `@deepseek-ai/*` 却没声明 `peerDependencies`」记为 `package-peer`；基线已有的同类问题不重复列出，由安装器每次提示。
 
 | 流程 | 必须回答的问题 |
 |---|---|
@@ -87,7 +87,27 @@ node install.mjs --kit-iterate --dry-run
 
 每个流程给出“需要改”或“无需改”的结论，并附上游与 kit 的具体文件/位置和理由。不能因为安装能跑，就推断更新、备份、恢复都没问题。
 
-发现新插件时，先判断它是不是必需能力、有哪些配置和持久数据；不要自动加入所有方案。发现补丁锚点失效时，读完整实现判断上游已修复还是改了写法；不能只换一个正则就宣称兼容。涉及新的用户偏好或扩大安装范围时再询问用户，其余已授权的 kit 修正继续完成。
+发现新插件时，先判断它是不是必需能力、有哪些配置和持久数据；不要自动加入所有方案。涉及新的用户偏好或扩大安装范围时再询问用户，其余已授权的 kit 修正继续完成。
+
+### 修复清单（`lib/fixes.mjs`，3.0 起）
+
+kit 对上游插件的每一处修改都是修复清单里的一条。报告同时跟踪主仓和零件仓 `cyanwell/dsh-agent-organs`（基线记在 `kit-iteration.json` 的 `organs`，快照在报告目录的 `organs-base/`、`organs-target/`，变化以 `organs/` 前缀并入全量文件变化；离线时 organs 用安装包快照 `assets/parts/`），然后对新上游逐条归类，写在 `report.md` 的「修复清单」一节：
+
+| 归类 | 意思 | 谁处理 |
+|---|---|---|
+| 仍需修 | 问题还在，kit 的锚点也对得上 | 不用动 |
+| 作者这次修好了 | 基线里问题在，目标里没了 | 登记（`--kit-accept`）时自动退役：写进 `kit-iteration.json` 的 `fixes.retired`，记下作者的提交号。条目本身留在清单里，还装着旧版插件的电脑照样会修；以后问题又回来了，登记时会自动取消退役 |
+| 作者早就修好了 | 基线、目标里都没有这个问题 | 不用动 |
+| 原文对不上 | 问题还在但锚点对不上，或者那段代码认不出来 | 契约提示 `fix:<id>`（`fix-anchor`）：读目标源码，判断作者是修了还是改写了。改写了就改 `lib/fixes.mjs` 里这一条（`old` / `new` / `any` / `problem` / `scope`），补 `tests/fixes.test.mjs`；作者确实修了，就让判定认得出来（调 `problem` / `scope`），不要只换一个正则就宣称兼容 |
+| 不再适用 | 零件或文件没了 | 契约提示 `fix-gone`：核对零件是删了、改名还是挪了，相应改清单和安装器 |
+| 疑似新问题 | 清单还没管、但和清单同类的毛病：写死 Windows 绝对路径、加载名 ≠ 包名。只报目标里新出现的，基线就有的列在报告里备查 | 契约提示 `fix-candidate`：判断会不会让用户那边静默失效。会，就在 `lib/fixes.mjs` 加一条（新 id，永不复用；`basis` 写依据，`since` 写 kit 版本），在 `tests/fixes.test.mjs` 补「问题在 / 作者已修 / 判断不了」三种判定；不会，就标 `not-applicable` 说明理由 |
+
+改清单时守住这几条：
+
+- 每条修复都要能逐字节还原回作者原文（`unpatchText`），更新时比对「本机改没改过」靠它。
+- 判定只看文件内容和本机环境，不看锚点在不在：`problem` 命中 = 问题在；没命中但 `scope` 命中（那段代码还在）= 作者已修；都没命中 = 判断不了。
+- 路径类修复不写死任何一台电脑的路径，用 `lib/home-paths.mjs` 的运行时定位。
+- 不是作者给的修复（Boss 本机实测的）`basis` 写 `boss`，注释里写明来源。
 
 ## 3. 完成 kit 修正
 
@@ -95,6 +115,7 @@ node install.mjs --kit-iterate --dry-run
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
+- 改修复清单（`lib/fixes.mjs`、`lib/organ-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）后，在隔离目录里跑一遍 `install.mjs --fix --dry-run`：已经装好的环境应全部是「保持」。
 - 包名或 preset id 变化时保留旧安装、旧会话和旧备份的兼容路径。
 - 备份范围或格式变化时同时维护写入和恢复，并说明旧包如何读取。
 - 本轮若修正了迭代工具自身，补跑其测试，继续使用本轮固定的上游快照完成分析。
@@ -108,6 +129,7 @@ node --check install.mjs
 node --check lib/kit-iterate.mjs
 node --check lib/kit-update.mjs
 node --check lib/package-contract.mjs
+node --check lib/fixes.mjs
 node --test tests/*.test.mjs
 git diff --check
 ```
@@ -132,6 +154,8 @@ git diff --check
 - `targetSha`：保留报告中的完整目标提交号；`summary` 写本次修正或无需修改的理由。
 - `flows`：四个 id 固定为 `install`、`update`、`backup`、`restore`。`decision` 为 `changed` 或 `unchanged`；填写 `reason`、源码证据数组 `evidence`，并在 `checks` 中引用实际完成的检查 id。
 - `findings`：逐项填写 `fixed` 或 `not-applicable`，后者必须说明为什么无需修改；未解决的保留 `pending`。
+- `fixChanges`：本轮清单新增、改写、退役记录，逐项填写 `id`、`action`（`add` / `rewrite` / `retire`）和 `evidence` 数组；没有变更填空数组。旧 id 不删除、不复用。
+- `kitVersion`：与 `install.mjs` 一致；改写修复实现后必须提升版本。登记校验清单/补丁指纹，不能漏报改动。
 - `checks`：每项有唯一 `id`、`scope`、实际执行的 `command`、`status` 和实际输出摘要 `evidence`。通过才写 `passed`，失败写 `failed`。
 - `limitations`：未验证的环境或能力，例如“未做 Windows 桌面验收”。
 
@@ -159,3 +183,5 @@ node install.mjs --kit-accept <本次报告目录>
 成功后，根目录 `kit-iteration.json` 保存新基线及历次完成证据，下轮从该基线继续对比。该记录应与本轮 kit 修改一起交付。失败或中断时保留报告和当前修改，继续补齐，不推进基线。
 
 `VERIFIED` 仍表示最后经过端到端验证的上游版本；代码审查完成不能自动更新它。只有具备对应完整验收证据时才修改。交付时分别说明 kit 自身仓库的检查/同步结果、插件上游范围、四流程各自结论、改了哪些文件、验证结果和剩余限制；自身检查被跳过时明确写出，不能声称两个来源都已最新。
+
+离线双源检查可同时传 `--organs-base-source <旧 organs>` 和 `--organs-source <新 organs>`；没提供时只核对内置快照，不能声称已检查 organs 最新版。通用扫描报告 Windows/macOS 个人路径、加载名与 client id、发布文件与依赖、preset 缺包、摘要模型路由和能静态识别的 schema 类型不符；结果都是待核对线索，不执行源码、不生成补丁。

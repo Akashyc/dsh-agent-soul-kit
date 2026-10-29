@@ -111,7 +111,7 @@ test('离线报告保留完整增删改证据，覆盖四流程且不操作 DSH'
   assert.match(report.kitUpdate.reason, /离线上游检查/)
 })
 
-test('新零件、未知包名、包契约变化、失效补丁和缺失文件都进入报告', (t) => {
+test('新零件、未知包名、包契约变化、修复清单原文对不上和缺失文件都进入报告', (t) => {
   const f = fixture(t)
   put(f.target, 'plugins/new-panel/package.json', { name: 'new-panel' })
   put(f.target, 'plugins/echo/package.json', { name: 'unrecognized-echo' })
@@ -119,9 +119,64 @@ test('新零件、未知包名、包契约变化、失效补丁和缺失文件�
   put(f.target, 'package.json', { name: 'dsh-agent-soul', files: ['different-directory'] })
   fs.unlinkSync(path.join(f.target, 'tools/init.mjs'))
   const { report } = f.prepare()
-  for (const kind of ['new-part', 'package-name', 'package-contract', 'patch-anchor', 'missing-file']) {
+  for (const kind of ['new-part', 'package-name', 'package-contract', 'fix-anchor', 'missing-file']) {
     assert.ok(report.findings.some((finding) => finding.kind === kind), kind)
   }
+})
+
+test('修复清单：作者这次修好的不进契约提示，登记时自动退役并记下提交号', (t) => {
+  const f = fixture(t)
+  put(f.target, 'plugins/clock/client.js', 'open ? h("div", { style: Object.assign({ position: "fixed" }, panelStyle) }, h(ClockPanel)) : null);\n')
+  const sha = commitFixture(f.target)
+  const { directory, report } = f.prepare()
+  const row = report.fixes.rows.find((r) => r.id === 'clock-panel')
+  assert.equal(row.category, 'author-fixed')
+  assert.equal(row.base, 'present')
+  assert.equal(row.target, 'absent')
+  assert.ok(!report.findings.some((x) => x.id === 'fix:clock-panel'))
+  assert.match(fs.readFileSync(path.join(directory, 'report.md'), 'utf8'), /clock-panel（clock 面板定位）：作者这次修好了/)
+  completeResult(directory)
+  const accepted = f.run(['--kit-accept', directory])
+  assert.equal(accepted.status, 0, accepted.stderr)
+  assert.match(accepted.stdout, /自动退役：clock-panel/)
+  const state = JSON.parse(fs.readFileSync(path.join(f.kit, 'kit-iteration.json'), 'utf8'))
+  assert.equal(state.fixes.retired['clock-panel'].upstream, sha)
+  assert.deepEqual(state.history[0].fixes.retired, ['clock-panel'])
+})
+
+test('修复清单：疑似新问题（写死 Windows 路径）只报目标里新出现的', (t) => {
+  const f = fixture(t)
+  put(f.target, 'plugins/riji/package.json', { name: 'dsh-agent-riji', files: ['index.js'] })
+  put(f.target, 'plugins/riji/index.js', "const DIARY = 'D:\\\\AI\\\\diary'\n")
+  put(f.base, 'plugins/clock/extra.js', "const OLD = 'C:/legacy/path'\n")
+  put(f.target, 'plugins/clock/extra.js', "const OLD = 'C:/legacy/path'\n")
+  const { report } = f.prepare()
+  const ids = report.findings.filter((x) => x.kind === 'fix-candidate').map((x) => x.file)
+  assert.deepEqual(ids, ['plugins/riji/index.js'])
+})
+
+test('改写修复实现必须登记证据并提升实际版本', (t) => {
+  const f = fixture(t)
+  commitFixture(f.target)
+  const { directory } = f.prepare()
+  const result = completeResult(directory)
+  fs.appendFileSync(path.join(f.kit, 'lib/fixes.mjs'), '\n// fixture changed implementation\n')
+  let accepted = f.run(['--kit-accept', directory])
+  assert.notEqual(accepted.status, 0)
+  assert.match(accepted.stdout + accepted.stderr, /fixChanges/)
+  result.fixChanges = [{ id: 'clock-panel', action: 'rewrite', evidence: ['fixture test'] }]
+  put(directory, 'result.json', result)
+  accepted = f.run(['--kit-accept', directory])
+  assert.notEqual(accepted.status, 0)
+  assert.match(accepted.stdout + accepted.stderr, /提升 kitVersion/)
+  const installer = path.join(f.kit, 'install.mjs')
+  fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replace("const KIT_VERSION = '3.0'", "const KIT_VERSION = '3.1'"))
+  result.kitVersion = '3.1'
+  put(directory, 'result.json', result)
+  accepted = f.run(['--kit-accept', directory])
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr)
+  const state = JSON.parse(fs.readFileSync(path.join(f.kit, 'kit-iteration.json')))
+  assert.deepEqual(state.history[0].fixes.changes, result.fixChanges)
 })
 
 test('发布清单自洽：只把目标里新出现的漏列 files、漏声明 peerDependencies 列为契约提示', (t) => {
