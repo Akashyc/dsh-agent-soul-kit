@@ -26,7 +26,7 @@
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板，包名 dsh-yanqing-echo）。按上游零件清单标 ✓ 的定，不能跳过 |
 | 可选零件 | Ⅰ/Ⅱ 层：mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板，包名 dsh-yanqing-huanqi-panel，要和 huanqi 一起装）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门）。装哪些按方案；大肥鱼方案装前五个，后五个默认不勾 |
-| Soul preset | 五个：PTC / PTC · Flash / 标准 / 极简 / Cordis，各自从官方同名预设原样派生，只把压缩（源有裁剪的连裁剪一起）换成带门牌的版本；生成哪几个、默认用哪个按方案。大肥鱼方案五个都生成，默认 PTC · Flash |
+| Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include，并核对 `soul-version.json` 哈希。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青 |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
@@ -45,7 +45,7 @@
 README.md                    给人看的说明
 AGENT-INSTALL.md             本手册
 install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
-lib/                         install.mjs 用的模块：Soul preset 派生、路径自动定位、人设规矩、发布清单核对、卸载规划、kit 迭代
+lib/                         install.mjs 用的模块：Soul preset 生成与迁移、路径自动定位、人设规矩、发布清单核对、卸载规划、kit 迭代
 tests/                       回归测试：node --test tests/*.test.mjs
 setups/                      方案：每个子文件夹一套
   大肥鱼/
@@ -60,7 +60,6 @@ assets/
   presets/standard.patch.yml 官方「标准」预设的快照（同上）
   presets/minimal.patch.yml  官方「极简」预设的快照（同上）
   presets/cordis.patch.yml   官方「Cordis」预设的快照（同上）
-  presets/flash-lean-ptc-v3.patch.yml   Flash 精简·PTC v3 的快照（没装 dsh-flash-presets 时用）
   presets/preset-yanqing*.yml、_shared/   上游砚青四套的快照（离线安装时用）
   presets/soul-version.json  作者给砚青四套记的哈希和契约版本（离线时拿它核对）
   parts/                     零件仓 organs 的快照：换气、compact-region（离线时用，提交号见 parts/SOURCE.json）
@@ -157,8 +156,8 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 2 | 下载并检查上游源码（缺文件、零件改成不认识的名字就停）；按方案生成 Soul preset 并校验 | 源码不对就停 |
 | 3 | 备份 `package.json`、`cordis.patch.yml` 为 `*.bak-<时间>-pre-soul-kit` | 出问题能还原 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频） | 桌面版只能这样装 |
-| 5 | 本机补丁：mnemon-probe 的默认路径改成真实的热记忆目录；clock 面板的定位；mcp-hub 找清单的默认目录；memory 的相对路径改成相对 DSH 家目录；yantai 的账本 / 记忆中枢路径、riji 的日记目录（都要指向书房，桌面端不传环境变量）；echo、huanqi-panel 的 `cordis.patch.yml` 里加载名改成和包名一致（没装的零件跳过）。路径类补丁都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧补丁会换成新写法 | 见第十一节 3、4、16、17、23 |
-| 6 | 生成 `node_modules/dsh-soul-preset`：从本机 DSH 自带的官方 PTC、和 Flash 精简·PTC v3 派生方案里要的 Soul 版，只把 `compaction-basic`、`tool-result-pruner` 的实现换成我们的两个零件 | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
+| 5 | 修复（kit 修复清单 `lib/fixes.mjs`，3.0 起）：逐条看问题在作者这一版里还在不在，还在才修。包括 mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单目录、memory 相对路径与上下文水位、yantai / riji 的书房和日记路径、echo / 换气面板的加载名与自建一节、换气和 compact-region 的诊断日志路径与两处行为修复、换气配置的字符串布尔。路径类修复都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧写法会换成现行写法。输出里每条一行，「需人工核对」「本机改过」的会写进「需要留意」 | 见第十一节 3、4、16、17、23 和第九节「修复」 |
+| 6 | 生成 `node_modules/dsh-soul-preset`：按方案生成上游砚青四套；移除旧 Flash，旧会话与默认入口迁到砚青 PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`）；已有就不动 | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → `install-kit --all` 把脚本装进 hub（再补上同义词表 `synonyms.json`）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
@@ -224,17 +223,17 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 ## 九、更新
 
-**什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后（PTC / 标准 / 极简 / Cordis 四个 Soul 模式要按新版官方预设重新生成）；装了或升级了 dsh-flash-presets 后（「PTC · Soul · Flash 模式」跟着重新生成）。
+**什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后核对插件与砚青四套的兼容性。安装、更新、恢复和完整修复会清理旧 Flash；`--fix-only` 只处理指定条目。迁移前检查普通与 zstd 会话，无法读取时停止，不直接删除旧入口。
 
 **更新会动的**：
-- profile 里的本体、已装的零件（只换有变化的，换完重打本机补丁）、dsh-soul-preset（只重新生成原来装的那几个 preset）。换气和 compact-region 从零件仓 `cyanwell/dsh-agent-organs` 取，其余零件从主仓取；
+- profile 里的本体、已装的零件（只换有变化的，换上作者原版）、dsh-soul-preset（只重新生成原来装的那几个 preset）；换完自动跑「修复」一步（见本节末尾「修复」）。compact-region 从零件仓 `cyanwell/dsh-agent-organs` 取；换气取哪个仓库由修复清单 `src-huanqi-organs` 判定（主仓那份不调 `/compact-region` 就取 organs），其余零件从主仓取；
 - **零件改名时自动迁移**：装新名字的目录、删旧目录（先整份备份），`package.json` 的 bundles 原位换名、dependencies 换名，三个锁文件（`pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml`）同步换名；
 - **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补。必装零件和 Soul preset 要调用的零件（压缩三件套 compaction、pruner、compact-region）不问、不能跳过，本机没有就补上，缺了 preset 加载失败、DSH 起不来；
 - **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
-- **压缩摘要模型照安装记录做**：默认 `session`（去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`，跟会话模型走，没有 API key 也能压缩，见第十一节 25）；要照作者原样加 `--summary-model author`，会记进安装记录，以后更新照做；
+- **修复清单的跳过设置照安装记录做**（`fixSkip`）：例如压缩摘要模型 `preset-summary-model` 默认去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`、跟会话模型走（见第十一节 25）；要照作者原样加 `--fix-skip preset-summary-model`（2.17 的 `--summary-model author` 也还认），记进安装记录，以后更新照做；
 - **作者契约版本**：上游的 `soul-version.json` 里有一行 `contracts`。作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」。脚本把它记进安装记录，下次更新拿来比；干跑里出现「★ 作者的契约版本变了」，就是要迁移的大更新，先停下，读上游 README 的更新记录，跟用户确认迁移办法再真跑。同一处还会核对砚青四套和作者记的哈希，对不上会写进「需要留意」；
 - **怎么分清本机改的和上游改的**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），本体和零件的变化分成「上游改的」和「本机改过、这次会换回上游版的」两类列出来；中枢脚本也按它判断本机改没改过。取不到基准时脚本会写进「需要留意」，这时报告里的变化分不清来源，中枢里和本体一起被改过的脚本也会被当成没改过换掉。
 
@@ -250,7 +249,43 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 **要停下问用户的情况**：干跑里出现「★ 作者的契约版本变了」（脚本不会自己停，你要停）。**脚本会自己停的**：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件没列进 `files`，照清单装上就缺文件）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包验证过的提交>` 装回验证过的版本；要跟上就得先更新安装包。
 **干跑提示「本机代码看起来手工把上游作者的称呼换成了 …」时**：说明以前手工改过名、安装记录里没记。照提示加 `--rename 爀曦=<称呼>` 重新干跑，确认「本机改过」里不再有改称呼的文件，再真跑。
-**要报给用户但不用停的情况**：补丁「原文对不上」（上游可能修了那段，验收时看一下时钟面板和 mnemon 探针）；某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 简介提醒（源 preset 的参数变了，「PTC · Soul · Flash 模式」的简介可能需要改写）。
+**要报给用户但不用停的情况**：「修复」一步里「需人工核对」（作者改写了那段代码，kit 判断不了问题还在不在，没修）和「本机改过」（那个文件被手改过，整个没动）的条目；「作者已修」「改用作者修复」的条目也报一句，说明这几条 kit 不再管了；某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 源文件缺失或 include 未展开的提醒。
+
+### 修复（`--fix`，3.0 起）
+
+kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有固定 id）。安装、更新、恢复装完都会自动跑「修复」一步；想单独查、单独修时用 `--fix`。
+
+**它怎么判断**：每条修复都带「问题长什么样」。先看作者这一版的原文里问题还在不在，再看本机已装的文件：
+
+| 作者原文 | 本机已装的 | 结果 |
+|---|---|---|
+| 问题还在 | 作者原文 / kit 旧写法 | 打上 kit 修复 / 换成现行写法 |
+| 问题还在 | 已是 kit 修复版 | 保持 |
+| 作者已修 | 还带着 kit 修复 | 撤掉，换回作者原文 |
+| 作者已修 | 作者原文 | 不动 |
+| 判断不了（作者改写了那段） | — | 不修，「需人工核对」 |
+| — | 本机手改过 | 整个文件不动，「本机改过」 |
+
+**`--fix` 对照的是已装那一版**：上游钉在安装记录里的主仓和 organs 提交号（离线主仓用 `--source <已装那一版的源码>`，organs 用 `--organs-source <对应版本源码>`），作者新改的东西要等 `--update` 才进来。`--fix` 不动本体、不补装零件、不碰中枢脚本和其它配置，只做修复清单里的事（另外按需重新生成 dsh-soul-preset）。
+
+**步骤**：
+
+1. 干跑：`install.mjs --fix --dry-run`。没有要修的会直接说「没有要修的」，并列出每条的结论。
+2. 有要修的：把「修复」那一步的输出报给用户——哪几条要打上、换写法、撤掉，有没有「需人工核对」「本机改过」「待选」。
+3. 完全退出 DSH 后，在用户已授权的范围内去掉 `--dry-run` 真跑；改动的文件先整份备份到 `<DSH 家目录>/dsh-soul/_backup/<时间>-fix/`。
+4. 修后检查 JavaScript 语法、YAML 和加载契约；失败自动还原本次涉及的包、配置、锁文件和安装记录。备份保留在 `transaction/manifest.json` 对应目录。强制杀进程或断电无法运行退出处理器，可按该清单人工恢复。
+5. 重开 DSH，新建会话确认 preset，再让 agent 调用 `agent_soul_check`。
+
+**参数**（id 用逗号隔开；`--fix --dry-run` 的输出里每条都写着 id）：
+
+- `--fix-skip <id,…>`：跳过这几条，已装的 kit 修复会撤掉、换回作者原文；记进安装记录，以后安装、更新、`--fix` 都跳过。`--fix-skip none` 清空。包名条目也可跳过；保留作者原包名时，如果作者 preset 仍引用另一个名字，报告会保留加载缺包提示。安装、更新、恢复也能用。
+- `--fix-revert <id,…>`：撤掉这几条 kit 修复，并记进跳过清单。
+- `--fix-only <id,…>`：这次只处理这几条，装前、文件、配置和 preset 都按此筛选；同一个文件里未选条目的旧写法也保持现状。
+- `--fix-reinstall <id,…>`：装前条目（`src-huanqi-organs` 换气取哪个仓库、`name-*` 零件包名）和已装的不一样时，现在就重装对应零件。不加这个参数，终端里会逐条问；agent 跑时干跑报告里会写「待选」，问过用户再决定加不加，不重装就留到下次 `--update`。
+
+安装记录的 `fixRecords` 保存文件/preset 的作者原文和 kit 结果，配置仅保存修改过的行；撤回须与这些证据或旧作者原文匹配。没有记录的旧版布尔配置无法推断原来的引号/空白，不伪造还原内容。
+
+**「本机改过」怎么办**：那个文件被手改过，kit 不知道该不该覆盖。问用户：要保留就不动；需要采用作者版时，先明确核对并保留本机改动，再合并或手动还原作者文件；`--update` 不强行覆盖含手改或未知修复的零件。
 
 ## 十、迁移（备份与恢复）
 
@@ -320,7 +355,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 | 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`yanqing`、`yanqing-ptc`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
-| 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 2.17 起默认 `--summary-model session`：生成 preset 时去掉这两行，和官方预设一样跟会话模型走，记进安装记录。有 API key、想照作者写死的，加 `--summary-model author` |
+| 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 修复清单 `preset-summary-model`（2.17 起）：生成 preset 时去掉这两行，和官方预设一样跟会话模型走；本机默认模型本来就走 deepseek-official 时不去掉。有 API key、想照作者写死的，加 `--fix-skip preset-summary-model` |
 
 ## 十二、卸载与回滚
 
@@ -329,7 +364,8 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 1. **先干跑**：`"$NODE" install.mjs --uninstall --dry-run`。把「清点要卸的东西」「打算怎么做」两段原样报给用户，特别是这几项：要删哪些包、新会话默认 preset 改成哪个、书房和中枢删不删、多少个会话是用 Soul preset 建的。
 2. **旧会话问用户**（有用 Soul preset 建的会话时才问）。会话文件开头记着建会话时的 preset id，preset 删了，这些会话多半打不开。三个选项原样给用户选，不要替用户定：
    - `shell` 留空壳 preset：dsh-soul-preset 留着，id 不变，名字后面标「（已卸载）」；压缩和裁剪换回官方原版，不依赖本架构的任何包。旧会话照常打开。
-   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（yanqing → standard、yanqing-cordis → cordis、yanqing-ptc → ptc、yanqing-distill → minimal；Flash 版回到 flash-lean-ptc-v3，没装 dsh-flash-presets 就回到 ptc）。只改这一个值，会话原样在备份包里。
+   - 旧安装含退役 Flash 时，`shell` 自动改为 `rewrite`，全部 Soul 会话迁到对应官方 preset，不留下 Flash 空壳；无法读取的会话需先处理。
+   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（yanqing → standard、yanqing-cordis → cordis、yanqing-ptc → ptc、yanqing-distill → minimal；退役 Flash 的两个旧 id 统一回到 ptc）。只改这一个值，会话原样在备份包里。
    - `keep` 不管：preset 全删，旧会话可能打不开；要看时用备份包装回来。
 3. **书房和记忆中枢**默认一起删（备份包里有）。用户想留着，就加 `--keep-data`；以后用 `--setup <方案>` 重装，会接着用原来的书房和账本。
 4. **真跑**：用户确认后，请用户**完全退出 DSH**，在终端里跑 `"$NODE" install.mjs --uninstall --old-sessions <用户选的>`（要保留书房的照加 `--keep-data`）。你本身是 DSH 里的 agent 时自己跑不了：干跑最后会打印现成的终端命令，交给用户。用户在终端里直接跑 `--uninstall` 的，脚本会一步步问，最后确认才动手。

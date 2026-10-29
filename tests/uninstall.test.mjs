@@ -12,13 +12,13 @@ import { presetSources, buildPresetBundle, buildShellBundle, PRESET_IDS } from '
 
 const OURS = ['dsh-agent-soul', 'dsh-agent-memory', 'dsh-soul-preset']
 
-test('Soul preset 换回对应的官方 preset；Flash 版看 dsh-flash-presets 装没装', () => {
+test('Soul preset 换回对应的官方 preset；退役 Flash 始终回到官方 PTC', () => {
   assert.equal(officialPresetFor('yanqing'), 'standard')
   assert.equal(officialPresetFor('yanqing-cordis'), 'cordis')
   assert.equal(officialPresetFor('yanqing-ptc'), 'ptc')
   assert.equal(officialPresetFor('yanqing-distill'), 'minimal')
   assert.equal(officialPresetFor('ptc-soul-flash'), 'ptc')
-  assert.equal(officialPresetFor('ptc-soul-flash', { flashInstalled: true }), 'flash-lean-ptc-v3')
+  assert.equal(officialPresetFor('ptc-soul-flash', { flashInstalled: true }), 'ptc')
   assert.equal(officialPresetFor('flash-lean-ptc-v3-soul'), 'ptc')
   assert.equal(officialPresetFor('ptc'), null)
 })
@@ -180,7 +180,7 @@ test('cordis.patch.yml：本架构的配置块（含单行写法、旧版根层�
   config:
     model: x
 `)
-  assert.equal(planCordisRemoval(CFG, { ids: [], flashInstalled: true }).defaultTo, 'flash-lean-ptc-v3')
+  assert.equal(planCordisRemoval(CFG, { ids: [], flashInstalled: true }).defaultTo, 'ptc')
   const off = CFG.replace('selectedDefault: ptc-soul-flash', 'selectedDefault: standard')
   assert.equal(planCordisRemoval(off, { ids: [] }).defaultTo, null)
 })
@@ -210,6 +210,9 @@ test('心跳 plist：认标签，或者认书房里的心跳脚本', () => {
   assert.ok(isSoulHeartbeatPlist('<key>Label</key>\n  <string>com.dsh-soul.heartbeat</string>'))
   assert.ok(isSoulHeartbeatPlist('<string>/bin/bash</string><string>/Users/x/.dsh/dsh-soul/memory/hub/heartbeat.sh</string>', { label: 'nope', soulRoot: '/Users/x/.dsh/dsh-soul' }))
   assert.ok(!isSoulHeartbeatPlist('<string>com.apple.other</string>', { soulRoot: '/Users/x/.dsh/dsh-soul' }))
+  const other = '<string>com.dsh-soul.heartbeat</string><string>/Users/x/.dsh/dsh-soul/memory/hub/heartbeat.mjs</string>'
+  assert.equal(isSoulHeartbeatPlist(other, { soulRoot: '/tmp/isolated/dsh-soul' }), false)
+  assert.equal(isSoulHeartbeatPlist(other, { soulRoot: '/Users/x/.dsh/dsh' }), false)
 })
 
 test('空壳 preset：id 不变、名字标「（已卸载）」、换回官方压缩和裁剪、不引用本架构的包', () => {
@@ -217,7 +220,7 @@ test('空壳 preset：id 不变、名字标「（已卸载）」、换回官方�
   const real = buildPresetBundle(src, PRESET_IDS).files['cordis.patch.yml']
   assert.ok(real.includes("name: 'dsh-yanqing-compaction'"))
   const shell = buildShellBundle(real)
-  assert.deepEqual(shell.ids, ['ptc-soul-flash'])
+  assert.deepEqual(shell.ids, PRESET_IDS)
   const y = shell.files['cordis.patch.yml']
   assert.ok(!/name: '(dsh-agent-|dsh-yanqing-)/.test(y))
   assert.equal((y.match(/（已卸载）"/g) || []).length, shell.ids.length)

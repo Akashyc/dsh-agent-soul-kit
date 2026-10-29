@@ -1,34 +1,26 @@
 # dsh-agent-soul 安装包
 
-**版本 2.15**（2026-10-29）· 验证过的上游：cyanwell/dsh-agent-soul v2.0.0（`6ea60a2`）· macOS、Windows 都已实测通过
+**版本 3.0**（2026-10-29）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
-> **这不是 DSH 插件，不要往插件市场里装。**
-> 它是一本写给 agent 的说明书，外加一个安装脚本：agent 读懂安装、更新、备份、恢复怎么做，再去读上游的更新记录，就能自己把这套架构装好、升级，并跟着上游迭代这份说明书。
+> **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
+> 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
 
-用法：clone 或下载到电脑上一个固定的位置，把这个文件夹设成 agent 的工作区，再把下面「怎么用」里对应的那段话发给它。
+将仓库 clone 或下载到电脑上的固定目录。交给 agent 操作时，把该目录设为工作区，再发送下方对应的操作说明；在终端操作时，先进入该目录。
 
-这个安装包（下文也叫 kit）能做这些事：
+工具包（下文简称 kit）支持：
 
-- 在 macOS 或 Windows 上装好 dsh-agent-soul 灵魂架构；
-- 上游作者在 GitHub 上更新后，跟着升级；
-- 把 agent 连同账本、对话一起搬到另一台电脑；
-- 卸载：先打备份包，再把本体、零件、Soul preset、配置和书房一起卸掉，想回来用备份包恢复；
-- 装一个全新的 agent，名字、称呼、规矩、人设、要哪些零件都由你定；
-- 迭代 kit 自身：同步 kit 仓库的更新，对照上游的变化，修正安装、更新、备份、迁移四个流程。
+- 安装：使用现成方案，或自定义名字、称呼、人设、零件和 preset。
+- 更新与修复：升级上游插件，或单独检查已安装版本的问题。
+- 备份与迁移：把书房、账本、会话和相关配置带到另一台电脑。
+- 卸载：先备份，再移除插件；旧会话可选择保留兼容入口。
+- kit 迭代：同步工具包自身，并对照主仓、零件仓更新安装与迁移逻辑。
 
-插件本体不放在这里：脚本每次都从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**，需要时可以指定版本。kit 最早是 2026-10-24 在 Boss 的 Mac 上给大肥鱼装这套架构时整理出来的。
+安装和更新默认获取上游主仓 `cyanwell/dsh-agent-soul` 的最新版，也可指定提交或使用本地源码；部分零件取自 `cyanwell/dsh-agent-organs`。单独修复使用安装记录中的版本，不升级插件。
 
 ## 两种装法
 
-- **用现成方案**：`setups/` 里一个文件夹就是一套方案。现在有一套「大肥鱼」，就是 Boss 那台 Mac 的样子，装出来一模一样。
-- **全新安装**：一步步填设定，分五组：
-  - 身份
-  - 硬线
-  - 人设
-  - 运行
-  - 零件
-
-  填完会存成一套新方案，下次别的电脑直接选它就行，不用再填。
+- **现成方案**：`setups/` 下每个文件夹是一套方案。内置「大肥鱼」，预设好身份、人设、零件和运行设置；路径按当前电脑生成。
+- **全新安装**：依次填写身份、硬线、人设、运行和零件设置，完成后保存为新方案，便于在其他电脑复用。
 
 零件分两种：
 
@@ -49,9 +41,9 @@
 
 ## 怎么用
 
-先确认新电脑上 DSH 已经装好、打开过一次。建议在插件市场装好 dsh-mnemon。
+先安装 DSH 并打开一次，让它生成 profile。需要 mnemon 记忆功能时，再从插件市场安装 dsh-mnemon。
 
-**交给 agent 装**：把整个文件夹拷到电脑上的固定位置，打开任意一个能操作这台电脑文件和终端的 agent，把下面这段发给它：
+**交给 agent 安装**：在能访问本机文件和终端的 agent 中，发送：
 
 ```text
 请读这个文件夹里的 AGENT-INSTALL.md，按它把 dsh-agent-soul 装到这台电脑上。先问我用现成方案还是全新安装；全新安装就按手册一组一组问我设定。每个阶段开始前先跟我确认，需要退出或重开 DSH 时告诉我。
@@ -65,7 +57,7 @@ node install.mjs
 
 直接跑会先问用现成方案还是全新安装；全新安装一问一答，回车就用默认值。最后给一份总结，确认之后才动手。动手前要先完全退出 DSH：macOS 按 Cmd+Q，Windows 连托盘图标也要右键退出。
 
-node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安装位置」自己找，版本不够就换一个合格的把自己重跑一遍。电脑上一个 node 都没有的话，用 DSH 自带的那个来启动，路径见 AGENT-INSTALL.md 的 A3。
+脚本会按「DSH 自带 → 当前进程 → PATH → 常见安装位置」查找合适的 Node.js。若终端找不到 `node`，可用 DSH 自带的 Node.js 启动，路径见 [安装手册](AGENT-INSTALL.md) 的 A3。
 
 **更新已经装好的电脑**：
 
@@ -73,7 +65,15 @@ node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安�
 请读这个文件夹里的 AGENT-INSTALL.md，按第九节「更新」把 dsh-agent-soul 更新到最新版。先干跑，把上游改了什么报给我，我确认后再真跑。
 ```
 
-**把 agent 搬到另一台电脑**：
+**只检查和修复当前安装**：
+
+```bash
+node install.mjs --fix --dry-run
+```
+
+先查看每条修复的判定和动作，确认需要处理的内容后，退出 DSH，再去掉 `--dry-run` 执行。筛选、跳过和撤回参数见下方「更新与修复」。
+
+**迁移到另一台电脑**：
 
 ```text
 请读这个文件夹里的 AGENT-INSTALL.md，按第十节「迁移」操作：在旧电脑上先备份；新电脑上用备份恢复。每一步先跟我确认。
@@ -96,8 +96,8 @@ node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安�
 迭代分三步，代码分析、修改和验证都由 agent 做：
 
 1. **同步 kit**：`node install.mjs --kit-iterate` 先查 kit 仓库 `Akashyc/dsh-agent-soul-kit`。本地干净、能快进就直接更新；有本地修改、分叉了，或者用的是下载版，就存一份新版快照和差异，由 agent 合入。
-2. **对照上游**：agent 重新读新版手册、重跑入口，再和插件上游 `cyanwell/dsh-agent-soul` 比对，写出四流程报告，完成修正和验证。
-3. **登记**：用 `--kit-accept <报告目录>` 登记这次的上游审查基线。只生成报告、只同步 kit 都不算迭代完成；整个流程也不会动本机已经装好的插件。
+2. **对照上游**：agent 重新读新版手册、重跑入口，再和插件上游 `cyanwell/dsh-agent-soul`、零件仓 `cyanwell/dsh-agent-organs` 比对，写出四流程报告，并把修复清单逐条归类（仍需修 / 作者这次修好了 / 原文对不上 / 不再适用 / 疑似新问题），完成修正和验证。
+3. **登记**：用 `--kit-accept <报告目录>` 登记这次的上游审查基线；作者这次修好的修复条目在登记时自动退役（条目留着，记下作者在哪个提交修好）。只生成报告、只同步 kit 都不算迭代完成；整个流程也不会动本机已经装好的插件。
 
 需要 Git。相关参数：
 
@@ -106,11 +106,12 @@ node 不用挑：脚本按「DSH 自带 → 当前进程 → PATH → 常见安�
 - 离线：给了 `--base-source`、`--source` 就默认不联网查 kit，想把 kit 也一起离线查，加 `--kit-source <干净的 Git 目录>`；
 - `--skip-kit-update`：已经人工合入并验证过时，跳过 kit 检查继续本轮；跳过会写进报告，不代表 kit 已是最新。
 
-常用命令（都可以加 `--dry-run` 先看会改什么；安装、更新、恢复、卸载真跑前都要先完全退出 DSH）：
+常用命令（可加 `--dry-run` 查看计划；安装、更新、修复、恢复、卸载实际执行前须完全退出 DSH）：
 
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
-node install.mjs --update          # 更新到上游最新版
+node install.mjs --update          # 更新到上游最新版（装完自动跑修复清单）
+node install.mjs --fix             # 单独跑修复：对照已装那一版的作者原文，问题还在才修
 node install.mjs --backup          # 打迁移用的备份包，放在 backups/
 node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
 node install.mjs --uninstall       # 卸载：先备份；终端里会问旧会话怎么处理（也可以加 --old-sessions shell|rewrite|keep）
@@ -121,8 +122,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 ## 装出来是什么
 
 - **本体和零件**：必装的四个，加上方案里选了的可选零件。
-- **记忆检索**：`memq` 命令随时能用。装了 mcp-hub 的话，会话里还能直接调 `mcp__echo__echo_search`，快一个数量级。
-- **Soul preset**：PTC / PTC · Flash / 标准 / 极简 / Cordis 五个，各自从官方同名预设原样派生；生成哪几个、默认用哪个按方案定。压缩摘要和被裁掉的工具输出都带门牌，能按 `log:<会话>#seq=<n>` 取回原文。
+- **记忆检索**：通过 `memq` 检索；安装并接入 mcp-hub 后，还可在会话里调用 `mcp__echo__echo_search`。
+- **Soul preset**：砚青、砚青创造、砚青 PTC、砚青蒸馏四套使用上游原文。内置「大肥鱼」默认安装砚青四套，新会话默认使用砚青；已有安装沿用砚青选择，旧 Flash 方案及会话入口迁到砚青 PTC。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
 - **心跳**：按方案每天定时重建索引、刷新自我层、跑体检。
@@ -134,11 +135,16 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 |---|---|
 | `AGENT-INSTALL.md` | 给 agent 的完整手册：选方案、全新安装怎么问、安装、更新、迁移、验收、已知坑、回滚 |
 | `AGENT-ITERATE.md` | 给 agent 的 kit 自我迭代流程：自身仓库同步、插件上游对比、四流程分析、修正、验证、完成登记 |
-| `install.mjs` | 安装 / 更新 / 备份 / 恢复 / 卸载脚本，跨平台，先 `--dry-run` 只看计划；重复跑安全 |
+| `install.mjs` | 安装、更新、修复、备份、恢复与卸载入口；支持干跑 |
+| [CHANGELOG.md](CHANGELOG.md) | 2.15 及以前的历史更新记录 |
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
-| `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开，拿作者 `soul-version.json` 核哈希）；PTC · Soul · Flash 从 Flash 源派生；卸载时做空壳 preset |
+| `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开，拿作者 `soul-version.json` 核哈希）；卸载时可保留使用官方零件的砚青空壳 |
+| `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
+| `lib/fixes.mjs` | 修复清单（3.0）：kit 对上游插件的 23 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
+| `lib/fix-records.mjs` | 修复原文、生成物与行级配置的核对和撤回 |
+| `lib/fix-transaction.mjs` | 修复失败时恢复包、配置、锁文件和安装记录；保留恢复清单 |
 | `lib/organ-patches.mjs` | 零件仓 organs 的换气、compact-region 的本机补丁：作者写死的 `D:\AI\memory\hub` 改成运行时找家目录，外加 Boss 本机实测的行为修复 |
 | `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
 | `lib/name-map.mjs` | 称呼替换：在上游源码的临时副本上把作者的称呼换成用户称呼；认出手工改过却没记下的情况 |
@@ -152,30 +158,41 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup`、`--uninstall` 打出的备份包；迁移时连同整个文件夹一起拷走 |
 
-## 更新会动什么
+## 更新与修复
 
-更新只换代码：
+`--update` 获取上游新版本，更新本体、零件和 Soul preset，并同步未被本机修改的中枢脚本。方案、书房、账本、权威源册、人设和心跳设置保留；需要调整的插件配置、包名及锁文件会在计划中列出。识别出的本机修改和无法判断的修复会提示核对。
 
-- 本体、已装的零件、Soul preset；
-- 中枢里没被本机改过的脚本。
+**修复清单**：`lib/fixes.mjs` 登记 23 条修复，包括 5 条装前取源/包名修复、16 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复。安装、更新、恢复先按计划安装作者文件，再运行修复阶段；称呼替换、preset 独立打包等 kit 固定处理仍保留。
 
-上游给零件改名时自动迁移，目录、配置、锁文件一起换。安装包后来新加的零件，更新时会问你装不装；拒掉的会记下来，以后不再问。
+| 检查结果 | 处理方式 |
+|---|---|
+| 问题仍在 | 应用 kit 修复；已修复的保持，已识别的旧写法更新 |
+| 作者已修 | 停止打补丁；有原文证据时，将旧 kit 修复版换回作者版 |
+| 无法判断 | 保留文件，报告「需人工核对」 |
+| 本机手改过 | 保留文件，报告冲突，由用户决定如何合并 |
 
-本机补丁（锚点写在 `install.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`、`lib/organ-patches.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过，早期写死了某台电脑路径的旧补丁换成运行时自动定位的写法。目前有：mnemon-probe 默认路径、memory 的相对路径与上下文水位、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名、换气面板「profile 里没有 `- id: huanqi` 时自建一节」，以及换气和 compact-region 的诊断日志路径、熔断后全量压缩、测试触发口、`/compact-region` 参数输入。
+`--fix` 只处理已安装版本，不升级本体或补装零件：
 
-**换气和 compact-region 从零件仓取**：这两个零件从 `cyanwell/dsh-agent-organs` 下载（离线用 `assets/parts/` 快照），其余零件从主仓 `plugins/` 取。依据是作者 10-28 的更新记录：「换气的 region 分支改成只走 `/compact-region`」，这次改动只落在 organs，主仓的换气没同步。
+| 参数 | 用途 |
+|---|---|
+| `--fix --dry-run` | 只检查并报告计划 |
+| `--fix-only <id,…>` | 本次仅处理指定条目，适用于所有修复阶段 |
+| `--fix-skip <id,…>` | 跳过指定条目，撤回可识别的 kit 修复，并记入安装记录；`none` 清空跳过设置 |
+| `--fix-revert <id,…>` | 撤回指定修复，并加入跳过清单 |
+| `--fix-reinstall <id,…>` | 同意立即重装因取源或包名变化而受影响的零件 |
 
-**不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
+装前条目发生变化时，终端会询问是否重装；非交互运行只列出待选项，明确指定 `--fix-reinstall` 才执行，否则留到下次更新。更新、备份与恢复会沿用保存的跳过设置。
 
-**压缩摘要模型**：作者的砚青四套把压缩摘要写死走 `deepseek-official`（要 DeepSeek API key）。kit 默认去掉这两行，让摘要跟会话模型走，账号登录也能压缩；有 key、想照作者原样就加 `--summary-model author`，记进安装记录。
+实际写入前先备份，修后检查语法和加载契约；失败时自动回滚涉及的包、配置、锁文件和安装记录。备份位于 `dsh-soul/_backup/`。断电或强制终止进程时，按备份清单人工恢复，详见 [安装手册](AGENT-INSTALL.md)。
 
-**称呼替换**：上游代码里写着作者本人的称呼「爀曦」（例如换气熔断时让 agent「告诉爀曦」）。方案里的 `nameMap` 决定换成谁（大肥鱼方案是 Boss），记进安装记录，更新、备份、恢复都照做，不会被冲掉。临时要改加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`。
+安装、更新、恢复和完整 `--fix` 会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到砚青 PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。`--fix-only` 保持指定范围，清理留到完整更新或修复。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
 
-**哪些是本机改的**：更新时会额外下载「已装那一版」的上游当基准，报告里分开列「上游改的」和「本机改过、这次会换回上游版的」；中枢脚本是不是本机改过也按它判断。
+几个常见设置：
 
-拷包之前会先核对上游每个包的发布清单：入口导入到的文件没列进 `files`（照清单装上就缺文件）时停下，不动任何东西；用到 `@deepseek-ai/*` 却没声明 `peerDependencies` 的只提示，装完验收时看那个零件有没有加载。
-
-更新前会把要换的东西整份备份到 `dsh-soul/_backup/`，附还原方法。
+- **零件来源**：compact-region 来自 organs；换气由清单判断使用主仓还是 organs。离线默认使用 `assets/parts/` 快照，也可用 `--organs-source` 指定对应源码。
+- **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
+- **称呼替换**：方案的 `nameMap` 决定把作者称呼「爀曦」换成谁；大肥鱼方案使用 Boss。可用 `--rename 爀曦=<称呼>` 调整，或用 `--rename none` 关闭，选择随安装记录保存。
+- **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。包的发布清单缺少入口依赖文件时会停止安装；缺少宿主依赖声明时会提示核对。
 
 ## 备份带什么
 
@@ -206,9 +223,9 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 注意
 
-- **平台**：macOS、Windows 都实际装过、验过，测试通过。脚本每一步都有校验，出错就停，并且留有备份。
+- **验证范围**：3.0 已通过 macOS 上的自动化测试、隔离安装/更新/备份/恢复流程和本机只读修复检查；尚未完成本版真实 DSH 重启、会话工具、压缩行为及 Windows 桌面验收。
 - **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。它们管的是作者本机的「砚青」preset 和 `dsh-yanqing-*` 零件，这些零件不在仓库里，和本安装包装的不是一套。拿它们查本安装包装好的 profile 会报「零件缺失、没有 preset」，这是口径不同，不要照着修。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
-- **插件市场里的「已停用」**：dsh-agent-compaction、dsh-agent-pruner 显示「已停用」是正常的，它们由 Soul preset 调用。不要打开，也不要卸载。
+- **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
 - **上游 v2.0.0 的加载名**：回声面板、换气面板改名时漏改了一处加载名，原样装会加载失败。安装包会自动修好，并在收尾时检查每个包要加载的插件都找得到。
 - **路径不带用户名**：memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录，Mac、Windows 同一份。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
 - **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
@@ -216,24 +233,10 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 版本记录
 
-版本号和 `install.mjs` 里的 `KIT_VERSION` 一致，脚本行为改了就往上加。
+这里只保留最近三条更新；2.15 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
-| 版本 | 日期 | 改了什么 |
+| 版本 | 日期 | 更新摘要 |
 |---|---|---|
-| 2.17 | 2026-10-29 | 压缩摘要默认跟会话模型走：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`，那是要 DeepSeek API key 的路由；账号登录（`deepseek-account`）的机器没有 key，手动 `/compact` 和 88% 的自动压缩全都报「no API key for provider route "deepseek-official"」压不成（Boss 本机会话日志里连续 6 次）。生成 preset 时去掉这两行，和官方预设一样跟会话模型走，其余逐字不动；`--summary-model author` 可以照作者原样，选择记进安装记录和方案（`summaryModel`），更新、恢复照做 |
-| 2.16 | 2026-10-29 | 换气改从零件仓 organs 取：作者 10-28 的更新记录写明「换气的 region 分支改成只走 `/compact-region`」，这次改动只落在 organs（6735d72），主仓 `plugins/huanqi` 没同步，装主仓那份 compact-region 就没人调；包名照旧按 `dsh-huanqi` 落地，称呼替换照做。organs 两个零件写死的 `D:\AI\memory\hub` 改成运行时找 `<DSH 家目录>/dsh-soul/memory/hub`，两个零件写同一个 `_plugin-diag.log`（和作者的设计一致）；另带三处 Boss 本机实测的修复：熔断后的全量压缩去掉多套的一层 `runMaintenance`、测试触发口先等回合收尾、`/compact-region` 声明 `input`。2.15 改在快照里的那版退回 organs 原样，kit 的改动一律走本机补丁（`lib/organ-patches.mjs`），在线离线打的是同一份，快照提交号记在 `assets/parts/SOURCE.json`。砚青 preset 的 `@include` 展开改成作者 `soul-preset build` 的算法（段内注释保留，以前删掉了），装前拿作者 `soul-version.json` 逐套核哈希；安装记录记下 organs 提交号和作者契约版本 `contracts`，更新时契约变了醒目提示；preset 只差注释时干跑报「只有注释不同」 |
-| 2.15 | 2026-10-29 | `assets/parts/compact-region` 快照跟上本机修好的那版：命令参数不再只认 `invocation.rawInput`（实机证明人打的参数到 handler 会是空串），改成依次试 `rawInput / args / argsText / input / text` 并去掉行首命令名 —— 换气程序化调用传的是整行（`commands.execute(agent, line, [], signal)`），两种形状都要接住；诊断日志顺带打出 `invocation` 的键名，下次失败能直接看到参数藏在哪 |
-| 2.14 | 2026-10-29 | 装、更新、卸载三处写配置前统一做一遍「布尔消毒」：换气配置里的 `fullCompactOnBreaker: 'true'` / `postCompactRecallHint: 'true'` 是字符串，过不了 Schemastery 的 `z.boolean()`，cordis 记一条 ValidationError 之后**整段配置静默退回默认值** —— 插件照跑，所以一直没人发现改的配置根本没生效。只在 `- id: huanqi` 这一段里、只掰已读过 schema 的两个布尔键（别的插件、别的键一律不碰），修了会在输出里报一行 |
-| 2.13 | 2026-10-29 | Soul preset 的默认方案只装砚青四套，去掉 PTC · Soul · Flash；新会话默认 preset 从 Flash 模式改成砚青；安装问卷的默认项、`--default-preset` 参数示例和不指定时的兜底值一起改。已经装过的电脑照安装记录来，不会被强制重装 |
-| 2.12 | 2026-10-29 | 修 2.11 更新到一半停下、DSH 起不来的问题：更新时必装零件和 Soul preset 要调用的零件（compact-region 等）本机没有就补装，不能跳过，恢复旧备份时也一样；安装包版本号按数字比（以前按字符串，`2.9` 比 `2.11` 算大）；按新名落地的包不再被下次更新当成「本机改过」；package.json 只写真的在的零件；以前的 Soul preset id（standard-soul、cordis-soul 等）还有会话在用的，留一个和对应砚青 preset 一样的别名，旧会话照常打开；去掉还有会话在用的 preset 会报出来；`--dsh-home` 指的目录没有 profile 时不管别处有没有都停下 |
-| 2.11 | 2026-10-29 | Soul preset 改成「kit 只造 PTC · Soul · Flash，砚青四套逐字搬上游 `presets/`」（以前是自己派生五套）；上游四套用 `# @include $DIR/_shared/compaction.yml` 共享压缩组，安装时按缩进展开；压缩三件套按上游 preset 的引用统一成 `dsh-yanqing-compaction` / `dsh-yanqing-pruner` / `dsh-yanqing-compact-region`，拷包时把 `package.json` 和 `cordis.patch.yml` 的 name 一起改；`compact-region` 从零件仓 `cyanwell/dsh-agent-organs` 取，离线用 `assets/parts/` 快照；卸载映射改成砚青四套；PTC · Soul · Flash 同步砚青的压缩模型（deepseek-official / deepseek-flash），打开 workflow-ptc 与 tool-workflow，补上 command-compact-region |
-| 2.10 | 2026-10-29 | 修 `--dsh-home` 两处：指定的家目录里没有 `profiles/<profile>/package.json` 时明确失败，不再静默回落到 `~/.dsh`（以前真跑会把文件写进另一份家目录）；`--dsh-home` 和环境变量 `DSH_HOME` 给相对路径时先解析成绝对路径，修好预设解析阶段 `createRequire` 抛 `ERR_INVALID_ARG_VALUE` 的崩溃；补两条回归测试 |
-| 2.9 | 2026-10-28 | 称呼替换（方案 `nameMap`、`--rename`，记进安装记录和备份；全新安装问卷加一题，默认换成用户称呼）；更新时下载已装那一版上游当基准，分开报「上游改的」和「本机改过的」，修好中枢三方比对把本体和中枢一起改过的脚本误判成「没改过」；`--base-source` 也可用于离线更新 |
-| 2.8 | 2026-10-28 | 跟进上游 `504d2d0`：拷包前核对发布清单（入口导入的文件漏列进 `files` 就停下，`@deepseek-ai/*` 漏声明 `peerDependencies` 只提示），kit 迭代报告也会列出新出现的这两类问题；更新时上游更新记录只列最近 8 条，并说明实际换什么以文件变化为准；说明里分清作者仓库新加的同名 `install.mjs`、`AGENT-INSTALL.md` 和体检工具不适用于本安装包 |
-| 2.7 | 2026-10-27 | 新增卸载（`--uninstall`）：先打备份包，再收回本体、零件、Soul preset、配置、锁文件、心跳和书房；用 Soul preset 建的旧会话可以留空壳、改写或不管 |
-| 2.6 | 2026-10-27 | 路径改成运行时自动定位，配置和补丁里不再写死用户名；「说话与样子」不再重复补三条规矩；装完在新会话里验收，干跑给出现成的终端命令 |
-| 2.5 | 2026-10-26 | kit 自身仓库更新与双源迭代（`--kit-update`）；新增标准、极简、Cordis 三个 Soul preset |
-| 2.4 | 2026-10-26 | kit 上游分析与自我迭代流程（`--kit-iterate`、`AGENT-ITERATE.md`）；修好换气面板第一次保存失败 |
-| 2.3 | 2026-10-26 | 新增五个可选面板件（model-statusbar、mobile-adapt、riji、splash、yantai）；修正 node 探测和 mnemon 记忆目录的解析 |
-| 2.2 | 2026-10-26 | 装的时候选现成方案或全新安装；必装以外的零件都可选；终端、agent 两种互动方式 |
-| 2.1 及以前 | 2026-10-24 ~ 10-26 | 在 Boss 的 Mac 上首装；跟进上游到 v2.0.0，加上 mcp-hub |
+| 3.0 | 2026-10-29 | 建立 23 条修复清单，新增独立修复、筛选、跳过、撤回和重装命令；补齐原文核对、本机修改保护和失败回滚。迭代同时检查主仓与 organs，支持作者修复自动退役、疑似问题扫描及变更证据登记。preset 统一为砚青四套，移除 Flash，旧会话和默认入口自动迁移。 |
+| 2.17 | 2026-10-29 | 压缩摘要默认跟随会话模型，解决账号登录时缺少 `deepseek-official` API key 导致的压缩失败；可选择保留作者模型设置。 |
+| 2.16 | 2026-10-29 | 换气改从 organs 取源，补齐诊断路径、全量压缩、空闲等待和命令参数修复；preset 按作者算法展开并核对哈希，记录 organs 提交号与契约版本。 |

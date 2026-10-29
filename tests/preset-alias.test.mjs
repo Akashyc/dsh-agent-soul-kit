@@ -37,13 +37,13 @@ test('Soul preset 包：带上要的别名，id 不和新 preset 撞；没有对
 test('卸载空壳：别名块留下来、换回官方压缩，跨行的说明整段换掉，不留本架构的包', () => {
   const b = buildPresetBundle(src, PRESET_IDS, { aliases: { 'standard-soul': 'yanqing' } })
   const shell = buildShellBundle(b.files['cordis.patch.yml'])
-  assert.deepEqual(shell.ids, ['ptc-soul-flash', 'standard-soul'])
+  assert.deepEqual(shell.ids, [...PRESET_IDS, 'standard-soul'])
   const t = shell.files['cordis.patch.yml']
   assert.doesNotMatch(t, /name: ['"]dsh-(yanqing|agent)-/)
   assert.doesNotMatch(t, /command-compact-region/)
   if (yaml) {
     const d = yaml.parse(t)
-    assert.deepEqual(d[0].insert.map((r) => r.config.id), ['ptc-soul-flash', 'standard-soul'])
+    assert.deepEqual(d[0].insert.map((r) => r.config.id), [...PRESET_IDS, 'standard-soul'])
     assert.ok(d[0].insert.every((r) => /已卸载/.test(r.config.description)))
   }
 })
