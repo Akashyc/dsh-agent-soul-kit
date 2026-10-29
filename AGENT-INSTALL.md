@@ -234,6 +234,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
+- **压缩摘要模型照安装记录做**：默认 `session`（去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`，跟会话模型走，没有 API key 也能压缩，见第十一节 25）；要照作者原样加 `--summary-model author`，会记进安装记录，以后更新照做；
 - **作者契约版本**：上游的 `soul-version.json` 里有一行 `contracts`。作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」。脚本把它记进安装记录，下次更新拿来比；干跑里出现「★ 作者的契约版本变了」，就是要迁移的大更新，先停下，读上游 README 的更新记录，跟用户确认迁移办法再真跑。同一处还会核对砚青四套和作者记的哈希，对不上会写进「需要留意」；
 - **怎么分清本机改的和上游改的**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），本体和零件的变化分成「上游改的」和「本机改过、这次会换回上游版的」两类列出来；中枢脚本也按它判断本机改没改过。取不到基准时脚本会写进「需要留意」，这时报告里的变化分不清来源，中枢里和本体一起被改过的脚本也会被当成没改过换掉。
 
@@ -319,6 +320,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 | 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`yanqing`、`yanqing-ptc`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
+| 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 2.17 起默认 `--summary-model session`：生成 preset 时去掉这两行，和官方预设一样跟会话模型走，记进安装记录。有 API key、想照作者写死的，加 `--summary-model author` |
 
 ## 十二、卸载与回滚
 

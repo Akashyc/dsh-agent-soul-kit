@@ -167,6 +167,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 **不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
 
+**压缩摘要模型**：作者的砚青四套把压缩摘要写死走 `deepseek-official`（要 DeepSeek API key）。kit 默认去掉这两行，让摘要跟会话模型走，账号登录也能压缩；有 key、想照作者原样就加 `--summary-model author`，记进安装记录。
+
 **称呼替换**：上游代码里写着作者本人的称呼「爀曦」（例如换气熔断时让 agent「告诉爀曦」）。方案里的 `nameMap` 决定换成谁（大肥鱼方案是 Boss），记进安装记录，更新、备份、恢复都照做，不会被冲掉。临时要改加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`。
 
 **哪些是本机改的**：更新时会额外下载「已装那一版」的上游当基准，报告里分开列「上游改的」和「本机改过、这次会换回上游版的」；中枢脚本是不是本机改过也按它判断。
@@ -218,6 +220,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.17 | 2026-10-29 | 压缩摘要默认跟会话模型走：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`，那是要 DeepSeek API key 的路由；账号登录（`deepseek-account`）的机器没有 key，手动 `/compact` 和 88% 的自动压缩全都报「no API key for provider route "deepseek-official"」压不成（Boss 本机会话日志里连续 6 次）。生成 preset 时去掉这两行，和官方预设一样跟会话模型走，其余逐字不动；`--summary-model author` 可以照作者原样，选择记进安装记录和方案（`summaryModel`），更新、恢复照做 |
 | 2.16 | 2026-10-29 | 换气改从零件仓 organs 取：作者 10-28 的更新记录写明「换气的 region 分支改成只走 `/compact-region`」，这次改动只落在 organs（6735d72），主仓 `plugins/huanqi` 没同步，装主仓那份 compact-region 就没人调；包名照旧按 `dsh-huanqi` 落地，称呼替换照做。organs 两个零件写死的 `D:\AI\memory\hub` 改成运行时找 `<DSH 家目录>/dsh-soul/memory/hub`，两个零件写同一个 `_plugin-diag.log`（和作者的设计一致）；另带三处 Boss 本机实测的修复：熔断后的全量压缩去掉多套的一层 `runMaintenance`、测试触发口先等回合收尾、`/compact-region` 声明 `input`。2.15 改在快照里的那版退回 organs 原样，kit 的改动一律走本机补丁（`lib/organ-patches.mjs`），在线离线打的是同一份，快照提交号记在 `assets/parts/SOURCE.json`。砚青 preset 的 `@include` 展开改成作者 `soul-preset build` 的算法（段内注释保留，以前删掉了），装前拿作者 `soul-version.json` 逐套核哈希；安装记录记下 organs 提交号和作者契约版本 `contracts`，更新时契约变了醒目提示；preset 只差注释时干跑报「只有注释不同」 |
 | 2.15 | 2026-10-29 | `assets/parts/compact-region` 快照跟上本机修好的那版：命令参数不再只认 `invocation.rawInput`（实机证明人打的参数到 handler 会是空串），改成依次试 `rawInput / args / argsText / input / text` 并去掉行首命令名 —— 换气程序化调用传的是整行（`commands.execute(agent, line, [], signal)`），两种形状都要接住；诊断日志顺带打出 `invocation` 的键名，下次失败能直接看到参数藏在哪 |
 | 2.14 | 2026-10-29 | 装、更新、卸载三处写配置前统一做一遍「布尔消毒」：换气配置里的 `fullCompactOnBreaker: 'true'` / `postCompactRecallHint: 'true'` 是字符串，过不了 Schemastery 的 `z.boolean()`，cordis 记一条 ValidationError 之后**整段配置静默退回默认值** —— 插件照跑，所以一直没人发现改的配置根本没生效。只在 `- id: huanqi` 这一段里、只掰已读过 schema 的两个布尔键（别的插件、别的键一律不碰），修了会在输出里报一行 |

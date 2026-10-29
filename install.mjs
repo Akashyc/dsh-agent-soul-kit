@@ -24,6 +24,8 @@
 //   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
 //   --default-preset <id|keep>   新会话默认用的 preset：yanqing、yanqing-ptc、yanqing-distill、yanqing-cordis、ptc-soul-flash 或 keep（更新默认）；安装默认按方案
+//   --summary-model <session|author>  压缩摘要用哪个模型：session 跟会话模型走（默认；去掉作者写死的 deepseek-official，
+//                                没有 DeepSeek API key 的账号登录也能压缩），author 照作者原样；记进安装记录，以后更新照做
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → ~/.dsh → %APPDATA%\dsh 依次找
@@ -70,7 +72,7 @@ import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { AUTHOR_NAMES, parseNameMap, validateNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL, readSoulVersion, checkPresetDigests } from './lib/soul-presets.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL, readSoulVersion, checkPresetDigests, SUMMARY_MODES } from './lib/soul-presets.mjs'
 import { organPatches, patchText, unpatchText } from './lib/organ-patches.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 
@@ -79,7 +81,7 @@ const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
 // 零件仓：换气（huanqi）和 compact-region 从上游的 organs 仓库取（见 ORGAN_PARTS）
 const ORGAN_REPO = 'cyanwell/dsh-agent-organs'
-const KIT_VERSION = '2.16'
+const KIT_VERSION = '2.17'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -147,6 +149,7 @@ const KIT_ACCEPT = flag('--kit-accept')
 const KIT_UPDATE = flag('--kit-update')
 const FORCE = flag('--force')
 const RENAME_OPT = opt('--rename')
+const SUMMARY_OPT = opt('--summary-model')
 if (flag('--rename') && RENAME_OPT === undefined) { console.log('--rename 后面要跟「上游称呼=你的称呼」（例如 --rename 爀曦=Boss），或者 none'); process.exit(2) }
 const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : UNINSTALL ? 'uninstall' : 'install'
 let REF = opt('--ref', 'main')
@@ -219,6 +222,7 @@ if ((flag('--old-sessions') || KEEP_DATA) && !UNINSTALL) { console.log('--old-se
 if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSIONS)) { console.log(`--old-sessions 只能是 ${Object.keys(OLD_SESSION_MODES).join(' / ')}：\n${Object.entries(OLD_SESSION_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
+if (flag('--summary-model') && !SUMMARY_MODES[SUMMARY_OPT]) { console.log(`--summary-model 只能是：\n${Object.entries(SUMMARY_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复、卸载不需要选方案'); process.exit(2) }
 if (FRESH && SETUP_OPT) { console.log('--setup（用现成方案）和 --fresh（全新安装）只能选一个'); process.exit(2) }
 if (opt('--heartbeat-time') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(opt('--heartbeat-time'))) { console.log(`--heartbeat-time 格式不对：${opt('--heartbeat-time')}，要 HH:MM`); process.exit(2) }
@@ -1047,7 +1051,7 @@ function buildSetupFiles(s) {
   const self = tidy(render(tightUser(readText(path.join(TPL, 'SELF.src.md.tpl')), s.user), vars, conds))
   const json = {
     _说明: `全新安装生成的方案（安装包 ${KIT_VERSION}，${new Date().toISOString()}）。同目录的权威源册、自我层模板可以直接改；路径和心跳时间这类 {{…}} 记号留给安装时按电脑填。`,
-    format: 1, kind: 'generated', name: s.name, user: s.user, userNote: s.userNote, purpose: s.purpose, nameMap: s.nameMap || {},
+    format: 1, kind: 'generated', name: s.name, user: s.user, userNote: s.userNote, purpose: s.purpose, nameMap: s.nameMap || {}, summaryModel: s.summaryModel || 'session',
     hardLines: s.hardLines, persona: s.persona, personaBrief: s.personaBrief, multiSession: s.multiSession, windowSize: s.windowSize,
     parts: s.parts, presets: s.presets, defaultPreset: s.defaultPreset, heartbeat: s.heartbeat,
     files: { authority: '00-authority.md', self: 'SELF.src.md.tpl', ...(voiceFile ? { voice: voiceFile } : {}) },
@@ -1075,6 +1079,7 @@ function loadSetup(name) {
   if (!s.presets.includes(s.defaultPreset)) e.push(`setup.json：defaultPreset ${s.defaultPreset} 不在 presets 里`)
   s.heartbeat = { enabled: !(s.heartbeat && s.heartbeat.enabled === false), time: (s.heartbeat && s.heartbeat.time) || '12:00' }
   for (const x of parseNameMap(s.nameMap).errors) e.push(`setup.json 的 nameMap：${x}`)
+  if (s.summaryModel !== undefined && !SUMMARY_MODES[s.summaryModel]) e.push(`setup.json 的 summaryModel 只能是 ${Object.keys(SUMMARY_MODES).join(' / ')}`)
   s.nameMap = s.nameMap && typeof s.nameMap === 'object' ? s.nameMap : {}
   s.files = s.files || {}
   for (const k of ['authority', 'self']) if (!s.files[k] || !exists(path.join(dir, s.files[k]))) e.push(`方案里缺${k === 'authority' ? '权威源册' : '自我层模板'}（setup.json 的 files.${k}）`)
@@ -1106,6 +1111,7 @@ function describeSetup(s, dirName) {
   lines.push(`  Soul preset：${s.presets.map((p) => PRESET_LABEL[p]).join('、')}；新会话默认 ${PRESET_LABEL[s.defaultPreset]}`)
   lines.push(`  心跳：${s.heartbeat.enabled ? `每天 ${s.heartbeat.time}` : '不开'}`)
   lines.push(`  称呼替换：${hasNames(s.nameMap) ? `上游代码里的${nameMapLabel(s.nameMap)}` : '不换（插件代码里保留上游作者的称呼）'}`)
+  lines.push(`  压缩摘要：${SUMMARY_MODES[s.summaryModel || 'session']}`)
   return lines
 }
 // 终端里一问一答（只在真有终端时用；agent 走 --questions + --answers）
@@ -2383,6 +2389,11 @@ function splitDiff(d, base) {
   return { up, local, extra, missing, both, localCount: local.length + extra.length + missing.length + both.length }
 }
 
+// 压缩摘要模型：--summary-model > 安装按方案 / 更新按安装记录 / 恢复按备份里的安装记录 > 默认 session（见 lib/soul-presets.mjs 的 SUMMARY_MODES）
+const SUMMARY_FROM = SUMMARY_OPT ? '--summary-model' : MODE === 'install' ? '方案' : MODE === 'update' ? '安装记录' : '备份里的安装记录'
+const SUMMARY_SAVED = MODE === 'install' ? SETUP && SETUP.summaryModel : MODE === 'update' ? state0 && state0.summaryModel : RB && RB.state && RB.state.summaryModel
+const SUMMARY_MODEL = SUMMARY_OPT || (SUMMARY_MODES[SUMMARY_SAVED] ? SUMMARY_SAVED : 'session')
+ok(`压缩摘要：${SUMMARY_MODES[SUMMARY_MODEL]}（${SUMMARY_OPT || SUMMARY_MODES[SUMMARY_SAVED] ? '按' + (SUMMARY_OPT ? ' --summary-model' : SUMMARY_FROM) : '默认，以前没记过'}）${SUMMARY_MODEL === 'session' ? '；要照作者写死，加 --summary-model author' : ''}`)
 const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir })
 // 作者的 soul-version.json（10-28 起有）：拿它的哈希核对砚青四套的原文（称呼替换之前），再记下契约版本。
 // 作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」—— 所以契约变了要醒目提示，别当普通更新
@@ -2436,7 +2447,7 @@ let SESS = null // 会话在用的 preset id → 个数
   }
 }
 let BUNDLE
-try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
+try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES, summary: SUMMARY_MODEL }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
 const parseYaml = yamlParser(PROF)
 if (parseYaml) {
   try {
@@ -2608,11 +2619,14 @@ if (UPDATE) {
     const ob = blocks(oldText), nb = blocks(BUNDLE.files['cordis.patch.yml'])
     // 2.16 起压缩段按作者算法展开、保留段内注释：只差注释的别报成「参数或提示词有变化」
     const noComments = (b) => b.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')
+    // 2.17 起默认去掉压缩摘要那两行（--summary-model）：只差这两行的单独说清楚
+    const ROUTE_RE = /^\s*summarization(?:Provider|Model):/m
+    const noRoute = (b) => noComments(b).split('\n').filter((l) => !ROUTE_RE.test(l)).join('\n')
     for (const id of [...PRESET_CHOICE, ...Object.keys(BUNDLE.aliases)]) {
       const a = so[id] || [], b = sn[id] || []
       const add = b.filter((x) => !a.includes(x)), rem = a.filter((x) => !b.includes(x))
       const tag = BUNDLE.aliases[id] ? `（旧会话别名，同 ${BUNDLE.aliases[id]}${SESS && SESS.counts[id] ? `，${SESS.counts[id]} 个会话在用` : ''}）` : ''
-      info(`${id}${tag}：${!ob[id] ? '新建' : ob[id] === nb[id] ? '没变' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : noComments(ob[id]) === noComments(nb[id]) ? '只有注释不同' : '插件没变，参数或提示词有变化'}`)
+      info(`${id}${tag}：${!ob[id] ? '新建' : ob[id] === nb[id] ? '没变' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : noComments(ob[id]) === noComments(nb[id]) ? '只有注释不同' : noRoute(ob[id]) === noRoute(nb[id]) ? (ROUTE_RE.test(nb[id]) ? '压缩摘要模型加回作者写死的 deepseek-official / deepseek-flash' : '去掉作者写死的压缩摘要模型，改成跟会话模型走') : '插件没变，参数或提示词有变化'}`)
     }
     for (const id of Object.keys(ob).filter((x) => !nb[x])) {
       const n = SESS && SESS.counts[id]
@@ -3060,6 +3074,7 @@ if (!DRY) {
     dsh: SRC_PRESETS.ptc.dsh,
     setup: SETUP_INFO,
     nameMap: NAME_MAP,
+    summaryModel: SUMMARY_MODEL,
     presetIds: PRESET_CHOICE,
     presetAliases: BUNDLE.aliases,
     presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
