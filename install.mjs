@@ -23,7 +23,7 @@
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
 //   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
-//   --default-preset <id|keep>   新会话默认用的 preset：ptc-soul、ptc-soul-flash、standard-soul、minimal-soul、cordis-soul 或 keep（更新默认）；安装默认按方案
+//   --default-preset <id|keep>   新会话默认用的 preset：yanqing、yanqing-ptc、yanqing-distill、yanqing-cordis、ptc-soul-flash 或 keep（更新默认）；安装默认按方案
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → ~/.dsh → %APPDATA%\dsh 依次找
@@ -70,15 +70,16 @@ import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { homeRel, homePathExpr, autoHomeExpr, MEMORY_OLD, memoryNew, MEMORY_ANY, MEMORY_PRESSURE_OLD, memoryPressureNew, MEMORY_PRESSURE_ANY, planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { AUTHOR_NAMES, parseNameMap, validateNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL } from './lib/soul-presets.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_INFO, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL, readSoulVersion, checkPresetDigests } from './lib/soul-presets.mjs'
+import { organPatches, patchText, unpatchText } from './lib/organ-patches.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const REPO = 'cyanwell/dsh-agent-soul'
-// 零件仓：compact-region 不在主仓，在上游的 organs 仓库
+// 零件仓：换气（huanqi）和 compact-region 从上游的 organs 仓库取（见 ORGAN_PARTS）
 const ORGAN_REPO = 'cyanwell/dsh-agent-organs'
-const KIT_VERSION = '2.15'
+const KIT_VERSION = '2.16'
 // 这份安装包最后一次端到端验证过的上游提交
 const VERIFIED = { sha: '6ea60a28e529855ce3ce8ed35ed25a9aeb4647d9', date: '2026-10-26' }
 
@@ -89,20 +90,22 @@ const PARTS = ['compaction', 'pruner', 'memory', 'mnemon-probe', 'echo', 'clock'
 const PART_NAMES = {
   compaction: ['dsh-yanqing-compaction', 'dsh-agent-compaction'], pruner: ['dsh-yanqing-pruner', 'dsh-agent-pruner'],
   memory: ['dsh-agent-memory'], 'mnemon-probe': ['dsh-agent-mnemon-probe'],
-  echo: ['dsh-yanqing-echo', 'dsh-agent-echo'], clock: ['dsh-agent-clock'], huanqi: ['dsh-huanqi'],
+  echo: ['dsh-yanqing-echo', 'dsh-agent-echo'], clock: ['dsh-agent-clock'], huanqi: ['dsh-huanqi', 'dsh-agent-huanqi'],
   'huanqi-panel': ['dsh-yanqing-huanqi-panel', 'dsh-agent-huanqi-panel'], 'mcp-hub': ['dsh-mcp-hub'],
   'model-statusbar': ['dsh-agent-model-statusbar'], 'mobile-adapt': ['dsh-agent-mobile-adapt'],
   riji: ['dsh-agent-riji'], splash: ['dsh-agent-splash'], yantai: ['dsh-agent-yantai'],
   'compact-region': ['dsh-yanqing-compact-region', 'dsh-agent-compact-region'],
 }
 // 从另一条上游（ORGAN_REPO）取的零件；其余从主仓 plugins/ 取
-const ORGAN_PARTS = ['compact-region']
-// 零件源：ORG 在线拿到就用上游最新的，没网就用安装包里带的快照（assets/parts/<零件>）
-let ORG = null
+//   compact-region 只在 organs。换气两边都有，但作者 10-28 的更新记录写明「换气的 region 分支改成只走 /compact-region」，
+//   这次改动只落在 organs（6735d72，lib 与作者本机在跑的那份同为 CFF585…），主仓 plugins/huanqi 没同步 ——
+//   装主仓那份，compact-region 装上了也没人调。所以换气也从 organs 取，包名照旧按 dsh-huanqi 落地。
+const ORGAN_PARTS = ['huanqi', 'compact-region']
+// 零件源：ORG 是 organs 的源码目录（在线下载的，或安装包快照 assets/parts/），已经做过称呼替换；ORG_INFO 记来源和提交号
+let ORG = null, ORG_SNAP = null, ORG_INFO = null
 const partSrc = (p) => ORGAN_PARTS.includes(p)
-  ? (ORG && exists(path.join(ORG, p, 'package.json')) ? path.join(ORG, p) : path.join(ASSETS, 'parts', p))
+  ? (ORG && exists(path.join(ORG, p, 'package.json')) ? path.join(ORG, p) : path.join(ORG_SNAP || path.join(ASSETS, 'parts'), p))
   : path.join(SRC.dir, 'plugins', p)
-const partProto = (p) => ORGAN_PARTS.includes(p) ? (ORG || null) : SRC.dir
 // 安装包后来才加的零件：更新时本机没有也会补装（不想要就加 --skip-part <目录名>）
 const ADDED_PARTS = { 'mcp-hub': '2.1', 'model-statusbar': '2.3', 'mobile-adapt': '2.3', riji: '2.3', splash: '2.3', yantai: '2.3' }
 // 安装包版本号按数字逐段比（字符串比的话 '2.9' < '2.11' 是 false，2.10 以后加的零件就永远补不上）
@@ -575,7 +578,8 @@ async function getOrganSource() {
   try {
     const d = await download(url, file)
     if (!d.ok) return null
-    return extractTarGz(file, tmp).dir
+    const r = extractTarGz(file, tmp)
+    return { dir: r.dir, sha: r.sha || null }
   } catch { return null }
 }
 
@@ -723,6 +727,8 @@ function patchList(runtime, names, dshHome) {
     old: HUANQI_PANEL_OLD, new: HUANQI_PANEL_NEW,
     any: HUANQI_PANEL_ANY, fixed: HUANQI_PANEL_FIXED,
   })
+  // 换气、compact-region（organs 零件）：作者写死的 D:\\AI\\memory\\hub 改成运行时找家目录，加两处 Boss 本机实测的行为修复（lib/organ-patches.mjs）
+  list.push(...organPatches(names))
   return list.filter((p) => Object.values(names).includes(p.pkg))
 }
 function applyPatch(nm, p, pendingSrc) {
@@ -756,7 +762,7 @@ function applyPatch(nm, p, pendingSrc) {
     return 'anchor-missing'
   }
   if (DRY) { info(`[干跑] 将打补丁：${p.label}`); return 'planned' }
-  write(file, s.replace(old, p.new), p.label)
+  write(file, patchText(s, p, old), p.label)
   ok(`${p.label}：已打`)
   return 'applied'
 }
@@ -2304,10 +2310,15 @@ if (MODE === 'install' && installed && state0 && !sameNameMap(state0.nameMap, NA
 
 const SRC0 = await getSource()
 ok(`上游源码：${SRC0.from}`)
-// 零件仓（organs）：compact-region 只在那儿。拿不到就退回安装包快照，不因为这一条卡住整装
-ORG = await getOrganSource()
-if (ORG) ok(`零件仓：${ORGAN_REPO}（${ORGAN_PARTS.join('、')} 从这儿取）`)
-else info(`零件仓没拿到（离线安装，或用 --source 装的），${ORGAN_PARTS.join('、')} 用安装包自带快照 assets/parts/`)
+// 零件仓（organs）：换气、compact-region 从这儿取。拿不到就退回安装包快照，不因为这一条卡住整装。
+// 在线下载的和快照都做称呼替换（换气里也有作者的称呼），后面比对、安装都用替换后的这份
+const ORG0 = await getOrganSource()
+const SNAP_SHA = (readJson(path.join(ASSETS, 'parts', 'SOURCE.json')) || {}).sha || null
+ORG = ORG0 ? withNames({ dir: ORG0.dir }).dir : null
+ORG_SNAP = withNames({ dir: path.join(ASSETS, 'parts') }).dir
+ORG_INFO = ORG0 ? { repo: ORGAN_REPO, sha: ORG0.sha, from: 'GitHub' } : { repo: ORGAN_REPO, sha: SNAP_SHA, from: '安装包快照 assets/parts/' }
+if (ORG0) ok(`零件仓：${ORGAN_REPO}${ORG0.sha ? ' 提交 ' + short(ORG0.sha) : ''}（${ORGAN_PARTS.join('、')} 从这儿取）`)
+else info(`零件仓没拿到（离线安装，或用 --source 装的），${ORGAN_PARTS.join('、')} 用安装包自带快照 assets/parts/（organs 提交 ${SNAP_SHA ? short(SNAP_SHA) : '未记录'}）`)
 const SRC = withNames(SRC0)
 if (SRC !== SRC0) { const shipped = new Set(packFiles(SRC.dir)); ok(`称呼替换（按${NAME_FROM === '--rename' ? ' --rename' : NAME_FROM}）：上游代码里的${nameMapLabel(NAME_MAP)}，会装进 DSH 的有 ${SRC.renamed.filter((f) => shipped.has(f)).length} 个文件；后面比对、安装、中枢同步都按替换后的来`) }
 const srcVer = (readJson(path.join(SRC.dir, 'package.json')) || {}).version
@@ -2373,6 +2384,22 @@ function splitDiff(d, base) {
 }
 
 const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir })
+// 作者的 soul-version.json（10-28 起有）：拿它的哈希核对砚青四套的原文（称呼替换之前），再记下契约版本。
+// 作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」—— 所以契约变了要醒目提示，别当普通更新
+const UP_HAS_PRESETS = exists(path.join(SRC0.dir, 'presets', 'preset-yanqing.yml'))
+const SOUL_VER = (() => { const v = readSoulVersion(SRC0.dir); return v && v.snapshot && UP_HAS_PRESETS ? null : v })()
+if (SOUL_VER) {
+  const dg = checkPresetDigests(SOUL_VER.snapshot ? path.join(ASSETS, 'presets') : path.join(SRC0.dir, 'presets'), SOUL_VER)
+  if (!dg.mismatch.length && !dg.missing.length) ok(`砚青 preset 和作者 soul-version.json 的哈希逐套对上（${dg.match.length} 套${SOUL_VER.snapshot ? '，离线按安装包快照核' : ''}）：装进去的就是作者 profile 里那份`)
+  else warn(`砚青 preset 和作者 soul-version.json 对不上：${[...dg.mismatch.map((x) => x.blockId + ' 哈希不同'), ...dg.missing.map((x) => x + ' 缺文件')].join('、')}。多半是作者改了 preset 没重新生成清单；照装，但请对照上游 presets/ 的更新记录核一下`)
+} else info('上游这一版没有 soul-version.json，跳过砚青 preset 的哈希核对')
+const oldContracts = state0 && state0.soul ? state0.soul.contracts : null
+const newContracts = SOUL_VER ? SOUL_VER.contracts : null
+if (UPDATE && newContracts) {
+  if (!oldContracts) info(`作者契约版本 ${JSON.stringify(newContracts)}：安装记录里还没有（2.15 及以前装的），这次记下，以后更新拿它比`)
+  else if (JSON.stringify(oldContracts) !== JSON.stringify(newContracts)) warn(`★ 作者的契约版本变了：${JSON.stringify(oldContracts)} → ${JSON.stringify(newContracts)}。作者说契约不变才不需要迁移，这次是要迁移的大更新：先读上游 README 的更新记录，确认迁移办法再真跑`)
+  else ok(`作者契约版本没变（${JSON.stringify(newContracts)}）：不需要迁移`)
+}
 // 旧会话用的别名：会话开头记着建会话时的 preset id（例如 2.10 以前的 standard-soul、cordis-soul），id 没了会话就打不开。
 // 还有会话在用的旧 id、已装的 preset 里已经有的别名，都留一个和对应新 preset 一样的别名；会话读不了时按安装记录里的旧 id 全留
 function sessionPresetCounts(dirs) {
@@ -2442,14 +2469,7 @@ function memRelativePredict() {
 }
 // 零件和上游比：本机补丁过的文件先「还原」再比，免得把自己的补丁当成上游变化
 //   同一个文件可能有好几处补丁（言替 index.js 两处、memory lib/index.js 两处）：读一次，逐处还原，最后才算哈希
-//   还原先认完整的新写法（有的补丁 any 只认得新写法的开头），认不出再按 any 还原（旧写法、写死路径的那种）
-function unpatchText(t, list) {
-  for (const p of list) {
-    if (p.new && t.includes(p.new)) t = t.split(p.new).join(p.old)
-    else if (p.any.test(t)) t = t.replace(p.any, p.old)
-  }
-  return t
-}
+//   还原先认完整的新写法（有的补丁 any 只认得新写法的开头），认不出再按 any 还原（旧写法、写死路径的那种）；实现在 lib/organ-patches.mjs 的 unpatchText
 function partDiff(i) {
   const s = partSrc(AP[i]), dst = path.join(NM, INST[i])
   const oldM = hashInstalled(dst)
@@ -2586,11 +2606,13 @@ if (UPDATE) {
     // 按块比：只是多了别名、或者文件头注释变了的，不把别的 preset 说成「有变化」
     const blocks = (t) => Object.fromEntries(String(t).replace(/\r\n/g, '\n').split(/\n(?= {4}- id: preset-)/).map((b) => [(b.match(/^ {8}id: ([\w-]+)$/m) || [])[1], b.replace(/\s+$/, '')]).filter(([k]) => k))
     const ob = blocks(oldText), nb = blocks(BUNDLE.files['cordis.patch.yml'])
+    // 2.16 起压缩段按作者算法展开、保留段内注释：只差注释的别报成「参数或提示词有变化」
+    const noComments = (b) => b.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')
     for (const id of [...PRESET_CHOICE, ...Object.keys(BUNDLE.aliases)]) {
       const a = so[id] || [], b = sn[id] || []
       const add = b.filter((x) => !a.includes(x)), rem = a.filter((x) => !b.includes(x))
       const tag = BUNDLE.aliases[id] ? `（旧会话别名，同 ${BUNDLE.aliases[id]}${SESS && SESS.counts[id] ? `，${SESS.counts[id]} 个会话在用` : ''}）` : ''
-      info(`${id}${tag}：${!ob[id] ? '新建' : ob[id] === nb[id] ? '没变' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : '插件没变，参数或提示词有变化'}`)
+      info(`${id}${tag}：${!ob[id] ? '新建' : ob[id] === nb[id] ? '没变' : add.length || rem.length ? `插件 +${add.join(',') || '无'} / -${rem.join(',') || '无'}` : noComments(ob[id]) === noComments(nb[id]) ? '只有注释不同' : '插件没变，参数或提示词有变化'}`)
     }
     for (const id of Object.keys(ob).filter((x) => !nb[x])) {
       const n = SESS && SESS.counts[id]
@@ -2692,7 +2714,7 @@ step(UPDATE ? '重打本机补丁' : '打本机补丁')
 const patchState = {}
 for (const p of PATCHES) {
   const i = PKGS.indexOf(p.pkg)
-  const pending = (DRY && (replaced.has(p.pkg) || !exists(path.join(NM, p.pkg)))) ? path.join(SRC.dir, 'plugins', AP[i], p.file) : null
+  const pending = (DRY && (replaced.has(p.pkg) || !exists(path.join(NM, p.pkg)))) ? path.join(partSrc(AP[i]), p.file) : null
   patchState[p.key] = applyPatch(NM, p, pending)
 }
 
@@ -3031,6 +3053,8 @@ if (!DRY) {
     _说明: 'dsh-agent-soul 安装包的安装记录；install.mjs --update 靠它判断从哪一版更新、装了哪些零件、哪些是用户拒掉的。',
     kitVersion: KIT_VERSION,
     upstream: { repo: REPO, ref: SOURCE ? null : REF, sha: SRC.sha, version: srcVer || null, from: SRC.from },
+    organs: ORG_INFO,
+    soul: SOUL_VER ? { version: SOUL_VER.soulVersion || null, contracts: SOUL_VER.contracts || null } : null,
     installedAt: (state0 && state0.installedAt) || (UPDATE ? null : now),
     updatedAt: now,
     dsh: SRC_PRESETS.ptc.dsh,
