@@ -138,7 +138,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
-| `lib/soul-presets.mjs` | 从官方预设派生 Soul preset；卸载时做空壳 preset |
+| `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开，拿作者 `soul-version.json` 核哈希）；PTC · Soul · Flash 从 Flash 源派生；卸载时做空壳 preset |
+| `lib/organ-patches.mjs` | 零件仓 organs 的换气、compact-region 的本机补丁：作者写死的 `D:\AI\memory\hub` 改成运行时找家目录，外加 Boss 本机实测的行为修复 |
 | `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
 | `lib/name-map.mjs` | 称呼替换：在上游源码的临时副本上把作者的称呼换成用户称呼；认出手工改过却没记下的情况 |
 | `lib/package-contract.mjs` | 上游包发布清单核对：入口导入的文件要在 `files` 里，用到的 `@deepseek-ai/*` 要声明 `peerDependencies`；拷包前和 kit 迭代报告共用 |
@@ -147,7 +148,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
-| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照 |
+| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照、离线用的砚青四套与作者 `soul-version.json`、零件仓 organs 的快照 `parts/`（提交号见 `parts/SOURCE.json`） |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup`、`--uninstall` 打出的备份包；迁移时连同整个文件夹一起拷走 |
 
@@ -160,7 +161,9 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 上游给零件改名时自动迁移，目录、配置、锁文件一起换。安装包后来新加的零件，更新时会问你装不装；拒掉的会记下来，以后不再问。
 
-本机补丁（锚点写在 `install.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过，早期写死了某台电脑路径的旧补丁换成运行时自动定位的写法。目前有：mnemon-probe 默认路径、memory 的相对路径与上下文水位、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名，以及换气面板「profile 里没有 `- id: huanqi` 时自建一节」。
+本机补丁（锚点写在 `install.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`、`lib/organ-patches.mjs`）每次安装或更新都会重新检查：打过的跳过，上游自己改好的也跳过，早期写死了某台电脑路径的旧补丁换成运行时自动定位的写法。目前有：mnemon-probe 默认路径、memory 的相对路径与上下文水位、clock 面板定位、mcp-hub 清单位置、yantai 账本与书房路径、riji 日记目录、echo / huanqi-panel 的加载名、换气面板「profile 里没有 `- id: huanqi` 时自建一节」，以及换气和 compact-region 的诊断日志路径、熔断后全量压缩、测试触发口、`/compact-region` 参数输入。
+
+**换气和 compact-region 从零件仓取**：这两个零件从 `cyanwell/dsh-agent-organs` 下载（离线用 `assets/parts/` 快照），其余零件从主仓 `plugins/` 取。依据是作者 10-28 的更新记录：「换气的 region 分支改成只走 `/compact-region`」，这次改动只落在 organs，主仓的换气没同步。
 
 **不碰**这些：方案、书房、账本、自我层、权威源册、人设、主配置、心跳，以及本机改过的脚本。
 
@@ -215,6 +218,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 改了什么 |
 |---|---|---|
+| 2.16 | 2026-10-29 | 换气改从零件仓 organs 取：作者 10-28 的更新记录写明「换气的 region 分支改成只走 `/compact-region`」，这次改动只落在 organs（6735d72），主仓 `plugins/huanqi` 没同步，装主仓那份 compact-region 就没人调；包名照旧按 `dsh-huanqi` 落地，称呼替换照做。organs 两个零件写死的 `D:\AI\memory\hub` 改成运行时找 `<DSH 家目录>/dsh-soul/memory/hub`，两个零件写同一个 `_plugin-diag.log`（和作者的设计一致）；另带三处 Boss 本机实测的修复：熔断后的全量压缩去掉多套的一层 `runMaintenance`、测试触发口先等回合收尾、`/compact-region` 声明 `input`。2.15 改在快照里的那版退回 organs 原样，kit 的改动一律走本机补丁（`lib/organ-patches.mjs`），在线离线打的是同一份，快照提交号记在 `assets/parts/SOURCE.json`。砚青 preset 的 `@include` 展开改成作者 `soul-preset build` 的算法（段内注释保留，以前删掉了），装前拿作者 `soul-version.json` 逐套核哈希；安装记录记下 organs 提交号和作者契约版本 `contracts`，更新时契约变了醒目提示；preset 只差注释时干跑报「只有注释不同」 |
 | 2.15 | 2026-10-29 | `assets/parts/compact-region` 快照跟上本机修好的那版：命令参数不再只认 `invocation.rawInput`（实机证明人打的参数到 handler 会是空串），改成依次试 `rawInput / args / argsText / input / text` 并去掉行首命令名 —— 换气程序化调用传的是整行（`commands.execute(agent, line, [], signal)`），两种形状都要接住；诊断日志顺带打出 `invocation` 的键名，下次失败能直接看到参数藏在哪 |
 | 2.14 | 2026-10-29 | 装、更新、卸载三处写配置前统一做一遍「布尔消毒」：换气配置里的 `fullCompactOnBreaker: 'true'` / `postCompactRecallHint: 'true'` 是字符串，过不了 Schemastery 的 `z.boolean()`，cordis 记一条 ValidationError 之后**整段配置静默退回默认值** —— 插件照跑，所以一直没人发现改的配置根本没生效。只在 `- id: huanqi` 这一段里、只掰已读过 schema 的两个布尔键（别的插件、别的键一律不碰），修了会在输出里报一行 |
 | 2.13 | 2026-10-29 | Soul preset 的默认方案只装砚青四套，去掉 PTC · Soul · Flash；新会话默认 preset 从 Flash 模式改成砚青；安装问卷的默认项、`--default-preset` 参数示例和不指定时的兜底值一起改。已经装过的电脑照安装记录来，不会被强制重装 |

@@ -1,0 +1,7 @@
+{
+  "_说明": "assets/parts/ 是零件仓 cyanwell/dsh-agent-organs 的原样快照（按各包 package.json 的 files 清单取），离线安装时用；在线时直接下载 organs 最新的。kit 自己的改动一律走 install.mjs 的本机补丁（lib/organ-patches.mjs），不改这里的文件。",
+  "repo": "cyanwell/dsh-agent-organs",
+  "sha": "6735d72ef039159fa611f429fd9b813e8dc4ecdc",
+  "date": "2026-10-28",
+  "parts": ["huanqi", "compact-region"]
+}

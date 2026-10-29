@@ -61,6 +61,9 @@ assets/
   presets/minimal.patch.yml  官方「极简」预设的快照（同上）
   presets/cordis.patch.yml   官方「Cordis」预设的快照（同上）
   presets/flash-lean-ptc-v3.patch.yml   Flash 精简·PTC v3 的快照（没装 dsh-flash-presets 时用）
+  presets/preset-yanqing*.yml、_shared/   上游砚青四套的快照（离线安装时用）
+  presets/soul-version.json  作者给砚青四套记的哈希和契约版本（离线时拿它核对）
+  parts/                     零件仓 organs 的快照：换气、compact-region（离线时用，提交号见 parts/SOURCE.json）
 logs/                        每次运行的输出（脚本自动建，可以删）
 backups/                     --backup、--uninstall 打出的备份包（迁移时连同文件夹一起拷走）
 ```
@@ -224,13 +227,14 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 **什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后（PTC / 标准 / 极简 / Cordis 四个 Soul 模式要按新版官方预设重新生成）；装了或升级了 dsh-flash-presets 后（「PTC · Soul · Flash 模式」跟着重新生成）。
 
 **更新会动的**：
-- profile 里的本体、已装的零件（只换有变化的，换完重打本机补丁）、dsh-soul-preset（只重新生成原来装的那几个 preset）；
+- profile 里的本体、已装的零件（只换有变化的，换完重打本机补丁）、dsh-soul-preset（只重新生成原来装的那几个 preset）。换气和 compact-region 从零件仓 `cyanwell/dsh-agent-organs` 取，其余零件从主仓取；
 - **零件改名时自动迁移**：装新名字的目录、删旧目录（先整份备份），`package.json` 的 bundles 原位换名、dependencies 换名，三个锁文件（`pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml`）同步换名；
 - **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补。必装零件和 Soul preset 要调用的零件（压缩三件套 compaction、pruner、compact-region）不问、不能跳过，本机没有就补上，缺了 preset 加载失败、DSH 起不来；
 - **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
+- **作者契约版本**：上游的 `soul-version.json` 里有一行 `contracts`。作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」。脚本把它记进安装记录，下次更新拿来比；干跑里出现「★ 作者的契约版本变了」，就是要迁移的大更新，先停下，读上游 README 的更新记录，跟用户确认迁移办法再真跑。同一处还会核对砚青四套和作者记的哈希，对不上会写进「需要留意」；
 - **怎么分清本机改的和上游改的**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），本体和零件的变化分成「上游改的」和「本机改过、这次会换回上游版的」两类列出来；中枢脚本也按它判断本机改没改过。取不到基准时脚本会写进「需要留意」，这时报告里的变化分不清来源，中枢里和本体一起被改过的脚本也会被当成没改过换掉。
 
 **更新不动的**：方案（不用选，也不会重新生成书房和自我层）、书房（含账本 `02-墨.jsonl`、权威源册、人设）、`SELF.src.md`、主配置 `memory/hub/echo.config.json`、中枢里本机改过的脚本、mcp-hub 清单里已有的 echo、心跳、默认 preset（除非加 `--default-preset`）、用户拒掉的零件。
@@ -243,7 +247,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 4. 请用户打开 DSH，按阶段 C 的 C1、C2（有新装 mcp-hub 的再加 C9）验，再让 agent 调用 `agent_soul_check`（memory 参数给 `<DSH 家目录>/dsh-soul/memory`，不是下面的 hub），期望 0 错。
 5. 有问题就回滚：更新前的整份拷贝在 `<DSH 家目录>/dsh-soul/_backup/<时间>-update/`，里面有 `还原方法.txt`。
 
-**要停下问用户的情况**（脚本会自己停）：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件没列进 `files`，照清单装上就缺文件）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包验证过的提交>` 装回验证过的版本；要跟上就得先更新安装包。
+**要停下问用户的情况**：干跑里出现「★ 作者的契约版本变了」（脚本不会自己停，你要停）。**脚本会自己停的**：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件没列进 `files`，照清单装上就缺文件）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包验证过的提交>` 装回验证过的版本；要跟上就得先更新安装包。
 **干跑提示「本机代码看起来手工把上游作者的称呼换成了 …」时**：说明以前手工改过名、安装记录里没记。照提示加 `--rename 爀曦=<称呼>` 重新干跑，确认「本机改过」里不再有改称呼的文件，再真跑。
 **要报给用户但不用停的情况**：补丁「原文对不上」（上游可能修了那段，验收时看一下时钟面板和 mnemon 探针）；某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 简介提醒（源 preset 的参数变了，「PTC · Soul · Flash 模式」的简介可能需要改写）。
 
@@ -368,6 +372,10 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **换电脑、换用户名、挪 DSH 家目录**：memory 的配置和路径类补丁不带用户名，跟着家目录走；但中枢主配置 `echo.config.json`、心跳、mcp-hub 里 echo 的命令是按这台电脑写的绝对路径，搬到别处要用第十节的备份恢复，或者在新位置重跑一次安装。
 - **改配置**：只改主配置 `memory/hub/echo.config.json`，再复制到 `profile/node_modules/dsh-agent-soul/kit/echo.config.json`（`--update` 也会照主配置重写副本）。
 - **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset yanqing`（只能选这台电脑生成了的 preset）。
+- **用作者仓库 `tools/` 里的工具体检时**：kit 的装法和作者本机不完全一样，有几条结论要换个读法，别照着它的修法动手：
+  - `verify-client-ids.mjs`：kit 每次装完都会跑，结论可信。`verify-live.mjs` 只读，可以跑。
+  - `soul-doctor.mjs`：`L0`、`L1/pkgintegrity`、`L1/peerdeps` 可信。`L1/parts` 报缺 `dsh-yanqing-memory` 不用管：作者主仓 memory 包的包名就是 `dsh-agent-memory`，preset 里也不引用它。`L2/presets` 报 profile 里 0 个 preset 块，是因为 kit 把砚青四套放在 `dsh-soul-preset` 包里；**不要**照它说的跑 `soul-preset.mjs build --write`，那会在 profile 里再插一份同 id 的四套。`soul-preset.mjs verify` 同理看不到包里的 preset；内容对不对看 kit 干跑里「哈希逐套对上」那一行。
+  - `soul-one-shot.mjs`：压缩、裁剪两行报「没接管」不用管，它还在找 `.agent-presets/`，作者自己写过 0.2.0-rc.2 起这个目录已经不读了。preset 有没有装好用作者给的验法：在新建会话界面切到砚青 preset，输入 `/compact-region`，能识别就算成功。
 
 ## 十四、平台说明
 
