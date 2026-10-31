@@ -304,10 +304,16 @@ function runNode(script, args, label, { dryRun = DRY } = {}) {
   return { ok: r.status === 0, code: r.status, out: String(r.stdout || '') + String(r.stderr || ''), error: r.error }
 }
 
+// 问答时按 Ctrl+C：readline 不发 SIGINT，而是让问题 reject 一个 AbortError —— 当成「取消」，不甩一屏堆栈
+function cancelled(e) {
+  if (e?.code !== 'ABORT_ERR') throw e
+  out(`\n  已取消（Ctrl+C）。${TOUCHED ? '到这一步为止改过的文件都有备份，见上面的输出。' : '还没有改任何文件。'}`)
+  process.exit(130)
+}
 // 终端里问一句（每次单开单关，问完不留着 stdin，脚本才能正常结束）
 async function askLine(prompt) {
   const rl = createInterface({ input: process.stdin, output: process.stdout })
-  try { return String(await rl.question(prompt)).trim() } finally { rl.close() }
+  try { return String(await rl.question(prompt)).trim() } catch (e) { return cancelled(e) } finally { rl.close() }
 }
 
 // 列出一个包「发布出去」会有的文件：按 package.json 的 files 清单（和 npm / pnpm 的规则一致），
@@ -341,13 +347,32 @@ function diffMaps(oldM, newM) {
   return { added, removed, changed, same: !added.length && !removed.length && !changed.length }
 }
 // 把源包按 files 清单装到 dst：先拷进旁边的暂存目录、核对过再换上，失败不留半截
-function installPackage(src, dst, label, keep = []) {
-  const files = packFiles(src)
+// 修复 pack-unshipped：上游 files 漏列、入口却导入的文件（源码里有），拷包时一起带上，并补进这个包 package.json 的 files，
+// 不然以后插件市场触发 pnpm 重装时又会按 files 把它清掉。包名 → 要补的文件，在发布清单检查那一步填
+const PACK_EXTRA = {}
+function packOf(src, pkg) {
+  const extra = (pkg && PACK_EXTRA[pkg]) || []
+  const files = [...new Set([...packFiles(src), ...extra])].sort()
+  if (!extra.length) return { files, fixed: {} }
+  const pj = JSON.parse(readText(path.join(src, 'package.json')))
+  pj.files = [...(pj.files || []), ...extra.filter((f) => !(pj.files || []).includes(f))]
+  return { files, fixed: { 'package.json': JSON.stringify(pj, null, 2) + '\n' } }
+}
+// 按（补过的）发布清单算出这个包装上后每个文件的哈希
+function packHashes(src, pkg) {
+  const { files, fixed } = packOf(src, pkg)
+  const m = hashFiles(src, files)
+  for (const [f, t] of Object.entries(fixed)) m.set(f, sha1(Buffer.from(t, 'utf8')))
+  return m
+}
+function installPackage(src, dst, label, keep = [], pkg = null) {
+  const { files, fixed } = packOf(src, pkg)
   if (DRY) { info(`[干跑] 将安装 ${label}（${files.length} 个文件）→ ${dst}`); return }
   const stage = dst + `.stage-${TS}`
   fs.rmSync(stage, { recursive: true, force: true })
   for (const f of files) { const t = path.join(stage, ...f.split('/')); fs.mkdirSync(path.dirname(t), { recursive: true }); fs.copyFileSync(path.join(src, ...f.split('/')), t) }
-  const want = hashFiles(src, files), got = hashDir(stage)
+  for (const [f, t] of Object.entries(fixed)) fs.writeFileSync(path.join(stage, f), t)
+  const want = packHashes(src, pkg), got = hashDir(stage)
   if (!diffMaps(want, got).same) { fs.rmSync(stage, { recursive: true, force: true }); die(`${label} 拷贝不完整`) }
   if (exists(dst)) {
     for (const k of keep) { const from = path.join(dst, k); if (exists(from)) { fs.mkdirSync(path.dirname(path.join(stage, k)), { recursive: true }); fs.copyFileSync(from, path.join(stage, k)) } }
@@ -1551,7 +1576,7 @@ if (MODE === 'install') {
     if (ANSWERS_FILE) { raw = readJson(path.resolve(ANSWERS_FILE)); if (!raw || typeof raw !== 'object') die(`回答文件读不了，或者不是合法的 JSON：${ANSWERS_FILE}`) }
     else if (TTY) {
       const rl = createInterface({ input: process.stdin, output: process.stdout })
-      try { raw = await askTerminal(rl, { mnemon: MNEMON, platform: process.platform }) } finally { rl.close() }
+      try { raw = await askTerminal(rl, { mnemon: MNEMON, platform: process.platform }) } catch (e) { cancelled(e) } finally { rl.close() }
       draft = path.join(KIT, 'logs', `answers-${TS}.json`)
       fs.mkdirSync(path.dirname(draft), { recursive: true })
       fs.writeFileSync(draft, JSON.stringify(raw, null, 2), 'utf8')
@@ -1727,17 +1752,22 @@ if (MODE !== 'install') for (const [i, p] of AP.entries()) { const t = platformT
 // 只查这次真的会装上的（更新时本机没装、也不补装的零件，打包有问题也不该挡住更新）
 const PKG_ISSUES = [['本体 dsh-agent-soul', SRC.dir, null], ...AP.map((p, i) => [PKGS[i], partSrc(p), p]).filter(([name]) => PKGS_LIVE.includes(name))]
   .flatMap(([label, dir, part]) => inspectPackage(dir, packFiles(dir)).map((issue) => ({ label, part, issue })))
-const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer')
+const PACK_FIX = fixSelected('pack-unshipped') && !FIX_SKIP.includes('pack-unshipped')
+for (const x of PKG_ISSUES) if (PACK_FIX && x.issue.kind === 'unshipped') (PACK_EXTRA[x.part ? x.label : 'dsh-agent-soul'] ||= []).push(x.issue.target)
+const PACK_LIST = Object.entries(PACK_EXTRA).map(([n, f]) => `${n}：${f.join('、')}`)
+FIX_ROWS.push({ id: 'pack-unshipped', status: !fixSelected('pack-unshipped') ? 'frozen' : FIX_SKIP.includes('pack-unshipped') ? 'skipped' : PACK_LIST.length ? 'kit' : 'clean',
+  action: PACK_LIST.length && !FIX_MODE ? 'apply' : 'none', note: PACK_LIST.length ? `补进发布清单：${PACK_LIST.join('；')}${FIX_MODE ? '（--fix 不重装零件，下次 --update 时补上）' : ''}` : null })
+const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer' && !(PACK_FIX && x.issue.kind === 'unshipped'))
 if (PKG_BROKEN.length) {
   const optional = [...new Set(PKG_BROKEN.map((x) => x.part).filter((p) => p && OPTIONAL_PARTS.includes(p)))]
-  die(`上游包的发布清单不自洽，照清单装上后会缺文件、加载失败：\n      ${PKG_BROKEN.map((x) => describeIssue(x.label, x.issue)).join('\n      ')}\n    这是上游打包的问题，安装包不替它补文件。${SRC.sha === VERIFIED.sha ? '' : `可以先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包对照过的版本；`}${optional.length ? `加 --skip-part ${optional.join(',')} 先跳过${optional.length > 1 ? '这几个' : '这个'}可选零件（已装的那份保留原样）；` : ''}并告诉用户。`)
+  die(`上游包的发布清单不自洽，照清单装上后会缺文件、加载失败：\n      ${PKG_BROKEN.map((x) => describeIssue(x.label, x.issue)).join('\n      ')}\n    这是上游打包的问题：源码里也没有的文件安装包补不了（源码里有、只是漏列的，由修复 pack-unshipped 补上，除非跳过了它）。${SRC.sha === VERIFIED.sha ? '' : `可以先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包对照过的版本；`}${optional.length ? `加 --skip-part ${optional.join(',')} 先跳过${optional.length > 1 ? '这几个' : '这个'}可选零件（已装的那份保留原样）；` : ''}并告诉用户。`)
 }
 for (const x of PKG_ISSUES.filter((x) => x.issue.kind === 'peer')) info(`${describeIssue(x.label, x.issue)}；装完在新会话里确认它确实加载了，没加载再报给上游`)
 if (!UPDATE && RENAMES.length) die(`这台电脑装的是旧包名（${RENAMES.map((r) => r.from).join('、')}），请用 --update 迁移。`)
 const bodyKeep = ['kit/echo.config.json']
 
 if (!UPDATE && installed) {
-  const same = diffMaps(hashInstalled(BODY, bodyKeep), hashFiles(SRC.dir, packFiles(SRC.dir))).same
+  const same = diffMaps(hashInstalled(BODY, bodyKeep), packHashes(SRC.dir, 'dsh-agent-soul')).same
   if (!same && !(state0 && state0.upstream && SRC.sha && state0.upstream.sha === SRC.sha)) die(`这台电脑已经装过 dsh-agent-soul，而且和要装的版本不一样。要升级请用 --update；要按已装的版本补全，加 --ref <已装的提交>。`)
   ok('检测到已经装过同一版本：按「补全」处理，做过的步骤会跳过')
 }
@@ -2021,7 +2051,7 @@ function partDiff(i) {
     const t = readText(path.join(dst, f)), u = unpatchText(t, list)
     if (u !== t) oldM.set(f, sha1(Buffer.from(u, 'utf8')))
   }
-  const newM = hashFiles(s, packFiles(s))
+  const newM = packHashes(s, PKGS[i])
   return { ...diffMaps(oldM, newM), inst: oldM, next: newM }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
@@ -2054,7 +2084,7 @@ const HUB_PLAN = !installed ? [] : fs.readdirSync(NEW_KIT).filter((f) => /\.(mjs
   return { f, action }
 }).filter((x) => x.action)
 const hubOf = (a) => HUB_PLAN.filter((x) => x.action === a).map((x) => x.f)
-const bodyDiff = installed ? (() => { const inst = hashInstalled(BODY, bodyKeep), next = hashFiles(SRC.dir, packFiles(SRC.dir)); return { ...diffMaps(inst, next), inst, next } })() : null
+const bodyDiff = installed ? (() => { const inst = hashInstalled(BODY, bodyKeep), next = packHashes(SRC.dir, 'dsh-agent-soul'); return { ...diffMaps(inst, next), inst, next } })() : null
 const BODY_SPLIT = splitDiff(bodyDiff, baseMap())
 const PART_SPLIT = AP.map((p, i) => (ORGANS_BEFORE && ['huanqi', 'compact-region'].includes(p) ? null : splitDiff(PART_DIFF[i], baseMap('plugins', p))))
 // 本机手工改过称呼、安装记录里却没记：提醒加 --rename，别默默换回去
@@ -2266,7 +2296,7 @@ else {
 step(FIX_MODE ? '零件（--fix 不重装零件）' : UPDATE ? '换上新版本体和零件' : '本体和零件拷进 node_modules')
 if (FIX_MODE) ok('dsh-agent-soul（本体）：--fix 不动本体')
 else if (bodyDiff && bodyDiff.same) ok('dsh-agent-soul（本体）：和上游一致，跳过')
-else installPackage(SRC.dir, BODY, 'dsh-agent-soul（本体）', bodyKeep)
+else installPackage(SRC.dir, BODY, 'dsh-agent-soul（本体）', bodyKeep, 'dsh-agent-soul')
 const partsDone = []
 const replaced = new Set()
 for (let i = 0; i < AP.length; i++) {
@@ -2276,13 +2306,13 @@ for (let i = 0; i < AP.length; i++) {
     if (!INST[i]) {
       if (!TO_ADD.has(AP[i])) { info(`${PKGS[i]}：本机没装，跳过`); continue }
       partsDone.push(PKGS[i]); replaced.add(PKGS[i])
-      installPackage(s, dst, `${PKGS[i]}（新装）`)
+      installPackage(s, dst, `${PKGS[i]}（新装）`, [], PKGS[i])
       continue
     }
     partsDone.push(PKGS[i])
     if (INST[i] !== PKGS[i]) {
       replaced.add(PKGS[i])
-      installPackage(s, dst, `${PKGS[i]}（由 ${INST[i]} 改名）`)
+      installPackage(s, dst, `${PKGS[i]}（由 ${INST[i]} 改名）`, [], PKGS[i])
       if (DRY) info(`[干跑] 将删掉旧目录 node_modules/${INST[i]}`)
       else { fs.rmSync(path.join(NM, INST[i]), { recursive: true, force: true }); ok(`旧目录 node_modules/${INST[i]} 已删（备份里有）`) }
       continue
@@ -2293,11 +2323,11 @@ for (let i = 0; i < AP.length; i++) {
     }
     if (PART_DIFF[i].same) { ok(`${PKGS[i]}：没有变化`); continue }
     replaced.add(PKGS[i])
-    installPackage(s, dst, PKGS[i])
+    installPackage(s, dst, PKGS[i], [], PKGS[i])
   } else {
     partsDone.push(PKGS[i])
     if (exists(dst)) { ok(`${PKGS[i]}：已存在，保留（修复在下一步核对）`); continue }
-    installPackage(s, dst, PKGS[i])
+    installPackage(s, dst, PKGS[i], [], PKGS[i])
   }
 }
 

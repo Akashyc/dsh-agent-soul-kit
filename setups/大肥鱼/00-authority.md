@@ -72,7 +72,6 @@
 | 可复用结论 | dsh-mnemon 记忆空间 | mnemon space | `{{DSH_HOME}}/.mnemon/` | 主导会话 / 自动捕获 | 全部 | 结论以它为准；「发生没发生过」以账本为准 |
 | 检索索引 | memindex | 必须可丢弃重建 | `{{HUB}}/index/` | 重建者（`memindex.mjs build`） | 全部 | 账本与会话原文 |
 | 插件装配 | profile 配置 | `package.json` + `cordis.patch.yml` | `{{PROFILE_DIR}}/` | Boss（或 Boss 确认后的安装操作） | 全部 | 这一行本身；`{{DSH_HOME}}/recovery/` 快照与 `*.bak-*` 是沿革 |
-| 创作源文件 | 卡目录与预设文件 | 设定 / 预设源文件 | 不固定，每次创作时由 Boss 指明 | Boss / 主导会话按 Boss 指示 | 全部 | Boss 本次指明的那一份；打包出的 PNG / JSON 是衍生品，随时按最新源文件重打 |
 
 ★ **结论只登记一处**：结论正文写进 mnemon；账本的 `gain` 只记「哪天弄清了什么」，用 `--ref` 指向 mnemon 条目，不复写结论正文。
 ★ **主导权不单列一行**：谁是主导 = 《墨》里最后一条 `lead` 的署名者，已经包含在第一行里。
@@ -106,7 +105,6 @@
 |---|---|---|
 | 自我层 | `memory/hub/SELF.src.md` | `memory/hub/SELF.md`（衍生，由 `self.mjs` 装配） |
 | 插件装配 | `{{PROFILE_DIR}}/` 的 `package.json` 与 `cordis.patch.yml` | `{{DSH_HOME}}/recovery/` 快照、`*.bak-*`（沿革） |
-| 世界卡 / 角色卡 | Boss 当次指明的源文件与预设 | 打包出的 PNG / JSON（衍生） |
 | echo / agent_soul 配置 | `memory/hub/echo.config.json` | `{{PROFILE_DIR}}/node_modules/dsh-agent-soul/kit/echo.config.json`（副本，改主后复制过去）、`{{DSH_HOME}}/hub/echo.config.json`（软链接；建不了软链接的系统上是只含 memory 一项的指针文件） |
 | 大肥鱼的声音（人设） | `soul/65-声音/大肥鱼-声音.md` | `memory/hub/SELF.src.md` 里「说话与样子」一节（浓缩版，改人设先改主文件再同步） |
 
