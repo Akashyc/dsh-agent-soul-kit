@@ -216,7 +216,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 - **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（`dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`）。3.0 及以前装的 `dsh-yanqing-*` 和从 organs 装的换气、compact-region，`--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）；`--fix` 不动包名，碰到旧包名会让你先 `--update`。
 - **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
-- **称呼替换**：方案的 `nameMap` 决定把作者称呼「爀曦」换成谁；大肥鱼方案使用 Boss。可用 `--rename 爀曦=<称呼>` 调整，或用 `--rename none` 关闭，选择随安装记录保存。
+- **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.0 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
 - **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。包的发布清单缺少入口依赖文件时会停止安装；缺少宿主依赖声明时会提示核对。
 
 ## 备份带什么
