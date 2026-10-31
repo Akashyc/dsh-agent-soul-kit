@@ -42,7 +42,6 @@
 |---|---|---|
 | model-statusbar | **不可用**：探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe` | 可用 |
 | yantai | 部分可用：「速达」应用启动器靠 `.ps1` 脚本，只有 Windows 有；水位、未结、账本、门照常 | 可用 |
-| huanqi | 可用 | 部分可用：上游 issue #5，桌面打包版可能 import 不到宿主内部包，装完看启动日志有没有 `dsh-huanqi: failed to import` |
 | echo（面板体检） | 作者只按 Windows 布局找 DSH 自带的 node，安装包用修复 `echo-node-darwin` 补上 Mac 的布局 | 可用 |
 | 记忆中枢的常驻检索 `echo-svc` | 用的是 Windows 命名管道，Mac 上不启动；`memq` 自动退回直接读，快路子走 mcp-hub 的 echo | 可用 |
 
