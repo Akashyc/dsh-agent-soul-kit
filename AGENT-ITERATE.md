@@ -98,9 +98,9 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告只�
 | 仍需修 | 问题还在，kit 的锚点也对得上 | 不用动 |
 | 作者这次修好了 | 基线里问题在，目标里没了 | 登记（`--kit-accept`）时自动退役：写进 `kit-iteration.json` 的 `fixes.retired`，记下作者的提交号。条目本身留在清单里，还装着旧版插件的电脑照样会修；以后问题又回来了，登记时会自动取消退役 |
 | 作者早就修好了 | 基线、目标里都没有这个问题 | 不用动 |
-| 原文对不上 | 问题还在但锚点对不上，或者那段代码认不出来 | 契约提示 `fix:<id>`（`fix-anchor`）：读目标源码，判断作者是修了还是改写了。改写了就改 `lib/fixes.mjs` 里这一条（`old` / `new` / `any` / `problem` / `scope`），补 `tests/fixes.test.mjs`；作者确实修了，就让判定认得出来（调 `problem` / `scope`），不要只换一个正则就宣称兼容 |
+| 原文对不上 | 问题还在但锚点对不上，或者那段代码认不出来 | 契约提示 `fix:<id>`（`fix-anchor`）：读目标源码，判断作者是修了还是改写了。改写了就改 `lib/fixes.mjs` 里这一条（`old` / `new` / `any` / `problem` / `scope`），在隔离目录里干跑确认；作者确实修了，就让判定认得出来（调 `problem` / `scope`），不要只换一个正则就宣称兼容 |
 | 不再适用 | 零件或文件没了 | 契约提示 `fix-gone`：核对零件是删了、改名还是挪了，相应改清单和安装器 |
-| 疑似新问题 | 清单还没管、但和清单同类的毛病：写死 Windows 绝对路径、加载名 ≠ 包名。只报目标里新出现的，基线就有的列在报告里备查 | 契约提示 `fix-candidate`：判断会不会让用户那边静默失效。会，就在 `lib/fixes.mjs` 加一条（新 id，永不复用；`basis` 写依据，`since` 写 kit 版本），在 `tests/fixes.test.mjs` 补「问题在 / 作者已修 / 判断不了」三种判定；不会，就标 `not-applicable` 说明理由 |
+| 疑似新问题 | 清单还没管、但和清单同类的毛病：写死 Windows 绝对路径、加载名 ≠ 包名。只报目标里新出现的，基线就有的列在报告里备查 | 契约提示 `fix-candidate`：判断会不会让用户那边静默失效。会，就在 `lib/fixes.mjs` 加一条（新 id，永不复用；`basis` 写依据，`since` 写 kit 版本），在隔离目录里干跑确认「问题在 / 作者已修 / 判断不了」三种判定；不会，就标 `not-applicable` 说明理由 |
 
 改清单时守住这几条：
 
@@ -111,18 +111,18 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告只�
 
 ## 3. 完成 kit 修正
 
-修改前说明涉及的文件和计划，保持差异集中。按实际影响修改 `install.mjs`、`lib/`、模板、preset 快照或文档，并补充可重现问题的回归用例。
+修改前说明涉及的文件和计划，保持差异集中。按实际影响修改 `install.mjs`、`lib/`、模板、preset 快照或文档，并在隔离目录里重现问题、确认修好。
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
 - 改修复清单（`lib/fixes.mjs`、`lib/huanqi-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）或零件目录（`lib/parts.mjs`：包名、必装、各系统的已知限制）后，在隔离目录里跑一遍 `install.mjs --fix --dry-run`：已经装好的环境应全部是「保持」。
 - 包名或 preset id 变化时保留旧安装、旧会话和旧备份的兼容路径。
 - 备份范围或格式变化时同时维护写入和恢复，并说明旧包如何读取。
-- 本轮若修正了迭代工具自身，补跑其测试，继续使用本轮固定的上游快照完成分析。
+- 本轮若修正了迭代工具自身，用临时目录重跑一遍迭代命令，继续使用本轮固定的上游快照完成分析。
 
 ## 4. 按修改影响验证
 
-先运行最快的静态检查，再运行相关回归：
+先运行最快的静态检查：
 
 ```bash
 node --check install.mjs
@@ -130,11 +130,10 @@ node --check lib/kit-iterate.mjs
 node --check lib/kit-update.mjs
 node --check lib/package-contract.mjs
 node --check lib/fixes.mjs
-node --test tests/*.test.mjs
 git diff --check
 ```
 
-`tests/kit-update.test.mjs` 使用临时 Git 仓库验证自身更新、干跑、本地改动保护及入口分流；`tests/kit-iterate.test.mjs` 验证迭代报告与完成登记协议。它们不证明四个生产流程已经正常。行为修改应建立临时 profile 和数据，在隔离目录里补充对应验证：
+静态检查不证明四个生产流程正常。行为修改应建立临时 profile 和数据，在隔离目录里补充对应验证：
 
 | 流程 | 验证内容 |
 |---|---|

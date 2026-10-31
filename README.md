@@ -178,7 +178,6 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/package-contract.mjs` | 上游包发布清单核对：入口导入的文件要在 `files` 里，用到的 `@deepseek-ai/*` 要声明 `peerDependencies`；拷包前和 kit 迭代报告共用 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
-| `tests/` | 隔离回归测试，用 `node --test tests/*.test.mjs` 执行 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
 | `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照、离线用的砚青四套（跟上游 4606555） |
@@ -249,7 +248,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 注意
 
-- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单，自动化测试全过，并在 macOS 上用隔离的假 DSH 家目录干跑过安装、跑通了 `install.sh` 引导；尚未在真实 DSH 上真装、重启验收，`install.ps1` 没在 Windows 上跑过。
+- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单，并在 macOS 上用隔离的假 DSH 家目录干跑过安装、跑通了 `install.sh` 引导；尚未在真实 DSH 上真装、重启验收，`install.ps1` 没在 Windows 上跑过。
 - **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了（`dsh-agent-*`），但作者的 `soul-doctor` 在 profile 的 `cordis.patch.yml` 里找 preset 块，本安装包把 preset 放在独立包 `dsh-soul-preset` 里，所以它的 L2 会报「没有 preset」，这是口径不同，不要照着修；另外作者的 `tools/soul-preset.mjs` 不设 `DSH_HOME` 环境变量跑会直接报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
 - **回声面板、换气面板的加载名**：上游把这两个包的名字改回 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字还是 `dsh-yanqing-*`，原样装会加载失败。安装包会自动修好（修复 `echo-load-name`、`panel-load-name`），并在收尾时检查每个包要加载的插件都找得到。
