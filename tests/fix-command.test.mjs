@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { buildPresetBundle, presetSources } from '../lib/soul-presets.mjs'
-import { FIX_IDS, FIXES } from '../lib/fixes.mjs'
+import { FIX_IDS } from '../lib/fixes.mjs'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 
@@ -35,8 +35,9 @@ function fixture(t) {
   put(source, 'kit/templates/SELF.src.md', '# SELF\n')
   const parts = {
     compaction: 'dsh-agent-compaction', pruner: 'dsh-agent-pruner', memory: 'dsh-agent-memory', 'mnemon-probe': 'dsh-agent-mnemon-probe',
-    echo: 'dsh-yanqing-echo', clock: 'dsh-agent-clock', 'model-statusbar': 'dsh-agent-model-statusbar', huanqi: 'dsh-huanqi',
-    'huanqi-panel': 'dsh-yanqing-huanqi-panel', 'mobile-adapt': 'dsh-agent-mobile-adapt', riji: 'dsh-agent-riji', splash: 'dsh-agent-splash', yantai: 'dsh-agent-yantai'
+    echo: 'dsh-agent-echo', clock: 'dsh-agent-clock', 'model-statusbar': 'dsh-agent-model-statusbar', huanqi: 'dsh-huanqi',
+    'huanqi-panel': 'dsh-agent-huanqi-panel', 'mobile-adapt': 'dsh-agent-mobile-adapt', riji: 'dsh-agent-riji', splash: 'dsh-agent-splash', yantai: 'dsh-agent-yantai',
+    'compact-region': 'dsh-agent-compact-region'
   }
   for (const [part, name] of Object.entries(parts)) {
     put(source, `plugins/${part}/package.json`, { name, type: 'module', files: ['index.js', 'client.js', 'lib', 'cordis.patch.yml'] })
@@ -45,26 +46,16 @@ function fixture(t) {
   }
   // 保留作者实际补丁锚点，同时使外围表达式语法有效。
   put(source, 'plugins/clock/client.js', 'export function render(open) { return wrap(open ? h("div", { style: panelStyle }, h(ClockPanel)) : null);\n}\n')
-  put(source, 'plugins/huanqi/lib/index.js', 'export const oldMain = true\n')
+  put(source, 'plugins/huanqi/lib/index.js', 'export const main = true\n')
   put(source, 'plugins/huanqi-panel/index.js', "export const packageName = 'dsh-huanqi'\n")
   fs.cpSync(source, path.join(nm, 'dsh-agent-soul'), { recursive: true })
-  for (const part of ['compaction', 'pruner', 'memory', 'echo', 'clock']) {
-    const name = part === 'compaction' || part === 'pruner' ? `dsh-yanqing-${part}` : parts[part]
-    fs.cpSync(path.join(source, 'plugins', part), path.join(nm, name), { recursive: true })
-    const pj = JSON.parse(fs.readFileSync(path.join(nm, name, 'package.json')))
-    put(nm, `${name}/package.json`, { ...pj, name })
-  }
-  for (const [part, name] of [['huanqi', 'dsh-huanqi'], ['compact-region', 'dsh-yanqing-compact-region']]) {
-    fs.cpSync(path.join(ROOT, 'assets/parts', part), path.join(nm, name), { recursive: true })
-    const pj = JSON.parse(fs.readFileSync(path.join(nm, name, 'package.json')))
-    put(nm, `${name}/package.json`, { ...pj, name })
-  }
+  for (const part of ['compaction', 'pruner', 'memory', 'echo', 'clock', 'huanqi', 'huanqi-panel', 'compact-region']) fs.cpSync(path.join(source, 'plugins', part), path.join(nm, parts[part]), { recursive: true })
   const bundle = buildPresetBundle(presetSources(nm, { upstreamDir: source, appAsar: null }), ['yanqing'], { summary: 'author' })
   for (const [file, text] of Object.entries(bundle.files)) put(nm, `dsh-soul-preset/${file}`, text)
   put(profile, 'package.json', { name: 'fixture-profile', private: true, dependencies: {}, dsh: { bundles: [] } })
   const config = "- id: huanqi\n  name: dsh-huanqi\n  config:\n    fullCompactOnBreaker: 'true'\n"
   put(profile, 'cordis.patch.yml', config)
-  put(home, 'dsh-soul/.install-state.json', { kitVersion: '2.17', upstream: {}, organs: JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/parts/SOURCE.json'))), presetIds: ['yanqing'], nameMap: {}, huanqiFrom: 'organs', declined: [] })
+  put(home, 'dsh-soul/.install-state.json', { kitVersion: '3.0', upstream: {}, presetIds: ['yanqing'], nameMap: {}, declined: [] })
   const run = (...args) => spawnSync(process.execPath, [path.join(kit, 'install.mjs'), '--fix', '--source', source, '--dsh-home', home, '--no-input', '--confirm-quit', ...args], {
     cwd: kit, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024,
     env: { ...process.env, DSH_HOME: home }
@@ -110,61 +101,51 @@ test('修复后校验失败自动恢复插件、配置和安装记录', (t) => {
   assert.equal(f.read('dsh-soul/.install-state.json'), state)
 })
 
-test('装前来源变化仅报告待选，明确 --fix-reinstall 后才换回主仓', (t) => {
+test('装的是旧包名（3.0 的 dsh-yanqing-*）时 --fix 不动包名，让用户先 --update', (t) => {
   const f = fixture(t)
-  put(f.source, 'plugins/huanqi/lib/index.js', "export const command = () => runCommand('/compact-region 1 2')\n")
-  const before = fs.readFileSync(path.join(f.nm, 'dsh-huanqi/lib/index.js'), 'utf8')
-  let result = f.run('--fix-only', 'src-huanqi-organs', '--dry-run')
-  assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.match(result.stdout, /待选/)
-  assert.equal(fs.readFileSync(path.join(f.nm, 'dsh-huanqi/lib/index.js'), 'utf8'), before)
-  result = f.run('--fix-only', 'src-huanqi-organs', '--fix-reinstall', 'src-huanqi-organs')
-  assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.equal(fs.readFileSync(path.join(f.nm, 'dsh-huanqi/lib/index.js'), 'utf8'), "export const command = () => runCommand('/compact-region 1 2')\n")
+  fs.renameSync(path.join(f.nm, 'dsh-agent-compaction'), path.join(f.nm, 'dsh-yanqing-compaction'))
+  const profile = fs.readFileSync(path.join(f.profile, 'package.json'), 'utf8')
+  const result = f.run()
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout, /dsh-yanqing-compaction → dsh-agent-compaction/)
+  assert.match(result.stdout, /请用 --update/)
+  assert.match(result.stdout, /还没有改任何文件/)
+  assert.equal(fs.readFileSync(path.join(f.profile, 'package.json'), 'utf8'), profile)
 })
 
-test('包名修复可以撤回，未同意重装时保留包名和依赖', (t) => {
+test('organs 时代的参数明确报已去掉', (t) => {
   const f = fixture(t)
-  put(f.profile, 'pnpm-lock.yaml', 'dependencies:\n  dsh-yanqing-compaction:\n    specifier: file:node_modules/dsh-yanqing-compaction\n')
-  const profile = fs.readFileSync(path.join(f.profile, 'package.json'), 'utf8')
-  let result = f.run('--fix-only', 'name-compaction', '--fix-revert', 'name-compaction', '--dry-run')
-  assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.match(result.stdout, /待选/)
-  assert.equal(fs.readFileSync(path.join(f.profile, 'package.json'), 'utf8'), profile)
-  result = f.run('--fix-only', 'name-compaction', '--fix-revert', 'name-compaction', '--fix-reinstall', 'name-compaction')
-  assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.equal(fs.existsSync(path.join(f.nm, 'dsh-yanqing-compaction')), false)
-  for (const file of ['package.json', 'index.js', 'cordis.patch.yml']) {
-    assert.deepEqual(fs.readFileSync(path.join(f.nm, 'dsh-agent-compaction', file)), fs.readFileSync(path.join(f.source, 'plugins/compaction', file)))
+  for (const arg of ['--organs-source', '--fix-reinstall']) {
+    const result = f.run(arg, 'x')
+    assert.equal(result.status, 2)
+    assert.match(result.stdout, /4\.0 去掉了/)
   }
-  assert.ok(JSON.parse(fs.readFileSync(path.join(f.profile, 'package.json'))).dependencies['dsh-agent-compaction'])
-  assert.equal(fs.readFileSync(path.join(f.profile, 'pnpm-lock.yaml'), 'utf8'), 'dependencies:\n  dsh-agent-compaction:\n    specifier: file:node_modules/dsh-agent-compaction\n')
 })
 
 test('全部修复跳过并撤回后，插件文件等于作者原版', (t) => {
   const f = fixture(t)
   let result = f.run()
   assert.equal(result.status, 0, result.stdout + result.stderr)
-  result = f.run('--fix-skip', FIX_IDS.join(','), '--fix-reinstall', FIXES.filter((fix) => fix.phase === 'pre').map((fix) => fix.id).join(','))
+  result = f.run('--fix-skip', FIX_IDS.join(','))
   assert.equal(result.status, 0, result.stdout + result.stderr)
   for (const [part, pkg, file] of [
     ['clock', 'dsh-agent-clock', 'client.js'],
     ['compaction', 'dsh-agent-compaction', 'package.json'],
     ['pruner', 'dsh-agent-pruner', 'package.json'],
-    ['huanqi', 'dsh-huanqi', 'lib/index.js']
+    ['huanqi', 'dsh-huanqi', 'lib/index.js'],
+    ['compact-region', 'dsh-agent-compact-region', 'index.js'],
   ]) {
     assert.deepEqual(fs.readFileSync(path.join(f.nm, pkg, file)), fs.readFileSync(path.join(f.source, 'plugins', part, file)))
   }
-  assert.deepEqual(fs.readFileSync(path.join(f.nm, 'dsh-agent-compact-region/index.js')), fs.readFileSync(path.join(ROOT, 'assets/parts/compact-region/index.js')))
   assert.equal(fs.readFileSync(path.join(f.profile, 'cordis.patch.yml'), 'utf8'), f.config)
 })
 
-test('2.17 已打补丁的安装迁移到 3.0 后，干跑没有文件修复计划', (t) => {
+test('3.0 已打补丁的安装换 4.0 kit 后，干跑没有文件修复计划', (t) => {
   const f = fixture(t)
   let result = f.run()
   assert.equal(result.status, 0, result.stdout + result.stderr)
   const state = JSON.parse(f.read('dsh-soul/.install-state.json'))
-  state.kitVersion = '2.17'
+  state.kitVersion = '3.0'
   delete state.fixRecords
   delete state.fixes
   put(f.home, 'dsh-soul/.install-state.json', state)
@@ -172,7 +153,7 @@ test('2.17 已打补丁的安装迁移到 3.0 后，干跑没有文件修复计�
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.match(result.stdout, /这次要动的 0 条/)
   assert.match(result.stdout, /没有要修的/)
-  assert.equal(JSON.parse(f.read('dsh-soul/.install-state.json')).kitVersion, '2.17')
+  assert.equal(JSON.parse(f.read('dsh-soul/.install-state.json')).kitVersion, '3.0')
 })
 
 test('已登记 kit 文件可换回作者修复，用户手改过则保留', (t) => {
