@@ -48,7 +48,6 @@ install.sh / install.ps1     一行装的引导（macOS / Windows）：找 node�
 install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
 lib/                         install.mjs 用的模块：零件目录与系统限制（parts）、方案与问答（setup）、系统差异（platform）、
                              修复清单、Soul preset 生成与迁移、路径自动定位、人设规矩、发布清单核对、卸载规划、kit 迭代
-tests/                       回归测试：node --test tests/*.test.mjs
 setups/                      方案：每个子文件夹一套
   大肥鱼/
     setup.json               名字、称呼、硬线、人设类型、零件、preset、心跳
