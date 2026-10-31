@@ -420,7 +420,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（20 条，每条有
 ## 十四、平台说明
 
 - **一行装**：macOS 用 `install.sh`（`curl … | bash`），Windows 用 `install.ps1`（`irm … | iex`），两边只负责找 node、放好安装包、在终端里启动同一份 `install.mjs`。Mac 上的问答从 `/dev/tty` 读，`curl | bash` 也能一问一答；`install.ps1` 只用 ASCII 字符（Windows PowerShell 5.1 读管道来的脚本可能按本地代码页解码），出错时不关窗口。4.0 的 `install.ps1` 还没在 Windows 上真跑过。
-- **各系统用不了的零件**：见 README「两种装法」那张表（model-statusbar 只能在 Windows 上用；yantai 的「速达」只有 Windows 有；Windows 桌面打包版的换气可能 import 失败，上游 issue #5）。脚本按 `process.platform` 提示，不拦。
+- **各系统用不了的零件**：见 README「两种装法」那张表（model-statusbar 只能在 Windows 上用；yantai 的「速达」只有 Windows 有。换气在 Windows 桌面版上也能装：作者 2026-10-31 更正了「桌面版必然失败」的说法，它是新增型零件，走 insert，缺的宿主包由 DSH 从 app.asar 里提供）。脚本按 `process.platform` 提示，不拦。
 - **不写死路径**：安装包里没有任何一台电脑的路径。写给人和 agent 读的文件（权威源册、自我层、要贴进新会话的话）里，用户目录下的路径写成 `$HOME/…`，zsh、bash 和 Windows 上 DSH 用的 PowerShell 都认；心跳脚本按相对自己的位置找记忆中枢。必须是绝对路径的只有交给操作系统或别的程序执行的几处（launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`），安装时在这台电脑上现算，迁移恢复时换成新电脑的。
 
 - **Boss 那台 Mac 和安装包装出来的有两处不同**：心跳是第一次手工安装时建的 `memory/hub/heartbeat.sh`（launchd 用 `/bin/bash` 调它，日志同样写进 `hub/heartbeat/`），安装包现在生成的是 `soul/60-工具/heartbeat.mjs`，效果一样；mnemon-probe 的补丁是早期手工写法，脚本认得，不会重打。排查那台 Mac 的心跳时看 `heartbeat.sh` 和 `~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist`。
