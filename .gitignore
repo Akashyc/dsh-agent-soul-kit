@@ -1,4 +1,5 @@
 .DS_Store
-logs
+logs/
 backups/
 TMP/
+tests/
