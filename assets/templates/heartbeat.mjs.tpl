@@ -6,8 +6,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
-const HUB = {{HUB_JSON}}
+// 记忆中枢相对本脚本的位置（安装时算好），不写绝对路径
+const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), {{HUB_REL_JSON}})
 const LOGDIR = path.join(HUB, 'heartbeat')
 fs.mkdirSync(LOGDIR, { recursive: true })
 

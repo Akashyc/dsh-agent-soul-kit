@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileFixes, detectFix, planFile, scanCandidates, referencedPackageName } from '../lib/fixes.mjs'
+import { fileFixes, detectFix, planFile, scanCandidates } from '../lib/fixes.mjs'
 import { beginFixTransaction } from '../lib/fix-transaction.mjs'
 import { planManagedText, changedLines, revertConfigLines, hasMissingApiKey } from '../lib/fix-records.mjs'
 import { fixQuotedBooleans } from '../lib/config-sanitize.mjs'
 
 const names = { memory: 'dsh-agent-memory', clock: 'dsh-agent-clock' }
-const partNames = { memory: ['dsh-agent-memory'], clock: ['dsh-agent-clock'], echo: ['dsh-yanqing-echo'], 'huanqi-panel': ['dsh-yanqing-huanqi-panel'] }
+const partNames = { memory: ['dsh-agent-memory'], clock: ['dsh-agent-clock'], echo: ['dsh-agent-echo'], 'huanqi-panel': ['dsh-agent-huanqi-panel'] }
 const fixes = fileFixes({ runtime: null, names, partNames, dshHome: '/fixture' })
 const memory = fixes.find((fix) => fix.id === 'memory-home')
 
@@ -99,13 +99,6 @@ test('事务回滚还原符号链接指向的真实包内容', (t) => {
 test('模型路由相同但会话报 no API key 时仍能识别', () => {
   assert.equal(hasMissingApiKey('compaction failed: no API key configured'), true)
   assert.equal(hasMissingApiKey('compaction succeeded'), false)
-})
-
-test('包名以读取到的上游引用为准，不能强制 kit 写死的新名', () => {
-  const known = ['dsh-new', 'dsh-old']
-  assert.equal(referencedPackageName('compaction', 'dsh-old', ['name: dsh-old'], known), 'dsh-old')
-  assert.equal(referencedPackageName('compaction', 'dsh-old', ['name: dsh-new'], known), 'dsh-new')
-  assert.equal(referencedPackageName('compaction', 'dsh-old', ['name: dsh-other'], known), null)
 })
 
 test('扫描覆盖 macOS 路径、client id、模型路由、缺包和 schema 类型', () => {

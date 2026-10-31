@@ -11,10 +11,10 @@
 
 1. 称呼用户按用户自己说的来；不知道就先问。用「大肥鱼」方案时，用户是 **Boss**。本手册涉及本机安装与数据操作的阶段开始前，用一两句话告诉用户要做什么，等用户确认后再动手。kit 源码迭代的授权与验证范围见 `AGENT-ITERATE.md`。
 2. 只按本手册做。脚本报错就停下，把输出原文给用户看，不要自己绕过或手工补救。每次运行的输出也会存进本文件夹的 `logs/`。
-3. **不要**用 `dsh plugin add` 安装，也**不要**运行仓库作者的 `install-desktop.ps1`：桌面版 profile 不接受 CLI 安装，作者脚本也不包含这里的修正。
+3. **不要**用 `dsh plugin add` 安装，也**不要**运行仓库作者的 `install-desktop.ps1`：桌面版 profile 不接受 CLI 安装，作者脚本只拷本体、不装零件，也不包含这里的修正。用户想在自己的终端里一行装，用本安装包的 `install.sh`（macOS）/ `install.ps1`（Windows），命令见 README「怎么用」。
 4. 作者仓库自带的安装与体检工具**不是给本安装包用的**，不要拿它们的结论改配置。本手册说的 `install.mjs`、`AGENT-INSTALL.md` 一律指安装包文件夹里的这两份：
    - `tools/soul-one-shot.mjs --fix` 只认旧版的 `.agent-presets` 目录，在 DSH NEXT 上会把已经接管的压缩 / 裁剪误报成「没接管」；
-   - 2026-10-28 起作者仓库根目录也有同名的 `install.mjs`、`AGENT-INSTALL.md`，连同 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`，管的是作者本机的「砚青」preset 和 `dsh-yanqing-*` 零件。这些零件不在仓库里，没设 `DSH_HOME` 时默认家目录还是作者的 `D:/AI/dsh/home`。拿它们查本安装包装好的 profile，会固定报 `L1/parts`、`L2/presets`、`L2/threeparts`、`L2/presetresolve` 失败，这是口径不同，不是没装好。它的 `apply` 会因 `L1/parts` 不过而拒绝动手；直接跑 `soul-preset.mjs build --write` 则会把引用了不存在零件的砚青 preset 写进配置。
+   - 2026-10-28 起作者仓库根目录也有同名的 `install.mjs`、`AGENT-INSTALL.md`，连同 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`，管的是 profile 里直接写 preset 块的装法。包名现在和本安装包一致（`dsh-agent-*`），但本安装包把砚青四套放在独立包 `dsh-soul-preset` 里，拿作者的 doctor 查会固定报 `L2/presets`、`L2/threeparts` 失败，这是口径不同，不是没装好；直接跑 `soul-preset.mjs build --write` 会在 profile 里再插一份同 id 的四套。作者的 `soul-preset.mjs` 不设 `DSH_HOME` 环境变量时会直接报 ReferenceError（第 40 行用了第 51 行才定义的 `argOf`）。
 5. **不要**新建 `~/.mnemon` 目录：dsh-mnemon 把它当默认全局目录，凭空建出来可能让它换地方读写。
 6. 要退出、重开 DSH，都请用户来操作，并等用户确认已经做完。脚本真跑（不带 `--dry-run`）时 DSH 必须完全退出。
 7. **全新安装的设定只能由用户来定**：名字、称呼、硬线、人设、要不要哪个零件，一律问用户，不要替用户编。用户说「随便」「默认」的，就用问题清单里的默认值，并告诉用户用了哪个。
@@ -24,9 +24,9 @@
 | 项 | 内容 |
 |---|---|
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
-| 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板，包名 dsh-yanqing-echo）。按上游零件清单标 ✓ 的定，不能跳过 |
-| 可选零件 | Ⅰ/Ⅱ 层：mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板，包名 dsh-yanqing-huanqi-panel，要和 huanqi 一起装）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门）。装哪些按方案；大肥鱼方案装前五个，后五个默认不勾 |
-| Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include，并核对 `soul-version.json` 哈希。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青 |
+| 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；Soul preset 调用的 compact-region 跟着装。按作者 2026-10-31 定的「全局必装」，不能跳过 |
+| 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务；**macOS 上不可用**）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门；macOS 上「速达」用不了）。装哪些按方案；大肥鱼方案装前两个，面板件默认不勾。各系统的已知限制见 README「两种装法」那张表，脚本在问答和干跑里会按这台电脑的系统提示 |
+| Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青 |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
@@ -44,14 +44,16 @@
 ```
 README.md                    给人看的说明
 AGENT-INSTALL.md             本手册
+install.sh / install.ps1     一行装的引导（macOS / Windows）：找 node、放好安装包、在终端里启动 install.mjs
 install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
-lib/                         install.mjs 用的模块：Soul preset 生成与迁移、路径自动定位、人设规矩、发布清单核对、卸载规划、kit 迭代
+lib/                         install.mjs 用的模块：零件目录与系统限制（parts）、方案与问答（setup）、系统差异（platform）、
+                             修复清单、Soul preset 生成与迁移、路径自动定位、人设规矩、发布清单核对、卸载规划、kit 迭代
 tests/                       回归测试：node --test tests/*.test.mjs
 setups/                      方案：每个子文件夹一套
   大肥鱼/
     setup.json               名字、称呼、硬线、人设类型、零件、preset、心跳
     00-authority.md          权威源册（手写）
-    SELF.src.md.tpl          自我层模板（手写；{{HUB}} 由脚本换成本机路径）
+    SELF.src.md.tpl          自我层模板（手写；{{HUB}} 由脚本换成本机路径，写成 $HOME/… 不带用户名）
     大肥鱼-声音.md            人设完整版
   <全新安装存下的方案>/        结构一样，文件由模板生成，可以直接改
 assets/
@@ -61,8 +63,6 @@ assets/
   presets/minimal.patch.yml  官方「极简」预设的快照（同上）
   presets/cordis.patch.yml   官方「Cordis」预设的快照（同上）
   presets/preset-yanqing*.yml、_shared/   上游砚青四套的快照（离线安装时用）
-  presets/soul-version.json  作者给砚青四套记的哈希和契约版本（离线时拿它核对）
-  parts/                     零件仓 organs 的快照：换气、compact-region（离线时用，提交号见 parts/SOURCE.json）
 logs/                        每次运行的输出（脚本自动建，可以删）
 backups/                     --backup、--uninstall 打出的备份包（迁移时连同文件夹一起拷走）
 ```
@@ -80,7 +80,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 **A2. dsh-mnemon（建议装）。** 这套架构「可复用结论」那一层靠它，mnemon-probe 也只有装了它才有用。没装的话问用户要不要先在 DSH 插件市场装上、随便聊一句让它生成数据目录；不装也能继续，全新安装时 mnemon-probe 不会出现在选项里，自我层里也不写 mnemon 那一节。
 
-**A3. 一个 node（18 以上）。** 不用手动找路径。脚本自己按「DSH 自带 → 当前进程 → PATH → 常见安装位置」的顺序找；当前这个版本不够时会自动换一个合格的、把自己重跑一遍。心跳、MCP 的 echo、开机自启这些要长期用的配置，优先写 DSH 自带的那个 node —— 它不依赖用户的 PATH，DSH 换版本重跑一次安装就会跟着更新。
+**A3. 一个 node（18 以上）。** 不用手动找路径。脚本自己按「`DSH_NODE` → DSH 自带（按本机架构挑 arm64 / x64）→ 当前进程 → PATH → 常见安装位置」的顺序找；当前这个版本不够时会自动换一个合格的、把自己重跑一遍。心跳、MCP 的 echo、开机自启这些要长期用的配置，优先写 DSH 自带的那个 node —— 它不依赖用户的 PATH，DSH 换版本重跑一次安装就会跟着更新。
 
 想先确认一下：
 
@@ -98,7 +98,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 都找不到就装一个 18 以上的 node（`brew install node` / nodejs.org / `apt install nodejs`），或者用 `--node <路径>` 直接指定。不要用临时目录里的 node。
 
-**A4. 把整个文件夹放到一个固定位置**（例如「文稿」或「文档」下）。路径里有空格、有中文都没关系。
+**A4. 把整个文件夹放到一个固定位置**（例如「文稿」或「文档」下；用户用 README 的一行装命令时，`install.sh` / `install.ps1` 会放到「文稿 / 文档」下的 `dsh-agent-soul-kit`，并替你做完 A3）。路径里有空格、有中文都没关系。
 
 **A5. 网络。** 脚本要从 GitHub 下载源码（约 16MB）。它会自动用 `HTTPS_PROXY` 等环境变量或系统代理（macOS 读系统设置，Windows 读 IE 代理设置）。下载失败时二选一：
 
@@ -128,7 +128,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
    - **硬线**：从五条内置硬线里勾（把每条的规则念给用户听），再问要不要自己加；
    - **人设**：不设 / 写几句说话风格 / 再附一份完整人设文件；
    - **运行**：多会话、上下文窗口、生成哪几个 Soul preset、默认用哪个、心跳开不开、几点；
-   - **零件**：必装的四个直接告诉用户；可选的十个逐个问（分一组两次也行），每个都把「装了有什么、不装会怎样」说清楚。后五个是面板件，默认值是不勾；model-statusbar 要先确认用户本机有没有本地模型服务，riji / yantai 的数据源（日记目录、账本、memq）由安装流程自己接好；
+   - **零件**：必装的七个（compaction、pruner、memory、echo、huanqi、huanqi-panel、mcp-hub）直接告诉用户；可选的七个逐个问（分一组两次也行），每个都把「装了有什么、不装会怎样」说清楚。问题清单里带 `platform` 的选项是这台电脑的系统上有已知限制的零件（`unsupported` 装了也用不了，例如 macOS 上的 model-statusbar；`partial` 部分功能用不了），问之前把 `why` 念给用户听，默认别勾 `unsupported` 的。后五个是面板件，默认值是不勾；model-statusbar 要先确认用户本机有没有本地模型服务，riji / yantai 的数据源（日记目录、账本、memq）由安装流程自己接好；
    - **保存**：方案名（默认和 agent 名字一样）。
 3. 把回答写成一个 JSON 文件（建议放在 `logs/answers-<名字>.json`），键名就是题目的 `id`。用户没表态的题可以不写，脚本按默认值处理。完整人设文件写它的路径（`personaFile`），脚本会原样拷进方案和书房。
 
@@ -139,7 +139,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 回答缺项或不合规时，脚本会在「选方案」那一步列出每一处问题（比如没填名字、选了 huanqi-panel 没选 huanqi、没装 dsh-mnemon 却选了 mnemon-probe），就着问题回去问用户，改好再干跑。通过后，把「方案」那一段总结原样给用户看，再报：装的是哪个提交、和安装包验证过的版本是否一致、「需要留意」里的每一条。
 
-**B4. 真装**：用户确认后，请用户**完全退出 DSH**（macOS 按 `Cmd+Q`，点红色按钮只是关窗口；Windows 连托盘图标也要右键退出），然后去掉 `--dry-run` 再跑同一条命令。
+**B4. 真装**：用户确认后，请用户**完全退出 DSH**（macOS 按 `Cmd+Q`，点红色按钮只是关窗口；Windows 连托盘图标也要右键退出），然后去掉 `--dry-run` 再跑同一条命令。用户在 macOS 的真终端里自己跑时，DSH 还开着脚本会问要不要帮他退出（AppleScript，和 Cmd+Q 一样）；agent 的终端不是真终端，不会走这一步。
 
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
@@ -153,10 +153,10 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 |---|---|---|
 | 0 | 预检：node 版本、找 DSH 家目录和 profile、DSH 是否已退出 | 前提不满足就停，什么都不改 |
 | 1 | 选方案：读现成方案并校验，或校验回答、生成新方案并存进 `setups/` | 装什么、装成谁，在动手前定死 |
-| 2 | 下载并检查上游源码（缺文件、零件改成不认识的名字就停）；按方案生成 Soul preset 并校验 | 源码不对就停 |
+| 2 | 下载并检查上游源码（缺文件、零件改成不认识的名字就停；所有零件都取自主仓 `plugins/`，包名照上游原样）；选了这台系统上用不了的零件写进「需要留意」；按方案生成 Soul preset 并校验 | 源码不对就停 |
 | 3 | 备份 `package.json`、`cordis.patch.yml` 为 `*.bak-<时间>-pre-soul-kit` | 出问题能还原 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频） | 桌面版只能这样装 |
-| 5 | 修复（kit 修复清单 `lib/fixes.mjs`，3.0 起）：逐条看问题在作者这一版里还在不在，还在才修。包括 mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单目录、memory 相对路径与上下文水位、yantai / riji 的书房和日记路径、echo / 换气面板的加载名与自建一节、换气和 compact-region 的诊断日志路径与两处行为修复、换气配置的字符串布尔。路径类修复都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧写法会换成现行写法。输出里每条一行，「需人工核对」「本机改过」的会写进「需要留意」 | 见第十一节 3、4、16、17、23 和第九节「修复」 |
+| 5 | 修复（kit 修复清单 `lib/fixes.mjs`）：逐条看问题在作者这一版里还在不在，还在才修。包括 mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单目录、memory 相对路径与上下文水位、yantai / riji 的书房和日记路径、echo / 换气面板的加载名与自建一节、echo 面板在 macOS 上找 node、echo 面板 / 换气 / compact-region 的诊断日志路径与行为修复、换气配置的字符串布尔。路径类修复都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧写法会换成现行写法。输出里每条一行，「需人工核对」「本机改过」的会写进「需要留意」 | 见第十一节 3、4、16、17、23 和第九节「修复」 |
 | 6 | 生成 `node_modules/dsh-soul-preset`：按方案生成上游砚青四套；移除旧 Flash，旧会话与默认入口迁到砚青 PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`）；已有就不动 | 记忆检索走常驻服务 |
@@ -226,15 +226,15 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 **什么时候更新**：作者 GitHub 上有新提交时；DSH 本身升级后核对插件与砚青四套的兼容性。安装、更新、恢复和完整修复会清理旧 Flash；`--fix-only` 只处理指定条目。迁移前检查普通与 zstd 会话，无法读取时停止，不直接删除旧入口。
 
 **更新会动的**：
-- profile 里的本体、已装的零件（只换有变化的，换上作者原版）、dsh-soul-preset（只重新生成原来装的那几个 preset）；换完自动跑「修复」一步（见本节末尾「修复」）。compact-region 从零件仓 `cyanwell/dsh-agent-organs` 取；换气取哪个仓库由修复清单 `src-huanqi-organs` 判定（主仓那份不调 `/compact-region` 就取 organs），其余零件从主仓取；
-- **零件改名时自动迁移**：装新名字的目录、删旧目录（先整份备份），`package.json` 的 bundles 原位换名、dependencies 换名，三个锁文件（`pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml`）同步换名；
-- **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补。必装零件和 Soul preset 要调用的零件（压缩三件套 compaction、pruner、compact-region）不问、不能跳过，本机没有就补上，缺了 preset 加载失败、DSH 起不来；
+- profile 里的本体、已装的零件（只换有变化的，换上作者原版）、dsh-soul-preset（只重新生成原来装的那几个 preset）；换完自动跑「修复」一步（见本节末尾「修复」）。所有零件都从主仓 `plugins/` 取（作者 2026-10-31 弃用了零件仓 organs）；安装包 3.0 及以前从 organs 装的换气、compact-region，这次换成主仓那份，报告里标「以前从零件仓 organs 装的」，不算本机改过；
+- **零件改名时自动迁移**（例如 3.0 装的 `dsh-yanqing-compaction`、`dsh-yanqing-echo` 等 → 上游现在的 `dsh-agent-*`）：装新名字的目录、删旧目录（先整份备份），`package.json` 的 bundles 原位换名、dependencies 换名，三个锁文件（`pnpm-lock.yaml`、`node_modules/.pnpm/lock.yaml`、`node_modules/.modules.yaml`）同步换名；
+- **安装包后来加的零件**：在终端里跑，脚本会逐个问装不装；agent 跑时，干跑报告里会写「会装上；不要就加 --skip-part <零件>」，问过用户再决定加不加。拒掉的会记进安装记录，以后更新不再补。必装零件和 Soul preset 要调用的零件（压缩三件套 compaction、pruner、compact-region）不问、不能跳过，本机没有就补上，缺了 preset 加载失败、DSH 起不来；4.0 起换气、换气面板、mcp-hub 也是必装，以前拒掉过的这次照样补上；
 - **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
 - **修复清单的跳过设置照安装记录做**（`fixSkip`）：例如压缩摘要模型 `preset-summary-model` 默认去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`、跟会话模型走（见第十一节 25）；要照作者原样加 `--fix-skip preset-summary-model`（2.17 的 `--summary-model author` 也还认），记进安装记录，以后更新照做；
-- **作者契约版本**：上游的 `soul-version.json` 里有一行 `contracts`。作者原话：「零件版本怎么变，只要契约版本没变，就不需要迁移器」。脚本把它记进安装记录，下次更新拿来比；干跑里出现「★ 作者的契约版本变了」，就是要迁移的大更新，先停下，读上游 README 的更新记录，跟用户确认迁移办法再真跑。同一处还会核对砚青四套和作者记的哈希，对不上会写进「需要留意」；
+- **作者的 `soul-version.json`**：作者 2026-10-31 把它删了，安装包 4.0 不再核对砚青四套的哈希和契约版本；更新时以上游 README 的更新记录和干跑报告为准。
 - **怎么分清本机改的和上游改的**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），本体和零件的变化分成「上游改的」和「本机改过、这次会换回上游版的」两类列出来；中枢脚本也按它判断本机改没改过。取不到基准时脚本会写进「需要留意」，这时报告里的变化分不清来源，中枢里和本体一起被改过的脚本也会被当成没改过换掉。
 
 **更新不动的**：方案（不用选，也不会重新生成书房和自我层）、书房（含账本 `02-墨.jsonl`、权威源册、人设）、`SELF.src.md`、主配置 `memory/hub/echo.config.json`、中枢里本机改过的脚本、mcp-hub 清单里已有的 echo、心跳、默认 preset（除非加 `--default-preset`）、用户拒掉的零件。
@@ -247,13 +247,13 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 4. 请用户打开 DSH，按阶段 C 的 C1、C2（有新装 mcp-hub 的再加 C9）验，再让 agent 调用 `agent_soul_check`（memory 参数给 `<DSH 家目录>/dsh-soul/memory`，不是下面的 hub），期望 0 错。
 5. 有问题就回滚：更新前的整份拷贝在 `<DSH 家目录>/dsh-soul/_backup/<时间>-update/`，里面有 `还原方法.txt`。
 
-**要停下问用户的情况**：干跑里出现「★ 作者的契约版本变了」（脚本不会自己停，你要停）。**脚本会自己停的**：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件没列进 `files`，照清单装上就缺文件）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包验证过的提交>` 装回验证过的版本；要跟上就得先更新安装包。
+**脚本会自己停的**：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件没列进 `files`，照清单装上就缺文件）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包对照过的提交>` 装回对照过的版本；要跟上就得先更新安装包。
 **干跑提示「本机代码看起来手工把上游作者的称呼换成了 …」时**：说明以前手工改过名、安装记录里没记。照提示加 `--rename 爀曦=<称呼>` 重新干跑，确认「本机改过」里不再有改称呼的文件，再真跑。
 **要报给用户但不用停的情况**：「修复」一步里「需人工核对」（作者改写了那段代码，kit 判断不了问题还在不在，没修）和「本机改过」（那个文件被手改过，整个没动）的条目；「作者已修」「改用作者修复」的条目也报一句，说明这几条 kit 不再管了；某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 源文件缺失或 include 未展开的提醒。
 
-### 修复（`--fix`，3.0 起）
+### 修复（`--fix`）
 
-kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有固定 id）。安装、更新、恢复装完都会自动跑「修复」一步；想单独查、单独修时用 `--fix`。
+kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（20 条，每条有固定 id）。安装、更新、恢复装完都会自动跑「修复」一步；想单独查、单独修时用 `--fix`。
 
 **它怎么判断**：每条修复都带「问题长什么样」。先看作者这一版的原文里问题还在不在，再看本机已装的文件：
 
@@ -266,22 +266,22 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 | 判断不了（作者改写了那段） | — | 不修，「需人工核对」 |
 | — | 本机手改过 | 整个文件不动，「本机改过」 |
 
-**`--fix` 对照的是已装那一版**：上游钉在安装记录里的主仓和 organs 提交号（离线主仓用 `--source <已装那一版的源码>`，organs 用 `--organs-source <对应版本源码>`），作者新改的东西要等 `--update` 才进来。`--fix` 不动本体、不补装零件、不碰中枢脚本和其它配置，只做修复清单里的事（另外按需重新生成 dsh-soul-preset）。
+**`--fix` 对照的是已装那一版**：上游钉在安装记录里的主仓提交号（离线用 `--source <已装那一版的源码>`），作者新改的东西要等 `--update` 才进来。`--fix` 不动本体、不补装零件、不改包名、不碰中枢脚本和其它配置，只做修复清单里的事（另外按需重新生成 dsh-soul-preset）。安装包 3.0 及以前装的（零件还是 `dsh-yanqing-*`、换气和 compact-region 来自 organs），`--fix` 会停下让你先跑一次 `--update`。
 
 **步骤**：
 
 1. 干跑：`install.mjs --fix --dry-run`。没有要修的会直接说「没有要修的」，并列出每条的结论。
-2. 有要修的：把「修复」那一步的输出报给用户——哪几条要打上、换写法、撤掉，有没有「需人工核对」「本机改过」「待选」。
+2. 有要修的：把「修复」那一步的输出报给用户——哪几条要打上、换写法、撤掉，有没有「需人工核对」「本机改过」。
 3. 完全退出 DSH 后，在用户已授权的范围内去掉 `--dry-run` 真跑；改动的文件先整份备份到 `<DSH 家目录>/dsh-soul/_backup/<时间>-fix/`。
 4. 修后检查 JavaScript 语法、YAML 和加载契约；失败自动还原本次涉及的包、配置、锁文件和安装记录。备份保留在 `transaction/manifest.json` 对应目录。强制杀进程或断电无法运行退出处理器，可按该清单人工恢复。
 5. 重开 DSH，新建会话确认 preset，再让 agent 调用 `agent_soul_check`。
 
 **参数**（id 用逗号隔开；`--fix --dry-run` 的输出里每条都写着 id）：
 
-- `--fix-skip <id,…>`：跳过这几条，已装的 kit 修复会撤掉、换回作者原文；记进安装记录，以后安装、更新、`--fix` 都跳过。`--fix-skip none` 清空。包名条目也可跳过；保留作者原包名时，如果作者 preset 仍引用另一个名字，报告会保留加载缺包提示。安装、更新、恢复也能用。
+- `--fix-skip <id,…>`：跳过这几条，已装的 kit 修复会撤掉、换回作者原文；记进安装记录，以后安装、更新、`--fix` 都跳过。`--fix-skip none` 清空。安装、更新、恢复也能用。
 - `--fix-revert <id,…>`：撤掉这几条 kit 修复，并记进跳过清单。
-- `--fix-only <id,…>`：这次只处理这几条，装前、文件、配置和 preset 都按此筛选；同一个文件里未选条目的旧写法也保持现状。
-- `--fix-reinstall <id,…>`：装前条目（`src-huanqi-organs` 换气取哪个仓库、`name-*` 零件包名）和已装的不一样时，现在就重装对应零件。不加这个参数，终端里会逐条问；agent 跑时干跑报告里会写「待选」，问过用户再决定加不加，不重装就留到下次 `--update`。
+- `--fix-only <id,…>`：这次只处理这几条，文件、配置和 preset 都按此筛选；同一个文件里未选条目的旧写法也保持现状。
+- 4.0 去掉了 `--fix-reinstall`、`--organs-source`：取源和包名不再是修复条目（作者弃用了 organs、包名统一了），包名迁移走 `--update`。
 
 安装记录的 `fixRecords` 保存文件/preset 的作者原文和 kit 结果，配置仅保存修改过的行；撤回须与这些证据或旧作者原文匹配。没有记录的旧版布尔配置无法推断原来的引号/空白，不伪造还原内容。
 
@@ -346,7 +346,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 | 13 | 日志里一串「重复加载 / 路由重复」警告 | 在插件市场把某个插件关了又开，市场会用热加载再挂一份 | 重启 DSH 就会消失，与本安装无关 |
 | 14 | Windows 建软链接失败 | 普通用户没有建软链接的权限 | 改写成只含 memory 一项的指针文件 |
 | 15 | Windows 上 PowerShell 脚本里的中文路径乱码；计划任务插电池时不跑 | PowerShell 5.1 读无 BOM 脚本按本地代码页解码；计划任务默认「用电池时不启动」 | 注册脚本带 BOM；计划任务设成用电池也跑、错过补跑 |
-| 16 | 上游 v2.0.0 起回声面板、换气面板加载失败（「应用无法启动」或面板空白） | 作者把两个包改名为 `dsh-yanqing-echo`、`dsh-yanqing-huanqi-panel`，面板 id 也跟着改了，但它们 `cordis.patch.yml` 里要加载的 `name` 还是旧的 `dsh-agent-*`；DSH 按这个名字去 node_modules 找包，找不到 | 本机修：把那一行改成和包名一致；校验阶段会检查每个包要加载的插件都找得到 |
+| 16 | 上游 v2.0.0 起回声面板、换气面板加载失败（「应用无法启动」或面板空白） | 作者把两个包改名为 `dsh-yanqing-echo`、`dsh-yanqing-huanqi-panel`，面板 id 也跟着改了，但它们 `cordis.patch.yml` 里要加载的 `name` 还是旧的 `dsh-agent-*`；DSH 按这个名字去 node_modules 找包，找不到。2026-10-30 起反过来：包名改回 `dsh-agent-*`，加载名还写着 `dsh-yanqing-*` | 本机修：把那一行改成和包名一致；校验阶段会检查每个包要加载的插件都找得到 |
 | 17 | mcp-hub 找不到清单 | 它找 `$DSH_HOME/mcp-hub/servers.json`，环境变量里没有 DSH_HOME 时退到作者机器的 `D:\AI\dsh\home` | 本机改：默认值换成运行时找到的 DSH 家目录 |
 | 18 | 作者的常驻检索服务 `echo-svc.mjs` 在 Mac 上用不了 | 它用 Windows 命名管道 | 不启动它；`memq` 连不上会自动退回直接读，快路子走 mcp-hub 的 echo |
 | 19 | 下载报 `SSL_ERROR_SYSCALL` / `socket disconnected` | 代理那一刻连不上 GitHub | 过一会儿重跑，或换代理；还不行就浏览器下载源码，用 `--source` |
@@ -356,6 +356,9 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 | 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`yanqing`、`yanqing-ptc`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
 | 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者砚青四套在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 修复清单 `preset-summary-model`（2.17 起）：生成 preset 时去掉这两行，和官方预设一样跟会话模型走；本机默认模型本来就走 deepseek-official 时不去掉。有 API key、想照作者写死的，加 `--fix-skip preset-summary-model` |
+| 26 | macOS 上 model-statusbar 一直报错、没有读数 | 它的探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe`，只能在 Windows 上用 | 4.0 起问答和干跑会提示「macOS 不可用」，终端问答里默认不装；选了也不拦，装上就是空面板 |
+| 27 | macOS 上回声面板的体检一项都不出 | 面板在 Electron 里要找 DSH 自带的 node，作者只列了 Windows 的布局（`resources/runtime/…/node.exe`）；Mac 上找不到，就拿 DSH 主程序去跑体检脚本 | 修复清单 `echo-node-darwin`（4.0）：补上 `Contents/Resources/runtime/<arch>/…/node` |
+| 28 | 一行装在 Apple 芯片的 Mac 上挑到了 x64 的 node | DSH 同时带 arm64 和 x64 两份运行时，x64 那份要走 Rosetta | `install.sh` 和 `install.mjs` 都先挑本机架构那份（4.0） |
 
 ## 十二、卸载与回滚
 
@@ -412,10 +415,14 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 - **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset yanqing`（只能选这台电脑生成了的 preset）。
 - **用作者仓库 `tools/` 里的工具体检时**：kit 的装法和作者本机不完全一样，有几条结论要换个读法，别照着它的修法动手：
   - `verify-client-ids.mjs`：kit 每次装完都会跑，结论可信。`verify-live.mjs` 只读，可以跑。
-  - `soul-doctor.mjs`：`L0`、`L1/pkgintegrity`、`L1/peerdeps` 可信。`L1/parts` 报缺 `dsh-yanqing-memory` 不用管：作者主仓 memory 包的包名就是 `dsh-agent-memory`，preset 里也不引用它。`L2/presets` 报 profile 里 0 个 preset 块，是因为 kit 把砚青四套放在 `dsh-soul-preset` 包里；**不要**照它说的跑 `soul-preset.mjs build --write`，那会在 profile 里再插一份同 id 的四套。`soul-preset.mjs verify` 同理看不到包里的 preset；内容对不对看 kit 干跑里「哈希逐套对上」那一行。
+  - `soul-doctor.mjs`（跑之前设好 `DSH_HOME` 环境变量，作者不再猜家目录）：`L0`、`L1/parts`、`L1/pkgintegrity`、`L1/peerdeps` 可信（它现在新旧两种包名都认）。`L2/presets` 报 profile 里 0 个 preset 块，是因为 kit 把砚青四套放在 `dsh-soul-preset` 包里；**不要**照它说的跑 `soul-preset.mjs build --write`，那会在 profile 里再插一份同 id 的四套。`soul-preset.mjs verify` 同理看不到包里的 preset；内容对不对看 kit 干跑里「Soul preset 的源」那一行（作者删了 `soul-version.json`，没有哈希可核了）。
   - `soul-one-shot.mjs`：压缩、裁剪两行报「没接管」不用管，它还在找 `.agent-presets/`，作者自己写过 0.2.0-rc.2 起这个目录已经不读了。preset 有没有装好用作者给的验法：在新建会话界面切到砚青 preset，输入 `/compact-region`，能识别就算成功。
 
 ## 十四、平台说明
+
+- **一行装**：macOS 用 `install.sh`（`curl … | bash`），Windows 用 `install.ps1`（`irm … | iex`），两边只负责找 node、放好安装包、在终端里启动同一份 `install.mjs`。Mac 上的问答从 `/dev/tty` 读，`curl | bash` 也能一问一答；`install.ps1` 只用 ASCII 字符（Windows PowerShell 5.1 读管道来的脚本可能按本地代码页解码），出错时不关窗口。4.0 的 `install.ps1` 还没在 Windows 上真跑过。
+- **各系统用不了的零件**：见 README「两种装法」那张表（model-statusbar 只能在 Windows 上用；yantai 的「速达」只有 Windows 有；Windows 桌面打包版的换气可能 import 失败，上游 issue #5）。脚本按 `process.platform` 提示，不拦。
+- **不写死路径**：安装包里没有任何一台电脑的路径。写给人和 agent 读的文件（权威源册、自我层、要贴进新会话的话）里，用户目录下的路径写成 `$HOME/…`，zsh、bash 和 Windows 上 DSH 用的 PowerShell 都认；心跳脚本按相对自己的位置找记忆中枢。必须是绝对路径的只有交给操作系统或别的程序执行的几处（launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`），安装时在这台电脑上现算，迁移恢复时换成新电脑的。
 
 - **Boss 那台 Mac 和安装包装出来的有两处不同**：心跳是第一次手工安装时建的 `memory/hub/heartbeat.sh`（launchd 用 `/bin/bash` 调它，日志同样写进 `hub/heartbeat/`），安装包现在生成的是 `soul/60-工具/heartbeat.mjs`，效果一样；mnemon-probe 的补丁是早期手工写法，脚本认得，不会重打。排查那台 Mac 的心跳时看 `heartbeat.sh` 和 `~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist`。
 - **macOS**：Boss 的 Apple Silicon Mac + DSH NEXT 2.0.19-next（dsh 0.2.1-rc.2）上逐步实测装过一遍，Soul preset 的门牌也实测通过（`/compact` 摘要带门牌、`memq open` 取回原文），v2.0.0 的更新也在这台 Mac 上真跑过：启动正常、mcp-hub 的 echo 连上 3 个工具，自动压缩和裁剪的门牌都在真实会话里出现了。

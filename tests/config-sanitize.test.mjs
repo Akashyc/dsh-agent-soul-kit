@@ -66,13 +66,6 @@ test('错的只报错的、对的不报（混着来）', () => {
   assert.deepEqual(fixed.map((f) => f.key), ['fullCompactOnBreaker'])
 })
 
-test('真机配置（本机 profile）现在应当是干净的', () => {
-  const real = path.join(os.homedir(), '.dsh', 'profiles', 'desktop', 'cordis.patch.yml')
-  if (!fs.existsSync(real)) return // 别的机器上没有这个 profile，跳过
-  const { fixed } = fixQuotedBooleans(fs.readFileSync(real, 'utf8'))
-  assert.deepEqual(fixed, [], `本机 cordis.patch.yml 里还有字符串布尔：${fixed.map((f) => f.from).join('、')}`)
-})
-
 test('BOOLEAN_KEYS 只收真读过的布尔键', () => {
   // 这个清单是白名单：多加一个键等于替别人的 schema 做主
   assert.deepEqual([...BOOLEAN_KEYS].sort(), ['fullCompactOnBreaker', 'postCompactRecallHint'])

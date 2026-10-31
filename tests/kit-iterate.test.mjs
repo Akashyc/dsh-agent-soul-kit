@@ -170,8 +170,8 @@ test('改写修复实现必须登记证据并提升实际版本', (t) => {
   assert.notEqual(accepted.status, 0)
   assert.match(accepted.stdout + accepted.stderr, /提升 kitVersion/)
   const installer = path.join(f.kit, 'install.mjs')
-  fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replace("const KIT_VERSION = '3.0'", "const KIT_VERSION = '3.1'"))
-  result.kitVersion = '3.1'
+  fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replace("const KIT_VERSION = '4.0'", "const KIT_VERSION = '4.1'"))
+  result.kitVersion = '4.1'
   put(directory, 'result.json', result)
   accepted = f.run(['--kit-accept', directory])
   assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr)
