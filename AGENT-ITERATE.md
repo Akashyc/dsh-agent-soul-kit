@@ -91,7 +91,7 @@ node install.mjs --kit-iterate --dry-run
 
 ### 修复清单（`lib/fixes.mjs`，3.0 起）
 
-kit 对上游插件的每一处修改都是修复清单里的一条。报告同时跟踪主仓和零件仓 `cyanwell/dsh-agent-organs`（基线记在 `kit-iteration.json` 的 `organs`，快照在报告目录的 `organs-base/`、`organs-target/`，变化以 `organs/` 前缀并入全量文件变化；离线时 organs 用安装包快照 `assets/parts/`），然后对新上游逐条归类，写在 `report.md` 的「修复清单」一节：
+kit 对上游插件的每一处修改都是修复清单里的一条。报告只跟踪主仓 `cyanwell/dsh-agent-soul`（作者 2026-10-31 弃用了零件仓 `dsh-agent-organs`，换气、compact-region 都回了主仓 `plugins/`；旧报告和 `kit-iteration.json` 里的 `organs` 字段只作历史保留），然后对新上游逐条归类，写在 `report.md` 的「修复清单」一节：
 
 | 归类 | 意思 | 谁处理 |
 |---|---|---|
@@ -115,7 +115,7 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告同�
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
-- 改修复清单（`lib/fixes.mjs`、`lib/organ-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）后，在隔离目录里跑一遍 `install.mjs --fix --dry-run`：已经装好的环境应全部是「保持」。
+- 改修复清单（`lib/fixes.mjs`、`lib/huanqi-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）或零件目录（`lib/parts.mjs`：包名、必装、各系统的已知限制）后，在隔离目录里跑一遍 `install.mjs --fix --dry-run`：已经装好的环境应全部是「保持」。
 - 包名或 preset id 变化时保留旧安装、旧会话和旧备份的兼容路径。
 - 备份范围或格式变化时同时维护写入和恢复，并说明旧包如何读取。
 - 本轮若修正了迭代工具自身，补跑其测试，继续使用本轮固定的上游快照完成分析。
@@ -184,4 +184,4 @@ node install.mjs --kit-accept <本次报告目录>
 
 `VERIFIED` 仍表示最后经过端到端验证的上游版本；代码审查完成不能自动更新它。只有具备对应完整验收证据时才修改。交付时分别说明 kit 自身仓库的检查/同步结果、插件上游范围、四流程各自结论、改了哪些文件、验证结果和剩余限制；自身检查被跳过时明确写出，不能声称两个来源都已最新。
 
-离线双源检查可同时传 `--organs-base-source <旧 organs>` 和 `--organs-source <新 organs>`；没提供时只核对内置快照，不能声称已检查 organs 最新版。通用扫描报告 Windows/macOS 个人路径、加载名与 client id、发布文件与依赖、preset 缺包、摘要模型路由和能静态识别的 schema 类型不符；结果都是待核对线索，不执行源码、不生成补丁。
+上游新增或改动了只在某个系统上能用的代码（`powershell.exe`、命名管道、`.exe` 路径、`darwin` 分支等）时，同步 `lib/parts.mjs` 的系统限制表和 README 那张表。通用扫描报告 Windows/macOS 个人路径、加载名与 client id、发布文件与依赖、preset 缺包、摘要模型路由和能静态识别的 schema 类型不符；结果都是待核对线索，不执行源码、不生成补丁。

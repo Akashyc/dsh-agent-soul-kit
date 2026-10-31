@@ -218,7 +218,7 @@ test('心跳 plist：认标签，或者认书房里的心跳脚本', () => {
 test('空壳 preset：id 不变、名字标「（已卸载）」、换回官方压缩和裁剪、不引用本架构的包', () => {
   const src = presetSources(path.join(os.tmpdir(), 'no-such-profile-node_modules'), { appAsar: path.join(os.tmpdir(), 'no-such.asar') })
   const real = buildPresetBundle(src, PRESET_IDS).files['cordis.patch.yml']
-  assert.ok(real.includes("name: 'dsh-yanqing-compaction'"))
+  assert.ok(real.includes("name: 'dsh-agent-compaction'"))
   const shell = buildShellBundle(real)
   assert.deepEqual(shell.ids, PRESET_IDS)
   const y = shell.files['cordis.patch.yml']

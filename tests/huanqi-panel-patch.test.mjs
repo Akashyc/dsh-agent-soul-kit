@@ -2,20 +2,20 @@
 //
 // 两段：
 //   1. 补丁模块本身：旧实现 → 新实现的映射是幂等的，找不到锚点时如实报 anchor-missing。
-//   2. 已安装的面板（本机存在时）：空 profile 第一次 applyValues 会补节，而不是抛错；
-//      已有节时只改值、不重复建节。找不到面板就 skip，不让 CI 假红。
+//   2. 已安装的面板（集成检查，只在显式设了 DSH_HOME 时跑，默认不碰本机）：空 profile 第一次 applyValues 会补节，
+//      而不是抛错；已有节时只改值、不重复建节。
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { apply, OLD } from '../lib/huanqi-panel-patch.mjs'
 
 const PROFILE = process.env.DSH_PROFILE || 'desktop'
-const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
-const PANEL = path.join(DSH_HOME, 'profiles', PROFILE, 'node_modules', 'dsh-yanqing-huanqi-panel', 'index.js')
-const NO_PANEL = fs.existsSync(PANEL) ? false : `没装换气面板：${PANEL}`
+const PANEL = process.env.DSH_HOME
+  ? ['dsh-agent-huanqi-panel', 'dsh-yanqing-huanqi-panel'].map((n) => path.join(process.env.DSH_HOME, 'profiles', PROFILE, 'node_modules', n, 'index.js')).find((f) => fs.existsSync(f))
+  : null
+const NO_PANEL = PANEL ? false : '集成检查：设 DSH_HOME 指向装好换气面板的 DSH 家目录才跑'
 
 // 一份「只有别的条目、没有换气」的 profile patch —— 就是新装机器第一次保存时的样子
 const SAMPLE = [
