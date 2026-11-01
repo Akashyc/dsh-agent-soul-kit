@@ -93,7 +93,7 @@ node install.mjs
 node install.mjs --fix --dry-run
 ```
 
-先查看每条修复的判定和动作，确认需要处理的内容后，退出 DSH，再去掉 `--dry-run` 执行。筛选、跳过和撤回参数见下方「更新与修复」。
+安装、更新、恢复只按作者上游装，不打修复；装完单独做这一步。先看检查结果（每条修复的判定和清单外的疑似问题），逐条选修不修，退出 DSH 后用 `--fix --fix-only <选中的 id>` 执行；在终端里直接跑 `node install.mjs --fix` 会逐条问。筛选、跳过和撤回参数见下方「更新与修复」。
 
 **迁移到另一台电脑**：
 
@@ -132,8 +132,8 @@ node install.mjs --fix --dry-run
 
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
-node install.mjs --update          # 更新到上游最新版（装完自动跑修复清单）
-node install.mjs --fix             # 单独跑修复：对照已装那一版的作者原文，问题还在才修
+node install.mjs --update          # 更新到上游最新版（不打修复，装完单独检查）
+node install.mjs --fix             # 修复检查：对照已装那一版的作者原文报问题，逐条选了才修
 node install.mjs --backup          # 打迁移用的备份包，放在 backups/
 node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
 node install.mjs --uninstall       # 卸载：先备份；终端里会问旧会话怎么处理（也可以加 --old-sessions shell|rewrite|keep）
@@ -168,7 +168,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
 | `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开）；卸载时可保留使用官方零件的砚青空壳 |
 | `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
-| `lib/fixes.mjs` | 修复清单：kit 对上游插件的 21 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
+| `lib/fixes.mjs` | 修复清单：kit 对上游插件的 19 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
 | `lib/fix-records.mjs` | 修复原文、生成物与行级配置的核对和撤回 |
 | `lib/fix-transaction.mjs` | 修复失败时恢复包、配置、锁文件和安装记录；保留恢复清单 |
 | `lib/huanqi-patches.mjs` | 换气、compact-region 的本机补丁：作者写死的记忆中枢路径改成运行时找家目录，外加 Boss 本机实测的行为修复 |
@@ -187,7 +187,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 `--update` 获取上游新版本，更新本体、零件和 Soul preset，并同步未被本机修改的中枢脚本。方案、书房、账本、权威源册、人设和心跳设置保留；需要调整的插件配置、包名及锁文件会在计划中列出。识别出的本机修改和无法判断的修复会提示核对。
 
-**修复清单**：`lib/fixes.mjs` 登记 21 条修复：1 条拷包补漏（上游发布清单漏列的文件）、18 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条；4.1 新增拷包补漏）。安装、更新、恢复先按计划安装作者文件，再运行修复阶段；称呼替换、preset 独立打包等 kit 固定处理仍保留。
+**修复清单**：`lib/fixes.mjs` 登记 19 条修复：1 条拷包补漏（上游发布清单漏列的文件）、16 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条；4.1 新增拷包补漏；4.3 新增 echo 面板设置文件路径，删掉作者已修好的 clock 定位、换气触发口等待、compact-region 日志路径 3 条）。**修复和安装分开**：安装、更新、恢复只按作者上游装（称呼替换、preset 独立打包等 kit 固定处理仍保留），一条修复都不打——已经打上的照原样留着，被整包换掉的零件就是作者原文；装完单独做修复检查：先列出问题，逐条选「修 / 不修 / 这次先不动」，只修选中的。终端里装完会接着问要不要检查。清单外的问题（扫出来的疑似问题、使用中遇到的新 bug）先整理修复方案给用户确认，登记进 `lib/fixes.mjs` 再修，不直接手改已装文件。
 
 | 检查结果 | 处理方式 |
 |---|---|
@@ -196,25 +196,26 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | 无法判断 | 保留文件，报告「需人工核对」 |
 | 本机手改过 | 保留文件，报告冲突，由用户决定如何合并 |
 
-`--fix` 只处理已安装版本，不升级本体或补装零件：
+`--fix` 只处理已安装版本，不升级本体或重装零件（作者发布清单漏列的文件会补拷进已装的包）：
 
 | 参数 | 用途 |
 |---|---|
 | `--fix --dry-run` | 只检查并报告计划 |
+| `--fix` | 终端里报完问题逐条问，选完按选择执行；不在终端里只报不改 |
 | `--fix-only <id,…>` | 本次仅处理指定条目，适用于所有修复阶段 |
 | `--fix-skip <id,…>` | 跳过指定条目，撤回可识别的 kit 修复，并记入安装记录；`none` 清空跳过设置 |
 | `--fix-revert <id,…>` | 撤回指定修复，并加入跳过清单 |
 
-更新、备份与恢复会沿用保存的跳过设置。4.0 去掉了 `--fix-reinstall`、`--organs-source`（取源和包名不再是修复条目，包名迁移走 `--update`）。
+选过「不修」的条目记进跳过清单，以后检查不再问；备份与恢复会带上这份设置。4.0 去掉了 `--fix-reinstall`、`--organs-source`（取源和包名不再是修复条目，包名迁移走 `--update`）。
 
 实际写入前先备份，修后检查语法和加载契约；失败时自动回滚涉及的包、配置、锁文件和安装记录。备份位于 `dsh-soul/_backup/`。断电或强制终止进程时，按备份清单人工恢复，详见 [安装手册](AGENT-INSTALL.md)。
 
-安装、更新、恢复和完整 `--fix` 会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到砚青 PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。`--fix-only` 保持指定范围，清理留到完整更新或修复。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
+安装、更新、恢复会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到砚青 PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。修复检查不管这件事。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
 
 几个常见设置：
 
 - **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（`dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`）。3.0 及以前装的 `dsh-yanqing-*` 和从 organs 装的换气、compact-region，`--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）；`--fix` 不动包名，碰到旧包名会让你先 `--update`。
-- **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
+- **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，修复检查里把它选成「不修」，或用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
 - **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.1 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
 - **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。上游包缺少入口依赖文件（发布清单漏列的会自动补上）、或者 DSH 启动时要加载的文件有语法错误时，会在动手前停下，已装的照常能用（2026-11-01 上游回声面板的 `client.js` 坏过一次，照装 DSH 窗口起不来）；缺少宿主依赖声明时只提示核对。
 
@@ -250,17 +251,17 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 - **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单。4.1 在 macOS（Apple 芯片，DSH NEXT 2.0.21-next）上用 `install.sh` 真装验收过：全新安装的终端问答、13 个零件和 21 条修复、砚青四套 preset、mcp-hub 接入 echo、心跳；新会话里体检 0 错、`/compact` 摘要带门牌、`memq open` 按门牌取回原文。更新到上游 8ba1385 时撞上作者的语法错误、按备份回滚，装前语法检查就是因此加的。4.2 的两处改动只在本机干跑核对过（更新计划里列出给 echo 补 `DSH_HOME`）。`install.ps1` 还没在 Windows 上跑过。
 - **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了（`dsh-agent-*`），但作者的 `soul-doctor` 在 profile 的 `cordis.patch.yml` 里找 preset 块，本安装包把 preset 放在独立包 `dsh-soul-preset` 里，所以它的 L2 会报「没有 preset」，这是口径不同，不要照着修；另外作者的 `tools/soul-preset.mjs` 不设 `DSH_HOME` 环境变量跑会直接报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
-- **回声面板、换气面板的加载名**：上游把这两个包的名字改回 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字还是 `dsh-yanqing-*`，原样装会加载失败。安装包会自动修好（修复 `echo-load-name`、`panel-load-name`），并在收尾时检查每个包要加载的插件都找得到。
+- **回声面板、换气面板的加载名**：上游把这两个包的名字改回 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字还是 `dsh-yanqing-*`，原样装会加载失败。装完的修复检查里修（修复 `echo-load-name`、`panel-load-name`；修好之前先别启动 DSH），并在收尾时检查每个包要加载的插件都找得到。
 - **路径不带用户名**：安装包里没有写死任何一台电脑的路径。memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录；权威源册、自我层、要贴进新会话的话里的路径写成 `$HOME/…`（zsh、bash、PowerShell 都认）；心跳脚本按相对自己的位置找记忆中枢。只有交给操作系统和别的程序执行的几处必须是绝对路径，安装时在这台电脑上现算：launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`；迁移恢复时会换成新电脑的。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
 - **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，用 `--backup` / `--restore` 迁移，到了新电脑再任命下一代主导。
 
 ## 版本记录
 
-这里只保留最近三条更新；3.0 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；4.0 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 4.3 | 2026-11-01 | 修复和安装、更新、恢复分开：那几步只按作者上游装、不打修复，装完单独检查——先列出问题（清单里的逐条判定、清单外的疑似问题），用户逐条选修 / 不修 / 这次先不动，只修选中的；终端里装完会接着问，不在终端里的 `--fix` 只报不改。作者发布清单漏列的文件改由 `--fix` 补拷进已装的包，加载名对不上只提醒、不再停下。修复清单新增 `echo-settings-path`（上游 11-01 回声面板的设置兜底写死作者电脑的记忆中枢）。按上游 e6d66f5 逐条核对：clock 定位、换气触发口等待、compact-region 日志路径作者已修，这 3 条从清单删掉（id 不再使用），清单剩 19 条。 |
 | 4.2 | 2026-11-01 | mcp-hub 清单里的 echo 显式带上 `env.DSH_HOME`：上游 8ba1385 的 `echo-mcp.mjs` 没有它就去作者电脑的 `D:/AI/dsh/home` 找会话日志，而 mcp-hub 会滤掉继承来的 `DSH_*`；旧安装 `--update` 补上。换气测试触发口的判定认出作者 11-01 v1.2.2 的 `waitUntilQuiet`（先等 agent 静下来再压，和 `huanqi-trigger-idle` 同一个意思），判为作者已修、不再打，不再报「需人工核对」。 |
 | 4.1 | 2026-11-01 | macOS 真装验收通过。新增两道装前保护：上游发布清单漏列、入口却导入的文件拷包时补上并写进 `files`（修复 `pack-unshipped`，4606555 的 yantai 漏了 `env-config.mjs`）；DSH 启动要加载的文件先过 `node --check`，有语法错误就在动手前停下（上游 486be3d 的回声面板 `client.js` 坏了，照装 DSH 窗口起不来）。安装问答不再问替换作者称呼，默认不换，内置方案 `nameMap` 清空；问答中按 Ctrl+C 干净退出。按作者 10-31 的更正去掉换气在 Windows 桌面版装不上的警告。删掉 `tests/`，改 kit 后改用隔离干跑检查。 |
-| 4.0 | 2026-10-31 | 跟上游 4606555：零件仓 organs 弃用，所有零件取自主仓、包名回到 `dsh-agent-*`（旧安装 `--update` 迁移）；换气、换气面板、mcp-hub 改为必装；修复清单 20 条（去掉取源 / 包名 5 条，作者修好的 clock 定位、compact-region 日志路径、触发口等待自动退役，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径）。新增 macOS `install.sh`、Windows `install.ps1` 一行装；Mac 上可代为退出 DSH；问答和干跑提示各系统用不了的零件；生成的文档里路径写成 `$HOME/…`。`install.mjs` 拆出零件目录、方案问答、系统差异三个模块。卸载空壳兼容新包名。 |
