@@ -1957,7 +1957,7 @@ if (parseYaml && (MIGRATE_PRESETS || BUNDLE.text !== installedPresetText)) {
       const needRegion = srcText.indexOf('command-compact-region') >= 0
       if (!PART_NAMES.compaction.some((name) => names.includes(name)) || (needPruner && !PART_NAMES.pruner.some((name) => names.includes(name))) || (needRegion && !PART_NAMES['compact-region'].some((name) => names.includes(name)))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
     }
-  } catch (e) { die(`生成的 Soul preset 校验没过：${e.message}`) }
+  } catch (e) { die(`生成的 Soul preset 校验没过：${e.message}${PRESET_PLAN.action === 'local' ? '。profile 里这一节和安装记录对不上，被判成本机改过、整节原样保留，新加的 preset 没进去：先核对这一节（或还原成已知原文）再来一次' : ''}`) }
 }
 ok('Soul preset 的源：' + PRESET_CHOICE.map((id) => PRESET_LABEL[id] + ' ← ' + SRC_PRESETS[PRESET_SOURCE[id]].from).join('；'))
 const snapIds = PRESET_CHOICE.filter((id) => SRC_PRESETS[PRESET_SOURCE[id]].snapshot)
