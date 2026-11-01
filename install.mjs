@@ -89,7 +89,7 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '4.0'
+const KIT_VERSION = '4.1'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)

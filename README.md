@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 4.0**（2026-10-31）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 4.1**（2026-11-01）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -162,13 +162,13 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/parts.mjs` | 零件目录：装配顺序、包名（含旧名，更新时迁移）、必装 / 可选、各系统上的已知限制 |
 | `lib/setup.mjs` | 方案与问答：题库、终端一问一答、给 agent 的问题清单、回答校验、方案文件生成与读取 |
 | `lib/platform.mjs` | 系统差异：找 node（DSH 自带优先、按本机架构挑）、DSH 家目录候选、系统代理、Mac 上帮用户退出 DSH |
-| [CHANGELOG.md](CHANGELOG.md) | 2.16 及以前的历史更新记录 |
+| [CHANGELOG.md](CHANGELOG.md) | 2.17 及以前的历史更新记录 |
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
 | `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开）；卸载时可保留使用官方零件的砚青空壳 |
 | `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
-| `lib/fixes.mjs` | 修复清单：kit 对上游插件的 20 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
+| `lib/fixes.mjs` | 修复清单：kit 对上游插件的 21 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
 | `lib/fix-records.mjs` | 修复原文、生成物与行级配置的核对和撤回 |
 | `lib/fix-transaction.mjs` | 修复失败时恢复包、配置、锁文件和安装记录；保留恢复清单 |
 | `lib/huanqi-patches.mjs` | 换气、compact-region 的本机补丁：作者写死的记忆中枢路径改成运行时找家目录，外加 Boss 本机实测的行为修复 |
@@ -187,7 +187,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 `--update` 获取上游新版本，更新本体、零件和 Soul preset，并同步未被本机修改的中枢脚本。方案、书房、账本、权威源册、人设和心跳设置保留；需要调整的插件配置、包名及锁文件会在计划中列出。识别出的本机修改和无法判断的修复会提示核对。
 
-**修复清单**：`lib/fixes.mjs` 登记 20 条修复：18 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条）。安装、更新、恢复先按计划安装作者文件，再运行修复阶段；称呼替换、preset 独立打包等 kit 固定处理仍保留。
+**修复清单**：`lib/fixes.mjs` 登记 21 条修复：1 条拷包补漏（上游发布清单漏列的文件）、18 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条；4.1 新增拷包补漏）。安装、更新、恢复先按计划安装作者文件，再运行修复阶段；称呼替换、preset 独立打包等 kit 固定处理仍保留。
 
 | 检查结果 | 处理方式 |
 |---|---|
@@ -215,7 +215,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 - **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（`dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`）。3.0 及以前装的 `dsh-yanqing-*` 和从 organs 装的换气、compact-region，`--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）；`--fix` 不动包名，碰到旧包名会让你先 `--update`。
 - **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
-- **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.0 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
+- **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.1 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
 - **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。上游包缺少入口依赖文件（发布清单漏列的会自动补上）、或者 DSH 启动时要加载的文件有语法错误时，会在动手前停下，已装的照常能用（2026-11-01 上游回声面板的 `client.js` 坏过一次，照装 DSH 窗口起不来）；缺少宿主依赖声明时只提示核对。
 
 ## 备份带什么
@@ -247,7 +247,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 注意
 
-- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单，并在 macOS 上用隔离的假 DSH 家目录干跑过安装、跑通了 `install.sh` 引导；尚未在真实 DSH 上真装、重启验收，`install.ps1` 没在 Windows 上跑过。
+- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单。4.1 在 macOS（Apple 芯片，DSH NEXT 2.0.21-next）上用 `install.sh` 真装验收过：全新安装的终端问答、13 个零件和 21 条修复、砚青四套 preset、mcp-hub 接入 echo、心跳；新会话里体检 0 错、`/compact` 摘要带门牌、`memq open` 按门牌取回原文。更新到上游 8ba1385 时撞上作者的语法错误、按备份回滚，装前语法检查就是因此加的。`install.ps1` 还没在 Windows 上跑过。
 - **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了（`dsh-agent-*`），但作者的 `soul-doctor` 在 profile 的 `cordis.patch.yml` 里找 preset 块，本安装包把 preset 放在独立包 `dsh-soul-preset` 里，所以它的 L2 会报「没有 preset」，这是口径不同，不要照着修；另外作者的 `tools/soul-preset.mjs` 不设 `DSH_HOME` 环境变量跑会直接报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
 - **回声面板、换气面板的加载名**：上游把这两个包的名字改回 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字还是 `dsh-yanqing-*`，原样装会加载失败。安装包会自动修好（修复 `echo-load-name`、`panel-load-name`），并在收尾时检查每个包要加载的插件都找得到。
@@ -257,10 +257,10 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 版本记录
 
-这里只保留最近三条更新；2.16 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；2.17 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 4.1 | 2026-11-01 | macOS 真装验收通过。新增两道装前保护：上游发布清单漏列、入口却导入的文件拷包时补上并写进 `files`（修复 `pack-unshipped`，4606555 的 yantai 漏了 `env-config.mjs`）；DSH 启动要加载的文件先过 `node --check`，有语法错误就在动手前停下（上游 486be3d 的回声面板 `client.js` 坏了，照装 DSH 窗口起不来）。安装问答不再问替换作者称呼，默认不换，内置方案 `nameMap` 清空；问答中按 Ctrl+C 干净退出。按作者 10-31 的更正去掉换气在 Windows 桌面版装不上的警告。删掉 `tests/`，改 kit 后改用隔离干跑检查。 |
 | 4.0 | 2026-10-31 | 跟上游 4606555：零件仓 organs 弃用，所有零件取自主仓、包名回到 `dsh-agent-*`（旧安装 `--update` 迁移）；换气、换气面板、mcp-hub 改为必装；修复清单 20 条（去掉取源 / 包名 5 条，作者修好的 clock 定位、compact-region 日志路径、触发口等待自动退役，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径）。新增 macOS `install.sh`、Windows `install.ps1` 一行装；Mac 上可代为退出 DSH；问答和干跑提示各系统用不了的零件；生成的文档里路径写成 `$HOME/…`。`install.mjs` 拆出零件目录、方案问答、系统差异三个模块。卸载空壳兼容新包名。 |
 | 3.0 | 2026-10-29 | 建立 23 条修复清单，新增独立修复、筛选、跳过、撤回和重装命令；补齐原文核对、本机修改保护和失败回滚。迭代同时检查主仓与 organs，支持作者修复自动退役、疑似问题扫描及变更证据登记。preset 统一为砚青四套，移除 Flash，旧会话和默认入口自动迁移。 |
-| 2.17 | 2026-10-29 | 压缩摘要默认跟随会话模型，解决账号登录时缺少 `deepseek-official` API key 导致的压缩失败；可选择保留作者模型设置。 |
