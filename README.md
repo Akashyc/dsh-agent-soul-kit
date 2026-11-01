@@ -261,6 +261,6 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
-| 4.1 | 2026-11-01 | macOS 真装验收通过。新增两道装前保护：上游发布清单漏列、入口却导入的文件拷包时补上并写进 `files`（修复 `pack-unshipped`，4606555 的 yantai 漏了 `env-config.mjs`）；DSH 启动要加载的文件先过 `node --check`，有语法错误就在动手前停下（上游 486be3d 的回声面板 `client.js` 坏了，照装 DSH 窗口起不来）。安装问答不再问替换作者称呼，默认不换，内置方案 `nameMap` 清空；问答中按 Ctrl+C 干净退出。按作者 10-31 的更正去掉换气在 Windows 桌面版装不上的警告。删掉 `tests/`，改 kit 后改用隔离干跑检查。 |
+| 4.1 | 2026-11-01 | macOS 真装验收通过。新增两道装前保护：上游发布清单漏列、入口却导入的文件拷包时补上并写进 `files`（修复 `pack-unshipped`，4606555 的 yantai 漏了 `env-config.mjs`）；DSH 启动要加载的文件先过 `node --check`，有语法错误就在动手前停下（上游 486be3d 的回声面板 `client.js` 坏了，照装 DSH 窗口起不来）。安装问答不再问替换作者称呼，默认不换，内置方案 `nameMap` 清空；问答中按 Ctrl+C 干净退出。按作者 10-31 的更正去掉换气在 Windows 桌面版装不上的警告。删掉 `tests/`，改 kit 后改用隔离干跑检查。mcp-hub 清单里的 echo 显式带上 `env.DSH_HOME`：上游 8ba1385 的 `echo-mcp.mjs` 没有它就去作者电脑的 `D:/AI/dsh/home` 找会话日志，而 mcp-hub 会滤掉继承来的 `DSH_*`；旧安装 `--update` 补上。 |
 | 4.0 | 2026-10-31 | 跟上游 4606555：零件仓 organs 弃用，所有零件取自主仓、包名回到 `dsh-agent-*`（旧安装 `--update` 迁移）；换气、换气面板、mcp-hub 改为必装；修复清单 20 条（去掉取源 / 包名 5 条，作者修好的 clock 定位、compact-region 日志路径、触发口等待自动退役，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径）。新增 macOS `install.sh`、Windows `install.ps1` 一行装；Mac 上可代为退出 DSH；问答和干跑提示各系统用不了的零件；生成的文档里路径写成 `$HOME/…`。`install.mjs` 拆出零件目录、方案问答、系统差异三个模块。卸载空壳兼容新包名。 |
 | 3.0 | 2026-10-29 | 建立 23 条修复清单，新增独立修复、筛选、跳过、撤回和重装命令；补齐原文核对、本机修改保护和失败回滚。迭代同时检查主仓与 organs，支持作者修复自动退役、疑似问题扫描及变更证据登记。preset 统一为砚青四套，移除 Flash，旧会话和默认入口自动迁移。 |
