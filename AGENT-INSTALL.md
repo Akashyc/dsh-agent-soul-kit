@@ -26,7 +26,7 @@
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；Soul preset 调用的 compact-region 跟着装。按作者 2026-10-31 定的「全局必装」，不能跳过 |
 | 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务；**macOS 上不可用**）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门；macOS 上「速达」用不了）。装哪些按方案；大肥鱼方案装前两个，面板件默认不勾。各系统的已知限制见 README「两种装法」那张表，脚本在问答和干跑里会按这台电脑的系统提示 |
-| Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青 |
+| Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青；可选第五个「砚青 PTC Flash」（见第九节「砚青 PTC Flash」，默认不选） |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
@@ -143,7 +143,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
-- 其他可选参数：`--ref <提交>`（装指定版本）、`--default-preset yanqing`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
+- 其他可选参数：`--flash on`（加装砚青 PTC Flash，方案里没选也行）、`--ref <提交>`（装指定版本）、`--default-preset yanqing`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
 - **称呼替换**：默认不换（作者已把 preset 人设和文档里的人名改掉；内置方案的 `nameMap` 都是空的）。上游代码里还剩几处作者的称呼「爀曦」，其中一处是换气熔断时注入给 agent 的指令「告诉爀曦『需要手动压缩』」；用户要换，就加 `--rename 爀曦=<称呼>`，只换装进 DSH 的插件代码和文档，书房和账本不动，记进安装记录，以后更新、备份、恢复都照做。
 
 **B5. 脚本做的事**（每一步都会先备份；已经做过的会跳过，重复跑安全）：
@@ -156,7 +156,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 3 | 备份 `package.json`、`cordis.patch.yml` 为 `*.bak-<时间>-pre-soul-kit` | 出问题能还原 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频） | 桌面版只能这样装 |
 | 5 | 不打修复：零件照作者原样装，作者原文里的问题（加载名、写死的路径、发布清单漏列的文件等）原样留着，「需要留意」里会提醒会出问题的几处（例如 yantai 缺文件、加载名对不上）。修复装完单独检查，逐条选了才修（B7） | 安装始终以作者上游为准；kit 的修复是第三方补丁，和安装分开（第九节「修复」） |
-| 6 | 写 Soul preset：按方案生成上游砚青四套，写进 profile 的 `cordis.patch.yml` 顶层一项 `- insert:`（作者的装法，作者 doctor 认的位置）；4.3 以前装在独立包 `dsh-soul-preset` 里的，搬过来、把包和锁文件里的条目摘掉；移除旧 Flash，旧会话与默认入口迁到砚青 PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
+| 6 | 写 Soul preset：按方案生成上游砚青四套（选了砚青 PTC Flash 的再加它，源在线取 dsh-flash-presets），写进 profile 的 `cordis.patch.yml` 顶层一项 `- insert:`（作者的装法，作者 doctor 认的位置）；4.3 以前装在独立包 `dsh-soul-preset` 里的，搬过来、把包和锁文件里的条目摘掉；移除旧 Flash，旧会话与默认入口迁到砚青 PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`，`env` 带上 `DSH_HOME`）；已有就不动，只给本安装包登记的那台补上缺的 `DSH_HOME` | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → `install-kit --all` 把脚本装进 hub（再补上同义词表 `synonyms.json`）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
@@ -234,6 +234,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 - **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：`echo-doctor.mjs`、`echo-config.mjs` 用上游的 `install-kit` 换新；其余脚本做**三方比对**——中枢里的和旧版上游一模一样（本机没改过）就换成新版，本机改过的不动、只列出来，上游新加的文件补上；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
+- **砚青 PTC Flash**（装了的）：每次更新都重新取作者最新发布的版本，见本节「砚青 PTC Flash」。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`（只换回本体和零件；中枢脚本按本机改过保留）。
 - **修复清单的跳过设置记在安装记录里**（`fixSkip`）：修复检查里选过「不修」的条目照做、不再问。例如压缩摘要模型 `preset-summary-model` 修的是去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`、跟会话模型走（见第十一节 25）；要照作者原样就把它选成「不修」，或加 `--fix-skip preset-summary-model`（2.17 的 `--summary-model author` 也还认）；
 - **作者的 `soul-version.json`**：作者 2026-10-31 把它删了，安装包 4.0 不再核对砚青四套的哈希和契约版本；更新时以上游 README 的更新记录和干跑报告为准。
@@ -253,6 +254,15 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 **脚本会自己停的**：上游缺了安装需要的文件、零件删掉了或改成了安装包不认识的名字、上游包的发布清单不自洽（入口导入的文件源码里也没有）、DSH 启动时要加载的文件有语法错误（照装窗口就起不来，2026-11-01 上游回声面板坏过一次）、源 preset 结构变了派生不出来、装完发现有包要加载的插件找不到。脚本会建议先用 `--ref <安装包对照过的提交>` 装回对照过的版本；要跟上就得先更新安装包。
 **干跑提示「本机代码看起来手工把上游作者的称呼换成了 …」时**：说明以前手工改过名、安装记录里没记。照提示加 `--rename 爀曦=<称呼>` 重新干跑，确认「本机改过」里不再有改称呼的文件，再真跑。
 **要报给用户但不用停的情况**：某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 源文件缺失或 include 未展开的提醒。
+
+### 砚青 PTC Flash（可选）
+
+第五个 Soul preset，和砚青四套一起选（安装问答里默认不选）。它来自 [LarryE135/dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3（`presets/flash-lean-ptc-v3.patch.yml`）：精简行事规则（控轮数、按需折叠、验收通过就交付），上下文用到 25% 就压缩、只留最近约 2 万 token 原文。
+
+- **源**：每次安装、更新都在线取作者**最新发布的版本**（GitHub releases/latest），作者发了新版，下一次 `--update` 就跟上，干跑报告里写从哪一版到哪一版、这个 preset 变没变。`--flash-ref <标签|main|提交>` 指定版本，`--flash-source <目录|.tar.gz>` 离线用本地源码；`--fix` 钉在安装记录里那一版。取不到就停下，不会悄悄去掉已装的那份。
+- **适配**（`lib/flash-presets.mjs`，其余逐字照作者）：id 换成 `yanqing-ptc-flash`、名字「砚青 PTC Flash」（旧的 `ptc-soul-flash`、`flash-lean-ptc-v3-soul` 已退役，不能再用）；压缩、裁剪换成带门牌的 `dsh-agent-compaction`、`dsh-agent-pruner`；在手动压缩后面补上范围压缩 `dsh-agent-compact-region`（换气要用）。`workflow-ptc`、`tool-workflow` 照作者关着；压缩摘要本来就跟会话模型走，`preset-summary-model` 管不到它。作者改了结构（找不到 v3 那一块、压缩组里认不出那几个零件）就停下报出来，不猜。
+- **开关**：已装的电脑用 `install.mjs --update --flash on` 加上、`--flash off` 去掉，记进安装记录，以后更新照做。还有会话在用它时去掉，干跑会提醒先停下。
+- **验收**：装上后新建一个「砚青 PTC Flash」会话，按阶段 D 做一次门牌实测；Flash 的规则（例如只在用户要求时才用子代理、笔记不超过 60 行）和记账、门牌的流程有没有冲突，以这次实测为准。
 
 ### 修复（`--fix`）
 
