@@ -133,6 +133,7 @@ node install.mjs --fix --dry-run
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
 node install.mjs --update          # 更新到上游最新版（不打修复，装完单独检查）
+node install.mjs --update --flash on  # 加装砚青 PTC Flash（off 去掉）；装了的每次更新都跟作者最新发布的版本
 node install.mjs --fix             # 修复检查：对照已装那一版的作者原文报问题，逐条选了才修
 node install.mjs --backup          # 打迁移用的备份包，放在 backups/
 node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
@@ -145,7 +146,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 - **本体和零件**：必装的七个（加上 Soul preset 调用的 compact-region），再加方案里选了的可选零件。
 - **记忆检索**：通过 `memq` 检索；安装并接入 mcp-hub 后，还可在会话里调用 `mcp__echo__echo_search`。
-- **Soul preset**：砚青、砚青创造、砚青 PTC、砚青蒸馏四套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。内置「大肥鱼」默认安装砚青四套，新会话默认使用砚青；已有安装沿用砚青选择，旧 Flash 方案及会话入口迁到砚青 PTC。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
+- **Soul preset**：砚青、砚青创造、砚青 PTC、砚青蒸馏四套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。可选第五个「砚青 PTC Flash」：照 [dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3 适配（压缩、裁剪带门牌），安装问答里和砚青一起选、默认不选，已装的用 `--update --flash on` 加上；每次安装、更新在线取作者最新发布的版本。内置「大肥鱼」默认安装砚青四套，新会话默认使用砚青；已有安装沿用砚青选择，旧 Flash 方案及会话入口迁到砚青 PTC。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
 - **心跳**：按方案每天定时重建索引、刷新自我层、跑体检。
@@ -166,6 +167,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
+| `lib/flash-presets.mjs` | 砚青 PTC Flash：校验 dsh-flash-presets v3 的结构，换 id 和名字、压缩裁剪换成带门牌的零件、补范围压缩，其余照作者 |
 | `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开），写进 profile `cordis.patch.yml` 的 `- insert:` 那一节；卸载时可保留使用官方零件的砚青空壳 |
 | `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
 | `lib/fixes.mjs` | 修复清单：kit 对上游插件的 19 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
@@ -258,10 +260,10 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 版本记录
 
-这里只保留最近三条更新；4.0 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；4.1 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 4.4 | 2026-11-01 | 新增可选的第五个 Soul preset「砚青 PTC Flash」：照 LarryE135/dsh-flash-presets 的 v3 适配（id `yanqing-ptc-flash`，压缩、裁剪换成带门牌的零件、补上范围压缩，其余照作者），安装问答里和砚青四套一起选、默认不选，已装的用 `--update --flash on/off` 开关；每次安装、更新在线取作者最新发布的版本（`--flash-ref`、`--flash-source` 可指定），`--fix` 钉在已装那一版。 |
 | 4.3 | 2026-11-01 | 修复和安装、更新、恢复分开：那几步只按作者上游装、不打修复，装完单独检查——先列出问题（清单里的逐条判定、清单外的疑似问题），用户逐条选修 / 不修 / 这次先不动，只修选中的；终端里装完会接着问，不在终端里的 `--fix` 只报不改。作者发布清单漏列的文件改由 `--fix` 补拷进已装的包，加载名对不上只提醒、不再停下。Soul preset 改照作者的装法：写进 profile 的 `cordis.patch.yml`（顶层 `- insert:`），不再用独立包 `dsh-soul-preset`，旧安装 `--update` 搬过去并摘掉包和锁文件条目；卸载留空壳也写在 profile 里。修复清单新增 `echo-settings-path`（上游 11-01 回声面板的设置兜底写死作者电脑的记忆中枢）。按上游 e6d66f5 逐条核对：clock 定位、换气触发口等待、compact-region 日志路径作者已修，这 3 条从清单删掉（id 不再使用），清单剩 19 条。修复判定改成先还原再比：已装文件是「上一版作者原文 + kit 补丁」时，不再因为作者改过版就误判成「本机改过」——那会让零件永远停在旧版、每次都说「将打上」；有安装记录或 `--source` 基线就照常换上新版。`preset-summary-model` 判成「本机不需要」时不再借用「请手动合并」的说法。 |
 | 4.2 | 2026-11-01 | mcp-hub 清单里的 echo 显式带上 `env.DSH_HOME`：上游 8ba1385 的 `echo-mcp.mjs` 没有它就去作者电脑的 `D:/AI/dsh/home` 找会话日志，而 mcp-hub 会滤掉继承来的 `DSH_*`；旧安装 `--update` 补上。换气测试触发口的判定认出作者 11-01 v1.2.2 的 `waitUntilQuiet`（先等 agent 静下来再压，和 `huanqi-trigger-idle` 同一个意思），判为作者已修、不再打，不再报「需人工核对」。 |
-| 4.1 | 2026-11-01 | macOS 真装验收通过。新增两道装前保护：上游发布清单漏列、入口却导入的文件拷包时补上并写进 `files`（修复 `pack-unshipped`，4606555 的 yantai 漏了 `env-config.mjs`）；DSH 启动要加载的文件先过 `node --check`，有语法错误就在动手前停下（上游 486be3d 的回声面板 `client.js` 坏了，照装 DSH 窗口起不来）。安装问答不再问替换作者称呼，默认不换，内置方案 `nameMap` 清空；问答中按 Ctrl+C 干净退出。按作者 10-31 的更正去掉换气在 Windows 桌面版装不上的警告。删掉 `tests/`，改 kit 后改用隔离干跑检查。 |

@@ -33,6 +33,9 @@
 //   --fix-revert <id,…>          只用于 --fix：撤掉这几条 kit 修复，换回作者原文，并记进跳过清单
 //   --summary-model <session|author>  2.17 的写法，等于 preset-summary-model 这一条：author = 跳过（照作者写死 deepseek-official），
 //                                session = 不跳过（压缩摘要跟会话模型走，没有 DeepSeek API key 的账号登录也能压缩）
+//   --flash <on|off>             砚青 PTC Flash（dsh-flash-presets v3 的砚青适配）装不装：安装默认按方案，更新默认按安装记录
+//   --flash-ref <标签|分支|提交>  砚青 PTC Flash 的源取哪一版，默认作者最新发布的版本（GitHub releases/latest）
+//   --flash-source <目录|.tar.gz> 砚青 PTC Flash 用本地的 dsh-flash-presets 源码，不联网
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH_NODE > DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → <用户目录>/.dsh → Windows 的 %APPDATA%\dsh 依次找
@@ -77,7 +80,8 @@ import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { parseNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
+import { PRESET_IDS, DEFAULT_PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
+import { FLASH_REPO, FLASH_FILE, FLASH_PRESET_ID } from './lib/flash-presets.mjs'
 import { RETIRED_PRESETS, migratePresetDefault, migratePresetBundle, presetBlocks, planPresetSessions, applyPresetSessions } from './lib/preset-migration.mjs'
 import { beginFixTransaction } from './lib/fix-transaction.mjs'
 import { planManagedText, changedLines, revertConfigLines, hasMissingApiKey } from './lib/fix-records.mjs'
@@ -91,7 +95,7 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '4.3'
+const KIT_VERSION = '4.4'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
@@ -134,6 +138,7 @@ if (flag('--rename') && RENAME_OPT === undefined) { console.log('--rename 后面
 const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : FIX_MODE ? 'fix' : UPDATE ? 'update' : UNINSTALL ? 'uninstall' : 'install'
 let REF = opt('--ref', 'main')
 const SOURCE = opt('--source')
+const FLASH_OPT = opt('--flash'), FLASH_REF = opt('--flash-ref'), FLASH_SOURCE = opt('--flash-source')
 const PROXY_OPT = opt('--proxy')
 const PROFILE = opt('--profile', 'desktop')
 const RUNTIME_OPT = opt('--runtime')
@@ -202,6 +207,8 @@ if ((flag('--old-sessions') || KEEP_DATA) && !UNINSTALL) { console.log('--old-se
 if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSIONS)) { console.log(`--old-sessions 只能是 ${Object.keys(OLD_SESSION_MODES).join(' / ')}：\n${Object.entries(OLD_SESSION_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
+if (flag('--flash') && !['on', 'off'].includes(FLASH_OPT)) { console.log('--flash 只能是 on 或 off（砚青 PTC Flash 装不装）'); process.exit(2) }
+if ((flag('--flash') || flag('--flash-ref') || flag('--flash-source')) && !['install', 'update', 'restore'].includes(MODE)) { console.log('--flash、--flash-ref、--flash-source 只用于安装、更新、恢复（--fix 钉在安装记录里那一版）'); process.exit(2) }
 if (flag('--summary-model') && !SUMMARY_MODES[SUMMARY_OPT]) { console.log(`--summary-model 只能是：\n${Object.entries(SUMMARY_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 // 修复清单的参数（lib/fixes.mjs）：id 用逗号隔开
 const idsOpt = (k) => String(opt(k, '')).split(',').map((x) => x.trim()).filter(Boolean)
@@ -555,12 +562,13 @@ function rewritePaths(t, pairs) {
   return t.replace(re, (m) => map.get(m))
 }
 
-async function getSource({ ref = REF, source = SOURCE, soft = false } = {}) {
+// repo / flag：取别的仓库时用（砚青 PTC Flash 取 dsh-flash-presets，见 getFlashSource）
+async function getSource({ ref = REF, source = SOURCE, soft = false, repo = REPO, flag = '--source' } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-src-'))
   TMP_DIRS.push(tmp)
   if (source) {
     const s = path.resolve(source)
-    if (!exists(s)) die(`--source 指的地方不存在：${s}`)
+    if (!exists(s)) die(`${flag} 指的地方不存在：${s}`)
     if (fs.statSync(s).isDirectory()) {
       let dir = s
       if (!exists(path.join(dir, 'package.json'))) {
@@ -572,21 +580,39 @@ async function getSource({ ref = REF, source = SOURCE, soft = false } = {}) {
       return { dir, sha, local: true, from: '本地目录 ' + posix(dir) }
     }
     if (/\.(tar\.gz|tgz)$/i.test(s)) { const r = extractTarGz(s, tmp); return { ...r, from: '本地压缩包 ' + posix(s) } }
-    die('--source 只认文件夹或 .tar.gz。下载的是 .zip 的话，先解压，再把解压出的文件夹传给 --source')
+    die(`${flag} 只认文件夹或 .tar.gz。下载的是 .zip 的话，先解压，再把解压出的文件夹传给 ${flag}`)
   }
-  const url = `https://codeload.github.com/${REPO}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`
+  const url = `https://codeload.github.com/${repo}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`
   const file = path.join(tmp, 'upstream.tar.gz')
   info(`下载 ${url}`)
   const d = await download(url, file)
   if (!d.ok && soft) { info(`没下载到（${d.errs.join('；')}），这一份先不用`); return null }
   if (!d.ok) {
     const tip1 = d.proxy ? `① 代理 ${showProxy(d.proxy)} 这次没连上 GitHub：过一会儿重跑，或者换个代理地址加 --proxy <地址> 重跑` : '① 加 --proxy http://127.0.0.1:<端口> 走代理重跑'
-    die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${REPO}/archive/${ref}.tar.gz 下载，再加 --source <下载的文件> 重跑（基线用 --base-source；也可以是 git clone 下来的文件夹）`)
+    die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${repo}/archive/${ref}.tar.gz 下载，再加 ${flag} <下载的文件> 重跑${flag === '--source' ? '（基线用 --base-source；也可以是 git clone 下来的文件夹）' : '（也可以是 git clone 下来的文件夹）'}`)
   }
   let r
   try { r = extractTarGz(file, tmp) } catch (e) { if (soft) { info(`解压失败（${e.message}），这一份先不用`); return null } die(`解压失败：${e.message}`) }
-  return { ...r, from: `GitHub ${REPO}@${ref}（${d.via}）` }
+  return { ...r, from: `GitHub ${repo}@${ref}（${d.via}）` }
 }
+// 砚青 PTC Flash 的源（lib/flash-presets.mjs）：默认取作者最新发布的版本（GitHub releases/latest），每次安装 / 更新都重新取，作者发了新版就跟上；
+// --flash-ref 指定分支 / 标签 / 提交，--flash-source 用本地目录或 .tar.gz；--fix 钉在安装记录里那一版
+async function getFlashSource() {
+  let ref = FLASH_REF || (FIX_MODE && state0?.flash?.sha) || null
+  if (!ref && !FLASH_SOURCE) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-flash-'))
+    TMP_DIRS.push(tmp)
+    const f = path.join(tmp, 'latest.json')
+    const d = await download(`https://api.github.com/repos/${FLASH_REPO}/releases/latest`, f)
+    ref = d.ok ? (readJson(f) || {}).tag_name : null
+    if (!ref) die(`查不到 ${FLASH_REPO} 最新发布的版本${d.ok ? '' : `（${d.errs.join('；')}）`}：加 --flash-ref <标签或 main> 指定，或者 --flash-source <本地目录或 .tar.gz>；不要砚青 PTC Flash 就加 --flash off`)
+  }
+  const s = await getSource({ ref, source: FLASH_SOURCE, repo: FLASH_REPO, flag: '--flash-source' })
+  if (!exists(path.join(s.dir, ...FLASH_FILE.split('/')))) die(`${s.from} 里没有 ${FLASH_FILE}：作者改了目录结构，这次先加 --flash off 不装砚青 PTC Flash，等安装包跟上`)
+  const v = (readJson(path.join(s.dir, 'package.json')) || {}).version || null
+  return { ...s, ref: FLASH_SOURCE ? null : ref, pkgVersion: v, version: `dsh-flash-presets ${v ? 'v' + v : '?'}${s.sha ? `（${s.sha.slice(0, 7)}）` : ''}` }
+}
+const flashState = () => ({ repo: FLASH_REPO, ref: FLASH_SRC.ref, sha: FLASH_SRC.sha, version: FLASH_SRC.version, from: FLASH_SRC.from })
 
 // ── 源码体检 ──────────────────────────────────────────────────────────
 const REQUIRED_SOURCE_FILES = ['package.json', 'index.js', 'cordis.patch.yml', 'kit/echo/install-kit.mjs', 'kit/echo/scaffold.mjs', 'kit/templates/SELF.src.md', 'tools/init.mjs', 'tools/verify-client-ids.mjs']
@@ -1641,8 +1667,12 @@ const mapOldPresetIds = (list) => {
   return out
 }
 const PRESET_CHOICE = MODE === 'install' ? SETUP.presets
-  : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : PRESET_IDS)
-  : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : PRESET_IDS)
+  : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : [...DEFAULT_PRESET_IDS])
+  : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : [...DEFAULT_PRESET_IDS])
+// --flash on / off：砚青 PTC Flash 加进来或去掉（记进安装记录的 presetIds，以后更新照做）
+if (FLASH_OPT === 'on' && !PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.push(FLASH_PRESET_ID)
+if (FLASH_OPT === 'off' && PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.splice(PRESET_CHOICE.indexOf(FLASH_PRESET_ID), 1)
+if (!PRESET_CHOICE.length) die('--flash off 以后一个 Soul preset 都不剩了：至少留一个砚青 preset')
 // 局部 --fix-only 保持范围；安装、更新、恢复（和不带 --fix-only 的 --fix）清理退役 preset。
 const MIGRATE_PRESETS = !FIX_MODE || !FIX_ONLY.length
 let PRESET_SESSION_PLANS = []
@@ -1816,7 +1846,9 @@ function splitDiff(d, base) {
   return { up, local, extra, missing, both, localCount: local.length + extra.length + missing.length + both.length }
 }
 
-const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir })
+const FLASH_SRC = PRESET_CHOICE.includes(FLASH_PRESET_ID) ? await getFlashSource() : null
+if (FLASH_SRC) ok(`砚青 PTC Flash 的源：${FLASH_SRC.from}，${FLASH_SRC.version}${state0?.flash?.sha && FLASH_SRC.sha && state0.flash.sha !== FLASH_SRC.sha ? `；上次装的是 ${state0.flash.version || state0.flash.sha.slice(0, 7)}` : ''}`)
+const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir, flash: FLASH_SRC })
 // ═══ 修复清单 · preset：压缩摘要跟会话模型走（preset-summary-model）════════════════
 // 作者砚青四套写死 summarizationProvider: deepseek-official（要 API key）。本机默认模型就走这条路由（有 key）时不用去掉；
 // 作者哪天不写死了，判定为「作者已修」，照原样装
@@ -2236,10 +2268,12 @@ if (UPDATE && !FIX_MODE) {
     out('  修复不在更新里做：要检查就跑 node install.mjs --fix --dry-run')
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
     const shaMoved = state0.upstream && SRC.sha && state0.upstream.sha !== SRC.sha
+    const flashMoved = Boolean(FLASH_SRC) && state0.flash?.sha !== FLASH_SRC.sha
     const namesMoved = !sameNameMap(state0.nameMap, NAME_MAP)
     if (namesMoved) out(`称呼替换记成：${nameMapLabel(NAME_MAP) || '不换'}${DRY ? '（干跑，不写）' : ''}`)
     if (skipMoved) out(`修复清单的跳过设置记成：${FIX_SKIP.join('、') || '无'}${DRY ? '（干跑，不写）' : ''}`)
-    if (!DRY && (shaMoved || newDecl.length || namesMoved || skipMoved)) {
+    if (!DRY && (shaMoved || flashMoved || newDecl.length || namesMoved || skipMoved)) {
+      if (flashMoved) state0.flash = flashState()
       if (namesMoved) state0.nameMap = NAME_MAP
       if (skipMoved) state0.fixSkip = FIX_SKIP
       if (shaMoved) state0.upstream.sha = SRC.sha
@@ -2790,6 +2824,8 @@ if (!DRY) {
     _说明: 'dsh-agent-soul 安装包的安装记录；install.mjs --update 靠它判断从哪一版更新、装了哪些零件、哪些是用户拒掉的。',
     kitVersion: KIT_VERSION,
     upstream: { repo: REPO, ref: SOURCE ? null : REF, sha: SRC.sha, version: srcVer || null, from: SRC.from },
+    // 砚青 PTC Flash 的源（没装就是 null）；--fix 钉在这一版
+    flash: FLASH_SRC ? flashState() : null,
     installedAt: (state0 && state0.installedAt) || (UPDATE ? null : now),
     updatedAt: now,
     dsh: SRC_PRESETS.ptc.dsh,
