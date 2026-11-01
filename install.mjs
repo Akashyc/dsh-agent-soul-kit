@@ -77,7 +77,7 @@ import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { parseNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
+import { PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
 import { RETIRED_PRESETS, migratePresetDefault, migratePresetBundle, presetBlocks, planPresetSessions, applyPresetSessions } from './lib/preset-migration.mjs'
 import { beginFixTransaction } from './lib/fix-transaction.mjs'
 import { planManagedText, changedLines, revertConfigLines, hasMissingApiKey } from './lib/fix-records.mjs'
@@ -99,6 +99,7 @@ const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
 const OPTIONAL_SRC = ['mcp-hub']
 // 中枢同步时不碰的：安装器自己、带写死日志名的测试脚本
 const HUB_EXCLUDE = ['install-kit.mjs', 'test-self-check.mjs']
+// 4.3 以前砚青几套装在这个独立包里；4.3 起照作者写进 profile 的 cordis.patch.yml（lib/soul-presets.mjs 的 findPresetSection），更新时搬过去、把包摘掉
 const PRESET_PKG = 'dsh-soul-preset'
 const PREDECESSORS = ['dsh-loop-guard', 'dsh-reasoning-only-guard', 'dsh-stalled-turn-continue']
 const KIT_SET = ['echo-doctor.mjs', 'echo-config.mjs'] // 中枢里归仓库管的两个脚本，其余按本机演化
@@ -616,13 +617,13 @@ const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function patchList(runtime, names, dshHome) { return fileFixes({ runtime, names, dshHome, partNames: PART_NAMES }) }
 // 每个包的 cordis.patch.yml 里要加载的 name，都必须真能在 node_modules 里找到（@deepseek-ai/*、cordis:* 是 DSH 自带的）
 // 找不到 = DSH 启动时 import 失败。这次上游改名漏改的就是这一类
-function patchNamesMissing(nm, pkgDirs, parse) {
+// extra：另外要查的 [{ label, text }]（profile 里砚青那一节）
+function patchNamesMissing(nm, pkgDirs, parse, extra = []) {
   const bad = []
-  for (const d of pkgDirs) {
-    const f = path.join(nm, d, 'cordis.patch.yml')
-    if (!exists(f)) continue
+  const sources = [...pkgDirs.map((d) => ({ d, f: path.join(nm, d, 'cordis.patch.yml') })).filter((x) => exists(x.f)).map((x) => ({ label: `${x.d}/cordis.patch.yml`, d: x.d, text: readText(x.f) })), ...extra.map((x) => ({ ...x, d: x.label }))]
+  for (const { label, d, text } of sources) {
     let doc
-    try { doc = parse(readText(f)) } catch (e) { bad.push(`${d}/cordis.patch.yml 解析失败：${e.message}`); continue }
+    try { doc = parse(text) } catch (e) { bad.push(`${label} 解析失败：${e.message}`); continue }
     const names = []
     const visit = (node, inArray) => {
       if (Array.isArray(node)) { for (const x of node) visit(x, true); return }
@@ -665,12 +666,13 @@ function planPackageJson(text, pkgNames, renames = {}) {
   j.dsh = j.dsh || {}; j.dsh.profile = j.dsh.profile || {}
   const before = Array.isArray(j.dsh.profile.bundles) ? j.dsh.profile.bundles.slice() : []
   // 改名：bundles 里原位换名，dependencies 去掉旧名（下面会补新名）
-  let b = before.map((x) => renames[x] || x).filter((x, i, a) => a.indexOf(x) === i).filter((x) => !PRESET_ONLY.includes(x))
-  if (j.dependencies) for (const o of Object.keys(renames)) delete j.dependencies[o]
-  for (const n of ['dsh-agent-soul', ...pkgNames.filter((n) => !PRESET_ONLY.includes(n)), PRESET_PKG]) if (!b.includes(n)) b.push(n)
+  // 4.3 起 Soul preset 写在 profile 的 cordis.patch.yml 里，以前的独立包 dsh-soul-preset 从 bundles、dependencies 摘掉
+  let b = before.map((x) => renames[x] || x).filter((x, i, a) => a.indexOf(x) === i).filter((x) => !PRESET_ONLY.includes(x) && x !== PRESET_PKG)
+  if (j.dependencies) for (const o of [...Object.keys(renames), PRESET_PKG]) delete j.dependencies[o]
+  for (const n of ['dsh-agent-soul', ...pkgNames.filter((n) => !PRESET_ONLY.includes(n))]) if (!b.includes(n)) b.push(n)
   j.dsh.profile.bundles = b
   j.dependencies = j.dependencies || {}
-  for (const n of ['dsh-agent-soul', ...pkgNames, PRESET_PKG]) j.dependencies[n] = `file:node_modules/${n}`
+  for (const n of ['dsh-agent-soul', ...pkgNames]) j.dependencies[n] = `file:node_modules/${n}`
   const outText = JSON.stringify(j, null, 2) + (text.endsWith('\n') ? '\n' : '')
   const removed = before.filter((x) => PRESET_ONLY.includes(x))
   return { text: outText, bundles: b, removed, changed: outText !== text }
@@ -1041,6 +1043,10 @@ const cfgPath = path.join(PROF, 'cordis.patch.yml')
 const pkg0 = readJson(pkgPath)
 if (!pkg0) die('profile 的 package.json 解析失败')
 const bundles0 = (pkg0.dsh && pkg0.dsh.profile && pkg0.dsh.profile.bundles) || []
+// 砚青几套：profile 里那一节（作者的装法）；没有就看 4.3 以前的独立包 dsh-soul-preset
+const LEGACY_PRESET_RAW = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) ? readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) : ''
+const LEGACY_PRESET = exists(path.join(NM, PRESET_PKG)) || bundles0.includes(PRESET_PKG) || Boolean(pkg0.dependencies && pkg0.dependencies[PRESET_PKG])
+const installedPresetSection = () => (exists(cfgPath) && findPresetSection(readText(cfgPath)))?.text || presetSectionOf(LEGACY_PRESET_RAW)
 
 // 已有安装的位置（更新时以本机现有配置为准）
 const BODY = path.join(NM, 'dsh-agent-soul')
@@ -1179,8 +1185,9 @@ if (UNINSTALL) {
   const deps0 = Object.keys({ ...(pkg0.dependencies || {}), ...(pkg0.devDependencies || {}), ...(pkg0.optionalDependencies || {}) })
   const deselected0 = (pkg0.dsh && pkg0.dsh.desktopNextDeselectedBundles) || []
   const present = OUR_PKGS.filter((n) => exists(path.join(NM, n)) || deps0.includes(n) || bundles0.includes(n) || deselected0.includes(n))
-  const presetPj = readJson(path.join(NM, PRESET_PKG, 'package.json'))
-  const wasShell = Boolean(presetPj && presetPj.dshSoulShell)
+  // Soul preset：profile 里那一节（4.3 起），或 4.3 以前的独立包；上次卸载留下的空壳两处都认
+  const presetSec0 = installedPresetSection()
+  const wasShell = isShellSection(presetSec0) || Boolean(readJson(path.join(NM, PRESET_PKG, 'package.json'))?.dshSoulShell)
   // 更新、重新生成 preset 时在 node_modules 里留下的整份拷贝（<包>.bak-…）
   const bakDirs = exists(NM) ? fs.readdirSync(NM).filter((d) => OUR_PKGS.some((n) => d.startsWith(n + '.bak-'))) : []
   const LOCK_FILES = [
@@ -1259,7 +1266,7 @@ if (UNINSTALL) {
   }
 
   step('清点要卸的东西')
-  ok(`本体和零件 ${present.length} 个：${present.join('、') || '（没有）'}${wasShell ? `（${PRESET_PKG} 已经是上次卸载留下的空壳）` : ''}`)
+  ok(`本体和零件 ${present.length} 个：${present.join('、') || '（没有）'}${wasShell ? '（Soul preset 已经是上次卸载留下的空壳）' : ''}`)
   if (bakDirs.length) ok(`node_modules 里的旧拷贝 ${bakDirs.length} 个：${bakDirs.join('、')}`)
   ok(`心跳：${heartbeats.length ? heartbeats.map((h) => (h.kind === 'launchd' ? `launchd ${h.label}（${posix(h.file)}）` : `计划任务 ${h.name}`)).join('、') : process.platform === 'linux' ? '这个系统上脚本没注册过定时任务；自己加过 cron 的话，卸完手动删掉那一行' : '没找到'}`)
   ok(`书房和记忆中枢：${dataDirs.length ? dataDirs.map(posix).join('、') + (KEEP_DATA ? '——按 --keep-data 保留' : '——备份后删除') : '（没有）'}`)
@@ -1272,9 +1279,9 @@ if (UNINSTALL) {
   }
 
   // 旧会话怎么处理：没有受影响的会话就不用选；空壳要从已装的 Soul preset 反推，没装就做不了
-  const shellPossible = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml'))
+  const shellPossible = Boolean(presetSec0)
   const MODES = Object.fromEntries(Object.entries(OLD_SESSION_MODES).filter(([k]) => k !== 'shell' || shellPossible))
-  if (OLD_SESSIONS === 'shell' && !shellPossible) die(`node_modules 里没有 ${PRESET_PKG}，做不出空壳 preset；换成 --old-sessions rewrite 或 keep`)
+  if (OLD_SESSIONS === 'shell' && !shellPossible) die('profile 里没有 Soul preset，做不出空壳 preset；换成 --old-sessions rewrite 或 keep')
   let OLD = OLD_SESSIONS
   if (!soulSessions.length && !unreadable.length) { OLD = OLD || 'keep'; info('没有用 Soul preset 建的会话，Soul preset 直接删掉') }
   else if (!OLD && TTY) {
@@ -1287,15 +1294,16 @@ if (UNINSTALL) {
   }
   if (OLD === 'rewrite' && soulSessions.length && unreadable.length && !zstdOk) die('这个 node 解不开 zstd 压缩的会话文件，改写不了旧会话。用 DSH 自带的 node（24 以上）跑，或者加 --node <路径> 指定一个。')
 
-  if (OLD === 'shell' && (soulSessions.some((item) => RETIRED_PRESETS[item.preset]) || /(?:ptc-soul-flash|flash-lean-ptc-v3-soul)/.test(readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml'))))) {
+  if (OLD === 'shell' && (soulSessions.some((item) => RETIRED_PRESETS[item.preset]) || /(?:ptc-soul-flash|flash-lean-ptc-v3-soul)/.test(presetSec0 + LEGACY_PRESET_RAW))) {
     if (unreadable.length) die('有会话无法读取，不能安全移除退役 preset；请修复会话文件或使用支持 zstd 的 Node 后重试')
     OLD = 'rewrite'
     info('旧安装含已退役 preset：改写会话入口到对应官方 preset，不再留下 Flash 空壳')
   }
   step('打算怎么做')
-  const remove = OLD === 'shell' ? present.filter((n) => n !== PRESET_PKG) : present
+  // 空壳写在 profile 里，4.3 以前的独立包 dsh-soul-preset 一律摘掉
+  const remove = present
   const pjPlan = planPackageJsonRemoval(readText(pkgPath), remove)
-  ok(`package.json：bundles 去掉 ${pjPlan.removed.bundles.length} 个、dependencies 去掉 ${pjPlan.removed.dependencies.length} 个${pjPlan.removed.deselected.length ? `、desktopNextDeselectedBundles 去掉 ${pjPlan.removed.deselected.length} 个` : ''}${OLD === 'shell' ? `；${PRESET_PKG} 留着（空壳）` : ''}`)
+  ok(`package.json：bundles 去掉 ${pjPlan.removed.bundles.length} 个、dependencies 去掉 ${pjPlan.removed.dependencies.length} 个${pjPlan.removed.deselected.length ? `、desktopNextDeselectedBundles 去掉 ${pjPlan.removed.deselected.length} 个` : ''}`)
   const pkgDirsForIds = present.filter((d) => exists(path.join(NM, d, 'package.json')))
   const ids = [...new Set([...(parse ? soulEntryIds(NM, pkgDirsForIds, parse) : []), ...SOUL_IDS_FALLBACK, 'huanqi'])]
   const cfgText0 = exists(cfgPath) ? readText(cfgPath) : ''
@@ -1308,10 +1316,9 @@ if (UNINSTALL) {
   }
   let shell = null, rewrites = []
   if (OLD === 'shell') {
-    const curYml = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) ? readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) : ''
-    try { shell = buildShellBundle(curYml, { pkgName: PRESET_PKG }) } catch (e) { die(`做不出空壳 preset：${e.message}。换成 --old-sessions rewrite 或 keep 再跑`) }
+    try { shell = buildShellBundle(presetSec0) } catch (e) { die(`做不出空壳 preset：${e.message}。换成 --old-sessions rewrite 或 keep 再跑`) }
     const miss = Object.keys(byPreset).filter((k) => !shell.ids.includes(k))
-    ok(`${PRESET_PKG} 换成空壳：${shell.ids.join('、')} 的 id 不变、名字后面标「（已卸载）」，压缩和裁剪换回官方原版`)
+    ok(`profile 里的 Soul preset 换成空壳：${shell.ids.join('、')} 的 id 不变、名字后面标「（已卸载）」，压缩和裁剪换回官方原版`)
     if (miss.length) warn(`有旧会话用的 preset 不在已装的 Soul preset 里（${miss.join('、')}），空壳救不了它们；想救就改用 --old-sessions rewrite`)
   } else if (OLD === 'rewrite') {
     rewrites = soulSessions.map((x) => ({ ...x, r: rewriteSessionHeader(x.text, PRESET_MAP) }))
@@ -1323,6 +1330,12 @@ if (UNINSTALL) {
   else if (!OLD) {
     info(`用 Soul preset 建的 ${soulSessions.length} 个旧会话还没定怎么处理，真跑要加 --old-sessions：`)
     for (const [k, v] of Object.entries(MODES)) info(`  ${k}：${v}`)
+  }
+  // profile 里 Soul preset 那一节：留空壳就换成空壳（4.3 以前装在独立包里的也搬进来），否则整节去掉
+  if (shell || findPresetSection(cfgPlan.text)) {
+    cfgPlan.text = setPresetSection(cfgPlan.text, shell ? shell.text : '')
+    cfgPlan.changed = cfgPlan.text !== cfgText0
+    if (!shell) ok('cordis.patch.yml：去掉 Soul preset 那一节')
   }
   let srvPlan = null
   if (exists(SERVERS)) {
@@ -1425,17 +1438,9 @@ if (UNINSTALL) {
   }
 
   // ── 5. 本体和零件 ──
-  step(OLD === 'shell' ? `本体和零件（${PRESET_PKG} 换成空壳）` : '本体和零件')
+  step('本体和零件')
   for (const n of remove) if (exists(path.join(NM, n))) { rm(path.join(NM, n), `node_modules/${n}`); if (!DRY) ok(`node_modules/${n} 已删`) }
   for (const d of bakDirs) { rm(path.join(NM, d), `node_modules/${d}`); if (!DRY) ok(`node_modules/${d} 已删`) }
-  if (shell) {
-    const dir = path.join(NM, PRESET_PKG)
-    if (!wasShell || Object.entries(shell.files).some(([f, t]) => !exists(path.join(NM, PRESET_PKG, f)) || readText(path.join(NM, PRESET_PKG, f)) !== t)) {
-      if (!DRY && exists(dir)) { for (const f of fs.readdirSync(dir)) if (!shell.files[f]) fs.rmSync(path.join(dir, f), { recursive: true, force: true }) }
-      for (const [f, t] of Object.entries(shell.files)) write(path.join(dir, f), t, `${PRESET_PKG}/${f}（空壳）`)
-      if (!DRY) ok(`${PRESET_PKG} 已换成空壳：${shell.ids.map((id) => `${PRESET_LABEL[id] || id}（已卸载）`).join('、')}`)
-    } else ok(`${PRESET_PKG} 已经是空壳，不用改`)
-  }
 
   // ── 6. DSH 家目录里的东西 ──
   step('DSH 家目录里本架构的东西')
@@ -1625,7 +1630,7 @@ const USERN = (SETUP && SETUP.user) || (SETUP_INFO && SETUP_INFO.user) || '用�
 const setupText = (key) => (SETUP_NEW ? SETUP_NEW.files[SETUP.files[key]] : readText(path.join(SETUP_DIR, SETUP.files[key])))
 
 // 要生成的 Soul preset、默认 preset、心跳
-const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')))).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter((id) => PRESET_IDS.includes(id)))] } catch { return [] } })()
+const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(installedPresetSection())).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter((id) => PRESET_IDS.includes(id)))] } catch { return [] } })()
 // 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul → 砚青 PTC 之类）：先映射再过滤，认不出的丢掉
 const mapOldPresetIds = (list) => {
   const out = []
@@ -1643,7 +1648,7 @@ const MIGRATE_PRESETS = !FIX_MODE || !FIX_ONLY.length
 let PRESET_SESSION_PLANS = []
 const configBeforeMigration = exists(cfgPath) ? readText(cfgPath) : ''
 const migratedConfig = MIGRATE_PRESETS ? migratePresetDefault(configBeforeMigration) : configBeforeMigration
-const installedPresetText = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) ? readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) : ''
+const installedPresetText = installedPresetSection()
 const retiredBlocks = presetBlocks(installedPresetText).some((block) => RETIRED_PRESETS[block.id])
 if (MIGRATE_PRESETS) {
   try { PRESET_SESSION_PLANS = planPresetSessions(SESSIONS, RESTORE ? path.join(RB.root, 'sessions') : null) }
@@ -1745,6 +1750,7 @@ const PKGS = AP.map((p) => src.names[p])
 const INST = AP.map((p) => PART_NAMES[p].find((n) => exists(path.join(NM, n, 'package.json'))) || null)
 const RENAMES = AP.map((p, i) => (INST[i] && INST[i] !== PKGS[i] ? { part: p, from: INST[i], to: PKGS[i] } : null)).filter(Boolean)
 // 包名迁移（例如 3.0 装的 dsh-yanqing-* → 上游现在的 dsh-agent-*）要重装零件，那是 --update 的事；--fix 不动包名
+if (FIX_MODE && LEGACY_PRESET) die(`这台的 Soul preset 还装在 4.3 以前的独立包 ${PRESET_PKG} 里：搬进 profile 的 cordis.patch.yml（作者的装法）是 --update 的事，先跑 --update，再 --fix。`)
 if (FIX_MODE && RENAMES.length) die(`这台装的是旧包名（${RENAMES.map((r) => `${r.from} → ${r.to}`).join('；')}），包名迁移要重装零件：请用 --update，--fix 只修文件不改包名。`)
 const RENAME_MAP = Object.fromEntries(RENAMES.map((r) => [r.from, r.to]))
 const stateKit = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
@@ -1838,8 +1844,7 @@ let SUMMARY_MODEL = 'author'
   const skipped = FIX_SKIP.includes('preset-summary-model')
   const missingKey = prov === 'deepseek-official' && recentMissingApiKey()
   const status = !fixSelected('preset-summary-model') ? 'frozen' : skipped ? 'skipped' : prov === 'deepseek-official' && !missingKey ? 'n/a' : det === 'present' ? 'kit' : det === 'absent' ? 'author' : 'manual'
-  const instYml = path.join(NM, PRESET_PKG, 'cordis.patch.yml')
-  const had = det === 'present' && exists(instYml) && /- id: preset-yanqing/.test(readText(instYml)) && !/^\s*summarizationProvider:\s*['"]?deepseek-official/m.test(readText(instYml))
+  const had = det === 'present' && /- id: preset-yanqing/.test(installedPresetText) && !/^\s*summarizationProvider:\s*['"]?deepseek-official/m.test(installedPresetText)
   // preset 每次都按作者的重新生成：安装、更新保持已装的选择（打过的照打，没打的不打），改不改由 --fix 定
   if (status === 'kit' || (!FIX_MODE && had)) SUMMARY_MODEL = 'session'
   FIX_ROWS.push({ id: 'preset-summary-model', status, action: status === 'kit' ? (had ? 'keep' : 'apply') : had ? 'revert' : 'none', note: status === 'n/a' ? '本机默认模型走的就是 deepseek-official（有 API key）' : null })
@@ -1871,7 +1876,7 @@ let SESS = null // 会话在用的 preset id → 个数
   if (cands.length) {
     const sess = SESS = sessionPresetCounts([SESSIONS, ...(RESTORE ? [path.join(RB.root, 'sessions')] : [])])
     let onDisk = []
-    try { onDisk = Object.keys(presetSummary(readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')))) } catch { /* 还没装 */ }
+    onDisk = Object.keys(presetSummary(installedPresetText))
     const recorded = [...((state0 && state0.presetIds) || []), ...((RESTORE && RB.state && RB.state.presetIds) || []), ...Object.keys((state0 && state0.presetAliases) || {})]
     for (const [o, n] of cands) if (sess.counts[o] || onDisk.includes(o) || (sess.unreadable && recorded.includes(o))) PRESET_ALIASES[o] = n
     const kept = Object.keys(PRESET_ALIASES)
@@ -1880,48 +1885,36 @@ let SESS = null // 会话在用的 preset id → 个数
   }
 }
 let BUNDLE
-try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES, summary: SUMMARY_MODEL }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
-const AUTHOR_BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES, summary: 'author' })
-const LEGACY_BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES, summary: 'session' })
-const PRESET_PLANS = {}
-for (const [file, target] of Object.entries(BUNDLE.files)) {
-  const dest = path.join(NM, PRESET_PKG, file)
-  const text = exists(dest) ? readText(dest) : null
-  const plan = planManagedText({ upstream: AUTHOR_BUNDLE.files[file], target, installed: text, record: FIX_RECORDS.presets[file],
-    freeze: FIX_MODE && !fixSelected('preset-summary-model'), legacy: [LEGACY_BUNDLE.files[file]] })
-  PRESET_PLANS[file] = plan
-  if (plan.target !== null) BUNDLE.files[file] = plan.target
-  if (file === 'cordis.patch.yml') {
-    const row = FIX_ROWS.find((r) => r.id === 'preset-summary-model')
-    row.action = plan.action
-    if (plan.action === 'local') row.note = 'preset 本机改过，保留；请确认后手动合并或还原已知原文'
-  }
+try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES, summary: SUMMARY_MODEL }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
+const AUTHOR_BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES, summary: 'author' })
+const LEGACY_BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES, summary: 'session' })
+// 修复记录：4.3 起记 profile 里那一节；以前记的是独立包 dsh-soul-preset/cordis.patch.yml 整份（带注释头），只取「- insert:」那一节来比
+const OLD_PRESET_RECORD = FIX_RECORDS.presets.section || FIX_RECORDS.presets['cordis.patch.yml']
+const PRESET_PLAN = planManagedText({ upstream: AUTHOR_BUNDLE.text, target: BUNDLE.text, installed: installedPresetText || null,
+  record: OLD_PRESET_RECORD && { upstream: presetSectionOf(OLD_PRESET_RECORD.upstream), applied: presetSectionOf(OLD_PRESET_RECORD.applied) },
+  freeze: FIX_MODE && !fixSelected('preset-summary-model'), legacy: [LEGACY_BUNDLE.text] })
+if (PRESET_PLAN.target !== null) BUNDLE.text = PRESET_PLAN.target
+{
+  const row = FIX_ROWS.find((r) => r.id === 'preset-summary-model')
+  row.action = PRESET_PLAN.action
+  if (PRESET_PLAN.action === 'local' && row.status !== 'n/a') row.note = 'preset 本机改过，保留；请确认后手动合并或还原已知原文'
+  // 本机不需要（默认模型就走作者那条路由）时 preset 本来就不用改，别借用「本机改过、请手动合并」的话术
+  else if (PRESET_PLAN.action === 'local') row.action = 'none'
 }
-if (Object.values(PRESET_PLANS).some((plan) => plan.action === 'local')) {
-  for (const file of Object.keys(BUNDLE.files)) {
-    const installedFile = path.join(NM, PRESET_PKG, file)
-    if (exists(installedFile)) BUNDLE.files[file] = readText(installedFile)
-    delete PRESET_PLANS[file].record
-  }
-}
-if (MIGRATE_PRESETS && (retiredBlocks || /^#.*PTC.*Flash/m.test(installedPresetText))) {
-  const targetBundle = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { pkgName: PRESET_PKG, aliases: PRESET_ALIASES, summary: SUMMARY_MODEL })
-  const migrated = migratePresetBundle(installedPresetText, targetBundle.files['cordis.patch.yml'], [
-    AUTHOR_BUNDLE.files['cordis.patch.yml'], LEGACY_BUNDLE.files['cordis.patch.yml'],
-    FIX_RECORDS.presets['cordis.patch.yml']?.upstream, FIX_RECORDS.presets['cordis.patch.yml']?.applied
-  ])
-  BUNDLE.files = { ...targetBundle.files, 'cordis.patch.yml': migrated }
+// 本机改过的（不是作者原样、也不是 kit 写的）整节不动，只报出来
+if (PRESET_PLAN.action === 'local') delete PRESET_PLAN.record
+if (MIGRATE_PRESETS && (retiredBlocks || /^#.*PTC.*Flash/m.test(LEGACY_PRESET_RAW))) {
+  const targetBundle = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES, summary: SUMMARY_MODEL })
+  BUNDLE.text = migratePresetBundle(installedPresetText, targetBundle.text, [AUTHOR_BUNDLE.text, LEGACY_BUNDLE.text,
+    presetSectionOf(OLD_PRESET_RECORD?.upstream), presetSectionOf(OLD_PRESET_RECORD?.applied)].filter(Boolean))
   // 正文可能包含本机定制；不能把定制内容记成作者原文，后续仍走三方核对。
-  for (const file of Object.keys(PRESET_PLANS)) {
-    delete PRESET_PLANS[file].record
-    delete FIX_RECORDS.presets[file]
-    if (BUNDLE.files[file] === targetBundle.files[file]) PRESET_PLANS[file].record = { upstream: AUTHOR_BUNDLE.files[file], applied: BUNDLE.files[file] }
-  }
+  delete PRESET_PLAN.record
+  if (BUNDLE.text === targetBundle.text) PRESET_PLAN.record = { upstream: AUTHOR_BUNDLE.text, applied: BUNDLE.text }
 }
 const parseYaml = yamlParser(PROF)
-if (parseYaml && (MIGRATE_PRESETS || BUNDLE.files['cordis.patch.yml'] !== installedPresetText)) {
+if (parseYaml && (MIGRATE_PRESETS || BUNDLE.text !== installedPresetText)) {
   try {
-    const d = parseYaml(BUNDLE.files['cordis.patch.yml'])
+    const d = parseYaml(BUNDLE.text)
     const ids = d[0].insert.map((r) => r.config.id)
     if (ids.join() !== [...PRESET_IDS.filter((x) => PRESET_CHOICE.includes(x)), ...Object.keys(BUNDLE.aliases)].join()) throw new Error('preset id 不对：' + ids.join())
     for (const r of d[0].insert) {
@@ -2134,8 +2127,8 @@ if (!hasNames(NAME_MAP)) {
 }
 
 // ═══ 更新：变化报告 ═══════════════════════════════════════════════════
-const presetDir = path.join(NM, PRESET_PKG)
-const presetChanged = Object.entries(BUNDLE.files).some(([f, t]) => !exists(path.join(presetDir, f)) || readText(path.join(presetDir, f)) !== t)
+// profile 里那一节和要写的不一样，或者还装在 4.3 以前的独立包里（要搬进 profile），都算要重新写
+const presetChanged = LEGACY_PRESET || (exists(cfgPath) && findPresetSection(readText(cfgPath)))?.text !== BUNDLE.text
 if (UPDATE && !FIX_MODE) {
   step('上游改了什么')
   const oldSha = state0 && state0.upstream ? state0.upstream.sha : null
@@ -2202,12 +2195,12 @@ if (UPDATE && !FIX_MODE) {
   if (hubOf('add').length) info(`中枢里会新增：${hubOf('add').join('、')}`)
   if (hubOf('local').length) info(`中枢里这些本机改过，不动（和上游新版不同，需要的话人工对照）：${hubOf('local').join('、')}`)
   if (presetChanged) {
-    const oldText = exists(path.join(presetDir, 'cordis.patch.yml')) ? readText(path.join(presetDir, 'cordis.patch.yml')) : ''
-    const so = presetSummary(oldText), sn = presetSummary(BUNDLE.files['cordis.patch.yml'])
-    out('  Soul preset：会重新生成')
+    const oldText = installedPresetText
+    const so = presetSummary(oldText), sn = presetSummary(BUNDLE.text)
+    out(`  Soul preset：会重新写进 profile 的 cordis.patch.yml${LEGACY_PRESET ? `（从 4.3 以前的独立包 ${PRESET_PKG} 搬过来，照作者的装法；包会摘掉）` : ''}`)
     // 按块比：只是多了别名、或者文件头注释变了的，不把别的 preset 说成「有变化」
     const blocks = (t) => Object.fromEntries(String(t).replace(/\r\n/g, '\n').split(/\n(?= {4}- id: preset-)/).map((b) => [(b.match(/^ {8}id: ([\w-]+)$/m) || [])[1], b.replace(/\s+$/, '')]).filter(([k]) => k))
-    const ob = blocks(oldText), nb = blocks(BUNDLE.files['cordis.patch.yml'])
+    const ob = blocks(oldText), nb = blocks(BUNDLE.text)
     // 2.16 起压缩段按作者算法展开、保留段内注释：只差注释的别报成「参数或提示词有变化」
     const noComments = (b) => b.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')
     // 2.17 起默认去掉压缩摘要那两行（--summary-model）：只差这两行的单独说清楚
@@ -2224,8 +2217,7 @@ if (UPDATE && !FIX_MODE) {
       if (n) warn(`Soul preset ${id} 会被去掉，但还有 ${n} 个会话是用它建的，去掉后这些会话打不开。先停下`)
       else info(`${id}：去掉（没有会话在用）`)
     }
-    const body = (t) => t.split('\n').filter((l) => !l.startsWith('#')).join('\n')
-    if (body(oldText) === body(BUNDLE.files['cordis.patch.yml'])) info('（preset 正文完全一样，只有文件开头的注释变了）')
+    if (oldText === BUNDLE.text) info('（preset 正文完全一样，只是换个位置）')
   } else out('  Soul preset：和源一致，不用重新生成')
   const willReplace = (pkg) => { const i = PKGS.indexOf(pkg); return !INST[i] || INST[i] !== PKGS[i] || (!LOCAL_PARTS.has(AP[i]) && Boolean(PART_DIFF[i] && !PART_DIFF[i].same)) }
   const cfgPlan = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET, dshHome: DSH_HOME, memRelative: memFixed(willReplace) })
@@ -2276,7 +2268,7 @@ if (FIX_MODE) {
     }
     if (!DRY) {
       runFixes({ fresh: () => false, apply: false, record: true })
-      for (const [file, plan] of Object.entries(PRESET_PLANS)) if (plan.record) FIX_RECORDS.presets[file] = plan.record
+      if (PRESET_PLAN.record) FIX_RECORDS.presets = { section: PRESET_PLAN.record }
       const nextState = { ...(state0 || {}), kitVersion: KIT_VERSION, fixRecords: FIX_RECORDS, fixSkip: FIX_SKIP,
         fixes: Object.fromEntries(preview.map((row) => [row.id, { ...row, kitVersion: KIT_VERSION, upstream: SRC.sha }])) }
       const nextText = JSON.stringify(nextState, null, 2)
@@ -2317,7 +2309,7 @@ const BK = path.join(SOUL_ROOT, '_backup', `${TS}-${FIX_MODE ? 'fix' : UPDATE ? 
 const LOCKS = { 'pnpm-lock.yaml': path.join(PROF, 'pnpm-lock.yaml'), 'pnpm-current-lock.yaml': path.join(NM, '.pnpm', 'lock.yaml'), 'modules.yaml': path.join(NM, '.modules.yaml') }
 if (!DRY) {
   FIX_TRANSACTION = beginFixTransaction(path.join(BK, 'transaction'), [
-    pkgPath, cfgPath, STATE_PATH, ...Object.values(LOCKS), ...PRESET_SESSION_PLANS.map((plan) => plan.file),
+    pkgPath, cfgPath, STATE_PATH, ...Object.values(LOCKS), path.join(NM, '.package-map.json'), ...PRESET_SESSION_PLANS.map((plan) => plan.file),
     ...new Set(['dsh-agent-soul', ...PKGS, ...INST.filter(Boolean), PRESET_PKG].map((name) => path.join(NM, name)))
   ])
 }
@@ -2429,12 +2421,16 @@ if (UPDATE && !FIX_MODE) {
 
 // ═══ Soul preset ═════════════════════════════════════════════════════════
 step(`Soul preset（${PRESET_CHOICE.map((x) => PRESET_LABEL[x]).join(' / ')}）`)
-if (!presetChanged) ok(`${PRESET_PKG}：和源一致，跳过`)
-else if (DRY) info(`[干跑] 将生成 node_modules/${PRESET_PKG}（${PRESET_CHOICE.length} 个 preset）`)
+// 照作者的装法：写进 profile 的 cordis.patch.yml 顶层一项「- insert:」（作者 soul-preset verify / soul-doctor 认的位置）
+if (!presetChanged) ok('Soul preset：profile 里那一节和源一致，跳过')
 else {
-  fs.mkdirSync(presetDir, { recursive: true })
-  for (const [f, t] of Object.entries(BUNDLE.files)) fs.writeFileSync(path.join(presetDir, f), t, 'utf8')
-  ok(`${PRESET_PKG}：已生成（${PRESET_CHOICE.join('、')}${Object.keys(BUNDLE.aliases).length ? `；旧会话别名 ${Object.entries(BUNDLE.aliases).map(([o, n]) => `${o} → ${n}`).join('、')}` : ''}）`)
+  if (!exists(cfgPath) && !DRY) die('profile 的 cordis.patch.yml 不在，写不了 Soul preset')
+  write(cfgPath, setPresetSection(exists(cfgPath) ? readText(cfgPath) : '', BUNDLE.text), `cordis.patch.yml（Soul preset：${PRESET_CHOICE.length} 个）`)
+  if (!DRY) ok(`Soul preset 写进 profile 的 cordis.patch.yml：${PRESET_CHOICE.join('、')}${Object.keys(BUNDLE.aliases).length ? `；旧会话别名 ${Object.entries(BUNDLE.aliases).map(([o, n]) => `${o} → ${n}`).join('、')}` : ''}`)
+  if (exists(path.join(NM, PRESET_PKG))) {
+    if (DRY) info(`[干跑] 将删掉 4.3 以前的独立包 node_modules/${PRESET_PKG}（备份里有）`)
+    else { fs.rmSync(path.join(NM, PRESET_PKG), { recursive: true, force: true }); ok(`4.3 以前的独立包 node_modules/${PRESET_PKG} 已删（备份里有）`) }
+  }
 }
 
 // ═══ 恢复：放回备份里的数据 ═══════════════════════════════════════════
@@ -2531,7 +2527,17 @@ if (FIX_MODE) {
   if (plan.changed) { JSON.parse(plan.text); write(pkgPath, plan.text, 'package.json') } else ok('package.json 不用改')
   if (RENAMES.length) ok(`bundles、dependencies 里换名：${RENAMES.map((r) => `${r.from} → ${r.to}`).join('；')}`)
   if (plan.removed.length) ok(`bundles 去掉 ${plan.removed.join('、')}（它们由 Soul preset 调用；插件市场会显示「已停用」，属正常）`)
-  ok(`bundles ${plan.bundles.length} 项；dependencies 里本体、${PKGS.length} 个零件、${PRESET_PKG} 都是 file:node_modules/<包名>`)
+  ok(`bundles ${plan.bundles.length} 项；dependencies 里本体、${PKGS.length} 个零件都是 file:node_modules/<包名>`)
+  // 4.3 以前的独立包 dsh-soul-preset：Soul preset 搬进 profile 以后，锁文件里它的条目也摘掉（和卸载用同一套）
+  if (LEGACY_PRESET) {
+    ok(`bundles、dependencies 去掉 4.3 以前的独立包 ${PRESET_PKG}（Soul preset 改写在 profile 的 cordis.patch.yml 里）`)
+    for (const [f, fn] of [[LOCKS['pnpm-lock.yaml'], removeLockEntries], [LOCKS['pnpm-current-lock.yaml'], removeLockEntries], [LOCKS['modules.yaml'], removeModulesEntries], [path.join(NM, '.package-map.json'), removePackageMapEntries]]) {
+      if (!exists(f)) continue
+      let r
+      try { r = fn(readText(f), [PRESET_PKG]) } catch (e) { warn(`${posix(f)} 解析不了（${e.message}），没去掉 ${PRESET_PKG}；下次在插件市场装东西前，在 DSH 里重装一次插件让 pnpm 重写它`); continue }
+      if (r.changed) write(f, r.text, `${path.basename(f)}（去掉 ${PRESET_PKG}）`)
+    }
+  }
   if (RENAMES.length) {
     const ls = renameInLocks(LOCKS, RENAME_MAP)
     if (ls.length && !DRY) ok(`锁文件同步换名：${ls.join('、')}`)
@@ -2758,14 +2764,17 @@ if (RESTORE) {
 step(`校验和安装记录`)
 if (!DRY) {
   JSON.parse(readText(pkgPath)); ok('package.json 是合法 JSON')
-  for (const n of ['dsh-agent-soul', ...partsDone, PRESET_PKG]) if (!exists(path.join(NM, n, 'package.json'))) die(`node_modules/${n} 不见了`)
-  ok(`${partsDone.length + 2} 个包都在 node_modules 里`)
+  for (const n of ['dsh-agent-soul', ...partsDone]) if (!exists(path.join(NM, n, 'package.json'))) die(`node_modules/${n} 不见了`)
+  ok(`${partsDone.length + 1} 个包都在 node_modules 里`)
+  const presetSec = findPresetSection(readText(cfgPath))
+  if (!presetSec) die('profile 的 cordis.patch.yml 里找不到 Soul preset 那一节（- insert:），新会话选不到砚青')
+  ok(`Soul preset 在 profile 的 cordis.patch.yml 里：${Object.keys(presetSummary(presetSec.text)).join('、')}`)
   for (const r of RENAMES) if (exists(path.join(NM, r.from))) die(`旧目录 node_modules/${r.from} 还在，和新包 ${r.to} 会重复注册`)
   const r = runNode(path.join(BODY, 'tools', 'verify-client-ids.mjs'), [PROF], 'verify-client-ids')
   if (!r.ok) die('注册 id 有问题（撞车或面板 id ≠ 包名，会让 DSH 一启动就崩），先别启动 DSH：\n' + r.out)
   ok('注册 id 没有撞车，面板 id 都等于包名')
   if (parseYaml) {
-    const bad = patchNamesMissing(NM, ['dsh-agent-soul', ...partsDone, PRESET_PKG], parseYaml)
+    const bad = patchNamesMissing(NM, ['dsh-agent-soul', ...partsDone], parseYaml, [{ label: 'profile 里的 Soul preset', text: presetSec.text }])
     // 加载名还是上游旧包名的（echo-load-name、panel-load-name 管的）：安装、更新不改，--fix 没选它也不改，只提醒
     const loadOld = FILE_FIXES.filter((f) => /-load-name$/.test(f.id)).flatMap((f) => f.olds || []).map((o) => o.replace(/^name: /, ''))
     const known = bad.filter((b) => loadOld.some((n) => b.endsWith(` 要加载 ${n}，node_modules 里没有`)))
@@ -2775,7 +2784,7 @@ if (!DRY) {
     else if (other.length) die('有包要加载的插件在 node_modules 里找不到（DSH 启动时会 import 失败），先别启动 DSH：\n      ' + [...new Set(other)].join('\n      '))
     if (!bad.length) ok('每个包要加载的插件都找得到')
   } else info('profile 里没有 YAML 解析器，跳过「要加载的插件找不找得到」这项校验')
-  for (const [file, plan] of Object.entries(PRESET_PLANS)) if (plan.record) FIX_RECORDS.presets[file] = plan.record
+  if (PRESET_PLAN.record) FIX_RECORDS.presets = { section: PRESET_PLAN.record }
   const now = new Date().toISOString()
   const st = {
     _说明: 'dsh-agent-soul 安装包的安装记录；install.mjs --update 靠它判断从哪一版更新、装了哪些零件、哪些是用户拒掉的。',
