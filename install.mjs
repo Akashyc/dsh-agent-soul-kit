@@ -89,7 +89,7 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '4.1'
+const KIT_VERSION = '4.2'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
@@ -2208,7 +2208,7 @@ if (UPDATE && !FIX_MODE) {
   const fixPreview = runFixes({ fresh: (pkg) => { const i = PKGS.indexOf(pkg); return !INST[i] || INST[i] !== PKGS[i] || Boolean(PART_DIFF[i] && !PART_DIFF[i].same) }, apply: false })
   const fixPending = [...FIX_ROWS, ...fixPreview].some((r) => FIX_CHANGE.includes(r.action))
   const skipMoved = JSON.stringify([...((state0 && state0.fixSkip) || [])].sort()) !== JSON.stringify([...FIX_SKIP].sort())
-  // mcp-hub 清单里本安装包登记的 echo 还没写 DSH_HOME（4.1 以前装的）：也算有事要做
+  // mcp-hub 清单里本安装包登记的 echo 还没写 DSH_HOME（4.2 以前装的）：也算有事要做
   const echoEnvStale = PKGS.includes('dsh-mcp-hub') && (() => {
     const doc = readJson(path.join(DSH_HOME, 'mcp-hub', 'servers.json')), arr = Array.isArray(doc) ? doc : doc && doc.servers
     const e = Array.isArray(arr) && arr.find((x) => x && x.serverName === 'echo' && Array.isArray(x.args) && x.args.some((a) => /echo-mcp\.mjs$/.test(String(a))))
