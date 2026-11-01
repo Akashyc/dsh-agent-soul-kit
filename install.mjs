@@ -1760,7 +1760,7 @@ FIX_ROWS.push({ id: 'pack-unshipped', status: !fixSelected('pack-unshipped') ? '
 const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer' && !(PACK_FIX && x.issue.kind === 'unshipped'))
 if (PKG_BROKEN.length) {
   const optional = [...new Set(PKG_BROKEN.map((x) => x.part).filter((p) => p && OPTIONAL_PARTS.includes(p)))]
-  die(`上游包的发布清单不自洽，照清单装上后会缺文件、加载失败：\n      ${PKG_BROKEN.map((x) => describeIssue(x.label, x.issue)).join('\n      ')}\n    这是上游打包的问题：源码里也没有的文件安装包补不了（源码里有、只是漏列的，由修复 pack-unshipped 补上，除非跳过了它）。${SRC.sha === VERIFIED.sha ? '' : `可以先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包对照过的版本；`}${optional.length ? `加 --skip-part ${optional.join(',')} 先跳过${optional.length > 1 ? '这几个' : '这个'}可选零件（已装的那份保留原样）；` : ''}并告诉用户。`)
+  die(`上游包有问题，照装 DSH 会加载失败：\n      ${PKG_BROKEN.map((x) => describeIssue(x.label, x.issue)).join('\n      ')}\n    这是上游的问题，安装包不替作者改代码、也补不了源码里没有的文件（源码里有、只是漏列的，由修复 pack-unshipped 补上）；这次什么都没装，已装的照常能用。等作者修好再更新，${SRC.sha === VERIFIED.sha ? '' : `可以先用 --ref ${VERIFIED.sha.slice(0, 7)} 装安装包对照过的版本；`}${optional.length ? `加 --skip-part ${optional.join(',')} 先跳过${optional.length > 1 ? '这几个' : '这个'}可选零件（已装的那份保留原样）；` : ''}并告诉用户。`)
 }
 for (const x of PKG_ISSUES.filter((x) => x.issue.kind === 'peer')) info(`${describeIssue(x.label, x.issue)}；装完在新会话里确认它确实加载了，没加载再报给上游`)
 if (!UPDATE && RENAMES.length) die(`这台电脑装的是旧包名（${RENAMES.map((r) => r.from).join('、')}），请用 --update 迁移。`)
