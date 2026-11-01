@@ -158,7 +158,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 | 5 | 修复（kit 修复清单 `lib/fixes.mjs`）：逐条看问题在作者这一版里还在不在，还在才修。包括 mnemon-probe 默认路径、clock 面板定位、mcp-hub 清单目录、memory 相对路径与上下文水位、yantai / riji 的书房和日记路径、echo / 换气面板的加载名与自建一节、echo 面板在 macOS 上找 node、echo 面板 / 换气 / compact-region 的诊断日志路径与行为修复、换气配置的字符串布尔。路径类修复都是插件运行时自己找 DSH 家目录，不写任何一台电脑的绝对路径；以前写死了路径的旧写法会换成现行写法。输出里每条一行，「需人工核对」「本机改过」的会写进「需要留意」 | 见第十一节 3、4、16、17、23 和第九节「修复」 |
 | 6 | 生成 `node_modules/dsh-soul-preset`：按方案生成上游砚青四套；移除旧 Flash，旧会话与默认入口迁到砚青 PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）、dsh-soul-preset 进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
-| 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`）；已有就不动 | 记忆检索走常驻服务 |
+| 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`，`env` 带上 `DSH_HOME`）；已有就不动，只给本安装包登记的那台补上缺的 `DSH_HOME` | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → `install-kit --all` 把脚本装进 hub（再补上同义词表 `synonyms.json`）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
 | 10 | 写入 `SELF.src.md`（方案里的模板，填上本机路径）→ `scaffold --apply` 搭骨架 → 方案带完整人设的放进 `65-声音/` | plan 的第 2、3 步 |
 | 11 | 心跳：写 `soul/60-工具/heartbeat.mjs`；方案开了心跳的，macOS 注册 launchd，Windows 注册计划任务（用电池也照跑，错过会补跑），并立刻触发一次 | 每天自动刷新索引和自我层 |

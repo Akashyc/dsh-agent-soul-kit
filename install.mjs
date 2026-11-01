@@ -2208,7 +2208,14 @@ if (UPDATE && !FIX_MODE) {
   const fixPreview = runFixes({ fresh: (pkg) => { const i = PKGS.indexOf(pkg); return !INST[i] || INST[i] !== PKGS[i] || Boolean(PART_DIFF[i] && !PART_DIFF[i].same) }, apply: false })
   const fixPending = [...FIX_ROWS, ...fixPreview].some((r) => FIX_CHANGE.includes(r.action))
   const skipMoved = JSON.stringify([...((state0 && state0.fixSkip) || [])].sort()) !== JSON.stringify([...FIX_SKIP].sort())
-  if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !hubOf('update').length && !hubOf('add').length && !hubStale && !fixPending && !presetChanged && !presetMigrationPending && !cfgPlan.changed && !pkgPlan.changed) {
+  // mcp-hub 清单里本安装包登记的 echo 还没写 DSH_HOME（4.1 以前装的）：也算有事要做
+  const echoEnvStale = PKGS.includes('dsh-mcp-hub') && (() => {
+    const doc = readJson(path.join(DSH_HOME, 'mcp-hub', 'servers.json')), arr = Array.isArray(doc) ? doc : doc && doc.servers
+    const e = Array.isArray(arr) && arr.find((x) => x && x.serverName === 'echo' && Array.isArray(x.args) && x.args.some((a) => /echo-mcp\.mjs$/.test(String(a))))
+    return Boolean(e) && (e.env || {}).DSH_HOME !== posix(DSH_HOME)
+  })()
+  if (echoEnvStale) out('  mcp-hub 清单里的 echo：会补上 DSH_HOME（新版 echo-mcp 靠它找会话日志）')
+  if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !hubOf('update').length && !hubOf('add').length && !hubStale && !fixPending && !presetChanged && !presetMigrationPending && !cfgPlan.changed && !pkgPlan.changed && !echoEnvStale) {
     out('\n已经是最新，什么都不用改。')
     out(`  修复清单：没有要动的（kit 修 ${[...FIX_ROWS, ...fixPreview].filter((r) => r.status === 'kit').length} 条，都已经在）`)
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
@@ -2490,7 +2497,9 @@ if (PKGS.includes('dsh-mcp-hub') && !FIX_MODE) {
   step('mcp-hub 接入 echo 检索（记忆召回走常驻服务）')
   const SERVERS = path.join(DSH_HOME, 'mcp-hub', 'servers.json')
   const echoMcp = path.join(HUB, 'echo-mcp.mjs')
-  const entry = { serverName: 'echo', transport: 'stdio', enabled: true, command: posix(NODE_FOR_CONFIG), args: [posix(echoMcp)], cwd: posix(HUB), toolCallTimeoutMs: 60000 }
+  // echo-mcp 按 DSH_HOME 找会话日志（上游 11-01 起没有就退回作者电脑的 D:/AI/dsh/home），
+  // 而 mcp-hub 会滤掉继承来的 DSH_* 环境变量，只能在清单里给这台服务器显式写上
+  const entry = { serverName: 'echo', transport: 'stdio', enabled: true, command: posix(NODE_FOR_CONFIG), args: [posix(echoMcp)], cwd: posix(HUB), env: { DSH_HOME: posix(DSH_HOME) }, toolCallTimeoutMs: 60000 }
   const willHave = exists(echoMcp) || hubOf('add').includes('echo-mcp.mjs') || hubOf('update').includes('echo-mcp.mjs') || (!UPDATE && exists(path.join(SRC.dir, 'kit', 'echo', 'echo-mcp.mjs')))
   if (!willHave) { warn('中枢里没有 echo-mcp.mjs（上游这一版还没有，或本机中枢不是全套），没接入；mcp-hub 照样能用来接别的 MCP'); MCP_STATUS = '未接入 echo' }
   else {
@@ -2499,7 +2508,15 @@ if (PKGS.includes('dsh-mcp-hub') && !FIX_MODE) {
     else {
       const arr = Array.isArray(doc) ? doc : (doc.servers = Array.isArray(doc.servers) ? doc.servers : [])
       const has = arr.find((x) => x && x.serverName === 'echo')
-      if (has) { ok(`mcp-hub 清单里已经有 echo，保留原样（${posix(SERVERS)}）`); MCP_STATUS = '已有 echo' }
+      // 本安装包登记的那台（跑中枢里的 echo-mcp.mjs）缺 DSH_HOME 就补上；用户自己配的不动
+      const ours = has && Array.isArray(has.args) && has.args.some((a) => /echo-mcp\.mjs$/.test(String(a)))
+      if (ours && (has.env || {}).DSH_HOME !== entry.env.DSH_HOME) {
+        backup(SERVERS, UPDATE ? 'pre-soul-update' : 'pre-soul-kit')
+        has.env = { ...(has.env || {}), DSH_HOME: entry.env.DSH_HOME }
+        write(SERVERS, JSON.stringify(doc, null, 2), 'mcp-hub/servers.json（echo 补上 DSH_HOME）')
+        if (!DRY) ok(`mcp-hub 清单里的 echo 补上 DSH_HOME=${entry.env.DSH_HOME}（新版 echo-mcp 靠它找会话日志）`)
+        MCP_STATUS = '已接入 echo'
+      } else if (has) { ok(`mcp-hub 清单里已经有 echo，保留原样（${posix(SERVERS)}）`); MCP_STATUS = '已有 echo' }
       else {
         if (exists(SERVERS)) backup(SERVERS, UPDATE ? 'pre-soul-update' : 'pre-soul-kit')
         arr.push(entry)
