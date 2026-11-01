@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 4.3**（2026-11-01）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 4.5**（2026-11-01）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -32,9 +32,10 @@
   - mobile-adapt：手机竖屏适配；
   - riji：日记入口，读的是本机日记目录；
   - splash：启动一屏；
-  - yantai：工作台面板（水位 / 未结 / 账本 / 门）。
+  - yantai：工作台面板（水位 / 未结 / 账本 / 门）；
+  - perf：渲染性能护栏，界面上可以随时关掉高成本的毛玻璃（`backdrop-filter`）效果。
 
-  后五个是面板件，默认不勾：装完没有数据源就是空面板，想用再选。
+  后六个是面板件，默认不勾：装完没有数据源就是空面板，想用再选。
 
 各系统上的已知限制（读上游源码核对的；问答和干跑里会按这台电脑的系统提示，选了也不拦）：
 
@@ -260,10 +261,10 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 版本记录
 
-这里只保留最近三条更新；4.1 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；4.2 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 4.5 | 2026-11-01 | 跟上游 913a7b2（v2.0.0）：注册新零件 perf / `dsh-agent-perf`（渲染性能护栏，界面上可随时关掉高成本的 `backdrop-filter`；服务端 `apply` 是空的，没有配置、不写状态文件），进可选列表、默认不勾，已有的安装 `--update` 时问一句、拒掉就记进安装记录，不想装可加 `--skip-part perf`。没有新修复：本轮扫出的 5 条疑似问题逐条核对过——echo 诊断日志和换气触发口的写死路径已由 `echo-hub-path` / `huanqi-hub-path` 覆盖，clock 的浏览器候选路径是有意列出各系统安装位置、该文件不在发布清单里，换气测试里的 `D:/AI/yanqing-soul` 只是测试夹具、测试目录也不发布，perf 的 client id 与其它面板件同一约定。 |
 | 4.4 | 2026-11-01 | 新增可选的第五个 Soul preset「砚青 PTC Flash」：照 LarryE135/dsh-flash-presets 的 v3 适配（id `yanqing-ptc-flash`，压缩、裁剪换成带门牌的零件、补上范围压缩，其余照作者），安装问答里和砚青四套一起选、默认不选，已装的用 `--update --flash on/off` 开关；每次安装、更新在线取作者最新发布的版本（`--flash-ref`、`--flash-source` 可指定），`--fix` 钉在已装那一版。 |
 | 4.3 | 2026-11-01 | 修复和安装、更新、恢复分开：那几步只按作者上游装、不打修复，装完单独检查——先列出问题（清单里的逐条判定、清单外的疑似问题），用户逐条选修 / 不修 / 这次先不动，只修选中的；终端里装完会接着问，不在终端里的 `--fix` 只报不改。作者发布清单漏列的文件改由 `--fix` 补拷进已装的包，加载名对不上只提醒、不再停下。Soul preset 改照作者的装法：写进 profile 的 `cordis.patch.yml`（顶层 `- insert:`），不再用独立包 `dsh-soul-preset`，旧安装 `--update` 搬过去并摘掉包和锁文件条目；卸载留空壳也写在 profile 里。修复清单新增 `echo-settings-path`（上游 11-01 回声面板的设置兜底写死作者电脑的记忆中枢）。按上游 e6d66f5 逐条核对：clock 定位、换气触发口等待、compact-region 日志路径作者已修，这 3 条从清单删掉（id 不再使用），清单剩 19 条。修复判定改成先还原再比：已装文件是「上一版作者原文 + kit 补丁」时，不再因为作者改过版就误判成「本机改过」——那会让零件永远停在旧版、每次都说「将打上」；有安装记录或 `--source` 基线就照常换上新版。`preset-summary-model` 判成「本机不需要」时不再借用「请手动合并」的说法。 |
-| 4.2 | 2026-11-01 | mcp-hub 清单里的 echo 显式带上 `env.DSH_HOME`：上游 8ba1385 的 `echo-mcp.mjs` 没有它就去作者电脑的 `D:/AI/dsh/home` 找会话日志，而 mcp-hub 会滤掉继承来的 `DSH_*`；旧安装 `--update` 补上。换气测试触发口的判定认出作者 11-01 v1.2.2 的 `waitUntilQuiet`（先等 agent 静下来再压，和 `huanqi-trigger-idle` 同一个意思），判为作者已修、不再打，不再报「需人工核对」。 |

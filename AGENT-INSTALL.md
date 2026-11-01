@@ -25,9 +25,9 @@
 |---|---|
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；Soul preset 调用的 compact-region 跟着装。按作者 2026-10-31 定的「全局必装」，不能跳过 |
-| 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务；**macOS 上不可用**）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门；macOS 上「速达」用不了）。装哪些按方案；大肥鱼方案装前两个，面板件默认不勾。各系统的已知限制见 README「两种装法」那张表，脚本在问答和干跑里会按这台电脑的系统提示 |
+| 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务；**macOS 上不可用**）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门；macOS 上「速达」用不了）、perf（渲染性能护栏：界面上可随时关掉毛玻璃效果）。装哪些按方案；大肥鱼方案装前两个，面板件默认不勾。各系统的已知限制见 README「两种装法」那张表，脚本在问答和干跑里会按这台电脑的系统提示 |
 | Soul preset | 砚青 / 砚青创造 / 砚青 PTC / 砚青蒸馏，使用上游 `presets/` 原文；按作者算法展开 include。生成哪些、默认用哪个按方案；大肥鱼默认装四套、默认砚青；可选第五个「砚青 PTC Flash」（见第九节「砚青 PTC Flash」，默认不选） |
-| 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
+| 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji、perf —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
 | 自我层 | `memory/hub/SELF.src.md`：agent 的身份、硬线、说话方式、门 |
