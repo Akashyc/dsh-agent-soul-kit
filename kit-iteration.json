@@ -2,8 +2,431 @@
   "format": 1,
   "repo": "cyanwell/dsh-agent-soul",
   "baseline": {
-    "sha": "504d2d0029050941429e942bda31e4ca7c102aa4",
-    "treeDigest": "38e1caeb88c65818c0bca2ad1b5bbe70255fbfc302828ba8d7b4eb57e44da8c0"
+    "sha": "913a7b27ade7a8e30caef7bc25f39503595a0ba5",
+    "treeDigest": "4796a28180d5764c010c65e0b1c887b9675c07ec1594ae727854314e4389d62b"
+  },
+  "fixes": {
+    "retired": {},
+    "catalog": [
+      {
+        "id": "pack-unshipped",
+        "phase": "pack",
+        "part": null,
+        "since": "4.0",
+        "basis": "kit",
+        "title": "上游发布清单漏列的文件拷包时补上",
+        "why": "入口导入了、files 却没列（4606555 的 yantai 漏了 env-config.mjs），照清单装上就缺文件、零件加载失败；插件市场 pnpm 重装也按 files 走，所以连 files 一起补",
+        "type": "pack",
+        "target": "<零件>/package.json#files",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "入口导入了、files 却没列（4606555 的 yantai 漏了 env-config.mjs），照清单装上就缺文件、零件加载失败；插件市场 pnpm 重装也按 files 走，所以连 files 一起补"
+          }
+        ],
+        "applicability": "拷包时适用于任何发布清单漏列文件的包",
+        "validation": [
+          "package-contract",
+          "copy-hash"
+        ]
+      },
+      {
+        "id": "mnemon-runtime",
+        "phase": "file",
+        "part": "mnemon-probe",
+        "since": "2.0",
+        "basis": "kit",
+        "title": "mnemon-probe 热记忆目录的默认值",
+        "why": "DSH 桌面版不传 MNEMON_RUNTIME，默认的 ~/.mnemon/runtime 不一定是真实位置",
+        "type": "path",
+        "target": "mnemon-probe/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "DSH 桌面版不传 MNEMON_RUNTIME，默认的 ~/.mnemon/runtime 不一定是真实位置"
+          }
+        ],
+        "applicability": "仅在 mnemon-probe 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "memory-home",
+        "phase": "file",
+        "part": "memory",
+        "since": "2.6",
+        "basis": "kit",
+        "title": "memory 相对路径按 DSH 家目录定位",
+        "why": "上游只认 DSH_HOME 环境变量，没有就退回插件目录",
+        "type": "path",
+        "target": "memory/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游只认 DSH_HOME 环境变量，没有就退回插件目录"
+          }
+        ],
+        "applicability": "仅在 memory 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "memory-pressure",
+        "phase": "file",
+        "part": "memory",
+        "since": "2.6",
+        "basis": "kit",
+        "title": "memory 上下文水位找 DSH 家目录",
+        "why": "同上",
+        "type": "path",
+        "target": "memory/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "同上"
+          }
+        ],
+        "applicability": "仅在 memory 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "mcp-hub-home",
+        "phase": "file",
+        "part": "mcp-hub",
+        "since": "2.1",
+        "basis": "kit",
+        "title": "mcp-hub 清单位置",
+        "why": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home",
+        "type": "path",
+        "target": "mcp-hub/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home"
+          }
+        ],
+        "applicability": "仅在 mcp-hub 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "yantai-soul",
+        "phase": "file",
+        "part": "yantai",
+        "since": "2.3",
+        "basis": "kit",
+        "title": "yantai 书房路径",
+        "why": "没配环境变量时找不到书房",
+        "type": "path",
+        "target": "yantai/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "没配环境变量时找不到书房"
+          }
+        ],
+        "applicability": "仅在 yantai 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "yantai-memory",
+        "phase": "file",
+        "part": "yantai",
+        "since": "2.3",
+        "basis": "kit",
+        "title": "yantai 记忆中枢路径",
+        "why": "没配环境变量时找不到记忆中枢",
+        "type": "path",
+        "target": "yantai/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "没配环境变量时找不到记忆中枢"
+          }
+        ],
+        "applicability": "仅在 yantai 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "riji-diary",
+        "phase": "file",
+        "part": "riji",
+        "since": "2.3",
+        "basis": "kit",
+        "title": "riji 日记目录",
+        "why": "只认 DSH_HOME，日记目录要跟着书房走",
+        "type": "path",
+        "target": "riji/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "只认 DSH_HOME，日记目录要跟着书房走"
+          }
+        ],
+        "applicability": "仅在 riji 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-load-name",
+        "phase": "file",
+        "part": "echo",
+        "since": "2.2",
+        "basis": "kit",
+        "title": "echo 的加载名等于包名",
+        "why": "上游改了包名、cordis.patch.yml 里漏改，DSH 按旧名找不到包",
+        "type": "load-name",
+        "target": "echo/cordis.patch.yml",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游改了包名、cordis.patch.yml 里漏改，DSH 按旧名找不到包"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-hub-path",
+        "phase": "file",
+        "part": "echo",
+        "since": "4.0",
+        "basis": "kit",
+        "title": "echo 面板的诊断日志改到 DSH 家目录的记忆中枢",
+        "why": "上游 10-30 新加的失败诊断写死作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默写不进去",
+        "type": "path",
+        "target": "echo/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 10-30 新加的失败诊断写死作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默写不进去"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-node-darwin",
+        "phase": "file",
+        "part": "echo",
+        "since": "4.0",
+        "basis": "kit",
+        "title": "echo 面板在 macOS 上找到 DSH 自带的 node",
+        "why": "作者只按 Windows 的安装布局找 node；Mac 上找不到就拿 DSH 主程序去跑体检脚本，面板体检永远是空的",
+        "type": "behavior",
+        "target": "echo/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "作者只按 Windows 的安装布局找 node；Mac 上找不到就拿 DSH 主程序去跑体检脚本，面板体检永远是空的"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-settings-path",
+        "phase": "file",
+        "part": "echo",
+        "since": "4.3",
+        "basis": "kit",
+        "title": "echo 面板的设置文件改到 echo 自己找到的记忆中枢",
+        "why": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来",
+        "type": "path",
+        "target": "echo/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "panel-load-name",
+        "phase": "file",
+        "part": "huanqi-panel",
+        "since": "2.2",
+        "basis": "kit",
+        "title": "换气面板的加载名等于包名",
+        "why": "同上",
+        "type": "load-name",
+        "target": "huanqi-panel/cordis.patch.yml",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "同上"
+          }
+        ],
+        "applicability": "仅在 huanqi-panel 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "panel-ensure-block",
+        "phase": "file",
+        "part": "huanqi-panel",
+        "since": "2.4",
+        "basis": "kit",
+        "title": "换气面板：profile 没有 `- id: huanqi` 时自建一节",
+        "why": "面板只会改已有的节，第一次保存必报错",
+        "type": "behavior",
+        "target": "huanqi-panel/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "面板只会改已有的节，第一次保存必报错"
+          }
+        ],
+        "applicability": "仅在 huanqi-panel 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "huanqi-hub-path",
+        "phase": "file",
+        "part": "huanqi",
+        "since": "2.16",
+        "basis": "author",
+        "title": "换气诊断日志和测试触发口改到 DSH 家目录的记忆中枢",
+        "why": "写死作者电脑的 D:\\AI\\memory\\hub，作者自己点过名：装到别人机器就静默失效",
+        "type": "path",
+        "target": "huanqi/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "写死作者电脑的 D:\\AI\\memory\\hub，作者自己点过名：装到别人机器就静默失效"
+          }
+        ],
+        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "huanqi-full-maint",
+        "phase": "file",
+        "part": "huanqi",
+        "since": "2.16",
+        "basis": "boss",
+        "title": "换气熔断后的全量压缩去掉多套的一层 runMaintenance",
+        "why": "compactNow 自己会排队等空闲，外面再套一层内层必报 requires an idle agent",
+        "type": "behavior",
+        "target": "huanqi/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "compactNow 自己会排队等空闲，外面再套一层内层必报 requires an idle agent"
+          }
+        ],
+        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "cr-input",
+        "phase": "file",
+        "part": "compact-region",
+        "since": "2.16",
+        "basis": "boss",
+        "title": "/compact-region 声明参数输入",
+        "why": "不声明 input，输入框里带参数的命令会被前端当成普通消息",
+        "type": "behavior",
+        "target": "compact-region/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "不声明 input，输入框里带参数的命令会被前端当成普通消息"
+          }
+        ],
+        "applicability": "仅在 compact-region 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "huanqi-config-bool",
+        "phase": "config",
+        "part": "huanqi",
+        "since": "2.13",
+        "basis": "boss",
+        "title": "换气配置的字符串布尔改回真布尔",
+        "why": "面板把布尔写成 'true'，过不了 schema，整段配置静默退回默认值",
+        "type": "config",
+        "target": "profile/cordis.patch.yml#huanqi",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "面板把布尔写成 'true'，过不了 schema，整段配置静默退回默认值"
+          }
+        ],
+        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
+        "validation": [
+          "yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "preset-summary-model",
+        "phase": "preset",
+        "part": null,
+        "since": "2.17",
+        "basis": "boss",
+        "title": "压缩摘要跟会话模型走",
+        "why": "作者写死 summarizationProvider: deepseek-official，要 API key；账号登录的机器压缩全失败",
+        "type": "preset",
+        "target": "profile/cordis.patch.yml#Soul preset",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "作者写死 summarizationProvider: deepseek-official，要 API key；账号登录的机器压缩全失败"
+          }
+        ],
+        "applicability": "仅在安装 Soul preset 时适用",
+        "validation": [
+          "yaml",
+          "byte-roundtrip"
+        ]
+      }
+    ]
   },
   "history": [
     {
@@ -647,6 +1070,211 @@
         "未做真实 DSH 安装、重启与新会话验收；安装验证是在隔离 fake home 上真跑，产物只做了静态断言",
         "未做 Windows 桌面验收，本轮只在 macOS 上运行",
         "从旧名（dsh-agent-compaction 等）迁移的 --update 实跑未做，只覆盖了全新安装路径"
+      ]
+    },
+    {
+      "completedAt": "2026-11-01T12:00:01.801Z",
+      "reportCreatedAt": "2026-11-01T11:59:45.420Z",
+      "base": "504d2d0029050941429e942bda31e4ca7c102aa4",
+      "target": "913a7b27ade7a8e30caef7bc25f39503595a0ba5",
+      "kitVersion": "4.5",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "98a6c95733b400f6855ceb160bd31e091438bcc8",
+        "targetSha": "98a6c95733b400f6855ceb160bd31e091438bcc8",
+        "changes": [
+          {
+            "file": "AGENT-INSTALL.md",
+            "kind": "changed"
+          },
+          {
+            "file": "CHANGELOG.md",
+            "kind": "changed"
+          },
+          {
+            "file": "README.md",
+            "kind": "changed"
+          },
+          {
+            "file": "install.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/parts.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/setup.mjs",
+            "kind": "changed"
+          }
+        ],
+        "status": "current",
+        "ready": true,
+        "directory": null,
+        "message": "kit 自身已包含发布源 Akashyc/dsh-agent-soul-kit@98a6c95733b400f6855ceb160bd31e091438bcc8；保留本地修改，继续检查插件上游。"
+      },
+      "summary": "kit 自身：GitHub Akashyc/dsh-agent-soul-kit 远端 HEAD 98a6c95 与本地一致，工作区干净（用户方案 setups/ 与本地记录未动），无需合入。插件上游：从上次审查基线 504d2d0 到 913a7b2（v2.0.0）共 107 个文件变化；相对已装的 472920b 实际只有 6 个提交、18 个文件（echo 面板、echo-mcp、perf 新零件、tools 与文档）。唯一要改的是新零件 perf：登记进 lib/parts.mjs（可选、默认不勾、不写状态文件、无服务端逻辑、client 设置留在浏览器），ADDED_PARTS 记 4.5，已有安装 --update 时问一句、agent 跑就装上并提示 --skip-part，版本升 4.5，README / AGENT-INSTALL / CHANGELOG 同步。四流程里安装和更新有改动、备份和恢复无需改（perf 没有持久数据）。本轮 5 条疑似问题逐条核对后都不需要新修复：两条写死路径已在 echo-hub-path / huanqi-hub-path 覆盖内，clock 的浏览器候选路径是有意枚举、且不进发布清单，换气测试夹具不发布，perf 的 client id 与其它面板件同一约定。修复清单无新增、无退役。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "上游新增零件 perf，kit 的零件目录不认识它，安装会走「安装包不认识的零件」分支、装不上也选不了。登记成可选零件后安装问答、方案校验、干跑和实际拷包都能处理；它只有 client 侧界面，不进必装、不进默认勾选、方案不动。",
+          "evidence": [
+            "lib/parts.mjs：PARTS / PART_NAMES / OPTIONAL_PARTS / ADDED_PARTS / PART_INFO 增加 perf；插件目录 plugins/perf 的 package.json 只有 index.js（apply 为空）+ client.js + cordis.patch.yml，没有配置和状态文件",
+            "lib/setup.mjs：可选零件提示从「后 5 个」改成「后 6 个（… perf）」",
+            "隔离干跑：--source target --dsh-home TMP/iter-home2 --setup 大肥鱼 --dry-run 输出「可选装 …；不装 model-statusbar、mobile-adapt、riji、splash、yantai、perf」，不再有「上游又有安装包不认识的零件」",
+            "隔离真装（设置 訧的大肥鱼）：exit 0，安装记录 kitVersion 4.5，perf 进 declined、未装"
+          ],
+          "checks": [
+            "static",
+            "install-fresh",
+            "install-repeat"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "已有的 4.4 安装要在更新时被告知有一个新零件：ADDED_PARTS.perf=4.5 让终端里问一句、agent 跑时直接装上并在变化报告里写「不要就加 --skip-part perf」；拒掉的进 declined，以后不再补。包名、锁文件、preset、中枢脚本和修复合集都没变，旧安装照原样迁移。",
+          "evidence": [
+            "lib/parts.mjs：ADDED_PARTS perf: '4.5'，与 install.mjs 的 verLess(stateKit, ADDED_PARTS[p]) / TO_ADD 联动",
+            "隔离更新：把安装记录的 kitVersion 改回 4.4 后 --update --source target，输出「零件 dsh-agent-perf：本机没有，安装包新加的零件，会装上；不要就加 --skip-part perf」，随后「dsh-agent-perf（新装）：已安装（4 个文件）」，记录 kitVersion 4.5、parts 含 perf",
+            "更新后 profile/package.json 的 dependencies 与 dsh.bundles 都含 dsh-agent-perf"
+          ],
+          "checks": [
+            "static",
+            "update-adds-new-part"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "perf 没有服务器侧持久数据：index.js 的 apply 是空函数，client.js 的状态只存在浏览器里，不写 DSH 家目录的文件；其它零件的状态路径没有变。备份范围、manifest 格式、排除规则都不用动。",
+          "evidence": [
+            "上游 plugins/perf/index.js：export function apply(ctx) {}，无 fs / 路径 / 设置读写",
+            "隔离备份：--backup --out TMP/bk 生成 dsh-soul-backup-YudeMacBook.local-*.tar.gz，manifest 里 kind=dsh-agent-soul-backup、format=1、kitVersion=4.5"
+          ],
+          "checks": [
+            "static",
+            "backup-roundtrip"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "恢复按安装记录里的 parts 重建包和配置，perf 进记录后自然跟着装；没有新增路径替换、preset 或 MCP 条目。旧 format 1 备份继续可读。",
+          "evidence": [
+            "隔离恢复：--restore TMP/bk/*.tar.gz --dsh-home TMP/iter-home3 --source target，exit 0；新家目录里 soul/00-authority.md、memory/hub/SELF.md 都在，安装记录 kitVersion 4.5、parts 13 项含 dsh-agent-perf，node_modules 里 perf 四个文件到位",
+            "路径改写沿用 pathPairs / rewritePaths，未改代码"
+          ],
+          "checks": [
+            "static",
+            "backup-roundtrip"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "contract:plugins/echo/package.json",
+          "decision": "not-applicable",
+          "reason": "只是包名从 dsh-yanqing-echo 改成 dsh-agent-echo，kit 4.0 起 PART_NAMES 已认这两个名字、更新时自动迁移，当前装机用的就是新名。"
+        },
+        {
+          "id": "contract:plugins/huanqi/package.json",
+          "decision": "not-applicable",
+          "reason": "1.1.0→1.2.2：exports 加 ./src/*、files 加 src/**/*.ts、peerDependencies 范围放宽。入口仍是 lib/index.js（files 里原有），kit 按 files 清单拷包、不拷未列的测试与文档；peer 范围只影响宿主校验，不改拷贝与配置。"
+        },
+        {
+          "id": "contract:plugins/huanqi-panel/package.json",
+          "decision": "not-applicable",
+          "reason": "同样是 dsh-yanqing-huanqi-panel → dsh-agent-huanqi-panel 的改名，PART_NAMES 已有别名，迁移逻辑不变。"
+        },
+        {
+          "id": "package-integrity:plugins/yantai/index.js:./env-config.mjs",
+          "decision": "not-applicable",
+          "reason": "上游 files 仍漏列 yantai/env-config.mjs，这正是已有修复 pack-unshipped 管的事。按 4.3 的分工（安装/更新只照作者发布清单，修复单独做），这里不改安装器；隔离环境实测 --fix --dry-run 能识别并报出「补进发布清单：dsh-agent-yantai：env-config.mjs」，--fix --fix-only pack-unshipped 真跑后文件补进包、package.json 的 files 也补上。"
+        },
+        {
+          "id": "candidate:path:main/plugins/clock/verify-browser.mjs",
+          "decision": "not-applicable",
+          "reason": "那一串是 findBrowser() 里有意列的 Chrome/Edge 各系统安装位置（C:/Program Files、/usr/bin、/Applications），不是作者个人路径；而且 verify-browser.mjs 不在 clock 的 files 里，装了也不会被拷进包。"
+        },
+        {
+          "id": "candidate:path:main/plugins/echo/index.js",
+          "decision": "not-applicable",
+          "reason": "第 294 行是写死 D:\\AI\\memory\\hub\\_plugin-diag.log 的失败诊断，与已有修复 echo-hub-path 的锚点同一处；本轮报告里该条仍是「仍需修 / 目标 present」，判定没变，不用新增条目。"
+        },
+        {
+          "id": "candidate:path:main/plugins/huanqi/lib/index.js",
+          "decision": "not-applicable",
+          "reason": "第 1532 行是换气测试触发口 / 诊断日志的 D:\\AI\\memory\\hub 路径，已有修复 huanqi-hub-path 覆盖，报告同样仍是「仍需修 / 目标 present」。"
+        },
+        {
+          "id": "candidate:path:main/plugins/huanqi/test/subagent-exempt.spec.mjs",
+          "decision": "not-applicable",
+          "reason": "D:/AI/yanqing-soul 只是测试用例的夹具 cwd，huanqi 的 files 不含 test/，这个文件不进安装包，对装机后的行为没有影响。"
+        },
+        {
+          "id": "candidate:client-id:main/plugins/perf/client.js",
+          "decision": "not-applicable",
+          "reason": "client id dsh-agent-perf 等于它自己的包名，与 clock / mobile-adapt / riji / splash / yantai 等面板件同一个约定；扫描规则比的是本体包名 dsh-agent-soul，所以基线里每一个面板件都被列出来，不是 perf 独有的新问题。"
+        }
+      ],
+      "organs": null,
+      "fixes": {
+        "retired": [],
+        "unretired": [],
+        "changes": []
+      },
+      "checks": [
+        {
+          "id": "static",
+          "scope": "static",
+          "command": "node --check install.mjs; node --check lib/parts.mjs; node --check lib/setup.mjs; node --check lib/kit-iterate.mjs; node --check lib/kit-update.mjs; node --check lib/package-contract.mjs; node --check lib/fixes.mjs; git diff --check",
+          "status": "passed",
+          "evidence": "全部 exit 0，git diff --check 无输出；改动 6 个文件、+20/−14 行。"
+        },
+        {
+          "id": "install-fresh",
+          "scope": "simulated",
+          "command": "node install.mjs --source <target 快照> --dsh-home TMP/iter-home2 --setup 訧的大肥鱼 --confirm-quit --no-heartbeat",
+          "status": "passed",
+          "evidence": "exit 0；安装记录 kitVersion=4.5、12 个零件装好；perf 出现在「这次不装的零件」里（方案未选），不再报「安装包不认识的零件」；干跑时不认零件告警消失。"
+        },
+        {
+          "id": "install-repeat",
+          "scope": "simulated",
+          "command": "同一 profile 再跑一次 node install.mjs --source <target> --setup 訧的大肥鱼 --confirm-quit --no-heartbeat",
+          "status": "passed",
+          "evidence": "exit 0，重复安装不报错、只备份 package.json 与 cordis.patch.yml。"
+        },
+        {
+          "id": "update-adds-new-part",
+          "scope": "simulated",
+          "command": "把 .install-state.json 的 kitVersion 改回 4.4 并去掉 perf 的 declined 后：node install.mjs --update --source <target> --dsh-home TMP/iter-home2 --confirm-quit --no-heartbeat",
+          "status": "passed",
+          "evidence": "exit 0；输出「零件 dsh-agent-perf：本机没有，安装包新加的零件，会装上；不要就加 --skip-part perf」→「dsh-agent-perf（新装）：已安装（4 个文件）」；记录写回 4.5，parts 含 dsh-agent-perf，profile 的 dependencies / bundles 同步。"
+        },
+        {
+          "id": "fix-pack-unshipped",
+          "scope": "simulated",
+          "command": "node install.mjs --fix --source <target> --dsh-home TMP/iter-home2 --dry-run；再 node install.mjs --fix --fix-only pack-unshipped --source <target> --dsh-home TMP/iter-home2 --confirm-quit",
+          "status": "passed",
+          "evidence": "干跑列出「pack-unshipped：问题还在，kit 修 → 将打上；补进发布清单：dsh-agent-yantai：env-config.mjs」；真跑后 node_modules/dsh-agent-yantai/env-config.mjs 存在，其 package.json 的 files 含 env-config.mjs。"
+        },
+        {
+          "id": "backup-roundtrip",
+          "scope": "simulated",
+          "command": "node install.mjs --backup --dsh-home TMP/iter-home2 --out TMP/bk --confirm-quit；然后 node install.mjs --restore TMP/bk/<tar> --dsh-home TMP/iter-home3 --source <target> --confirm-quit",
+          "status": "passed",
+          "evidence": "备份 exit 0，生成 dsh-soul-backup-YudeMacBook.local-20261101-195852.tar.gz，manifest kind/format/kitVersion 正确；恢复 exit 0，新家目录 soul/00-authority.md 与 memory/hub/SELF.md 就位，记录 kitVersion=4.5、13 个零件（含 dsh-agent-perf），perf 四个文件在 node_modules 里。"
+        }
+      ],
+      "limitations": [
+        "没有在真实 DSH 里启动验收（本轮全部是隔离模拟）：perf 面板是否真的出现在界面、yantai 面板是否正常加载，都还没做桌面端实测。",
+        "Windows 未验证：本轮只在 macOS 上跑隔离安装/更新/备份/恢复。",
+        "Boss 这台 Mac 上的真实更新还没执行（--update 真跑要完全退出 DSH，等 Boss 确认）。",
+        "本轮的更新验证是把安装记录的 kitVersion 改回 4.4 来模拟旧安装，不是用真的 4.4 kit 装一遍再升；包名迁移路径本轮没覆盖（上游这 6 个提交没有改名）。"
       ]
     }
   ]
