@@ -1,8 +1,12 @@
 # 历史更新记录
 
-这里归档 4.5 及以前的更新，按版本从新到旧排列。记录反映当时的行为；当前功能与用法以 [README](README.md) 为准。
+这里归档 5.0 及以前的更新，按版本从新到旧排列。记录反映当时的行为；当前功能与用法以 [README](README.md) 为准。
 
 最近三条更新见 [README 的版本记录](README.md#版本记录)。
+
+## 5.0（2026-11-04）
+
+跟上游 c370a69（v3.0.0）。压缩三件套包名照上游换成 `dsh-yanqing-compaction` / `dsh-yanqing-pruner` / `dsh-yanqing-compact-region`，4.x 装的 `--update` 迁移。Soul preset 换成上游去个人化后的灵魂四套（`soul` / `soul-cordis` / `soul-ptc` / `soul-distill`），新增第五套「灵魂 · 全能」（`soul-all`，默认装，只取 preset 本身、不带上游文件后面作者整份 profile 的导出）；砚青 PTC Flash 改名为灵魂 · PTC Flash（`soul-ptc-flash`）；旧的 `yanqing*` 进别名映射，砚青建的会话照常打开，方案、安装记录、默认 preset 自动换到新 id。创造和全能用的 4 个技能（上游 `presets/skills/`）装进 profile 的 `skills/`，三方比对、本机改过的不动，备份只带本机改过的，卸载只删没改过的。注册上游新零件 heartbeat、chat、clawbot：照上游原样装、默认不勾，更新时不自动补装（终端里问、默认不装），新参数 `--add-part` 补装；问答和 README 写明三者的已知问题；本机自己装的 `dsh-clawbot` 安装包不碰。修复清单：作者 v3.0.0 修好的 `echo-load-name`、`panel-load-name` 退役，`preset-summary-model` 改认 `preset-soul*`（含全能）。kit 迭代的扫描不再把本体发布清单里的 `plugins/` 重扫一遍（以前每个面板件都报一条假的 client id 不符），压缩摘要路由已由 `preset-summary-model` 管着的不再当新问题报。
 
 ## 4.5（2026-11-01）
 
