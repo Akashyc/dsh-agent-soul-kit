@@ -100,7 +100,7 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '5.2'
+const KIT_VERSION = '5.3'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
@@ -1271,7 +1271,10 @@ if (UNINSTALL) {
     for (const f of exists(dir) ? fs.readdirSync(dir).filter((x) => x.endsWith('.plist')) : []) {
       const full = path.join(dir, f)
       let t = ''; try { t = readText(full) } catch { continue }
-      if (isSoulHeartbeatPlist(t, { label: HB_LABEL, soulRoot: posix(SOUL_ROOT) })) heartbeats.push({ kind: 'launchd', file: full, label: (t.match(/<key>Label<\/key>\s*<string>([^<]+)<\/string>/) || [])[1] || HB_LABEL })
+      const macLabel = 'com.dsh-soul.heartbeat.mac.' + crypto.createHash('sha256').update(path.resolve(DSH_HOME)).digest('hex').slice(0, 12)
+      const macRunner = posix(path.join(NM, PART_NAMES.heartbeat[0], 'heartbeat.mjs')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const oursMac = t.includes(`<string>${macLabel}</string>`) && t.includes(`<string>${macRunner}</string>`)
+      if (oursMac || isSoulHeartbeatPlist(t, { label: HB_LABEL, soulRoot: posix(SOUL_ROOT) })) heartbeats.push({ kind: 'launchd', file: full, label: (t.match(/<key>Label<\/key>\s*<string>([^<]+)<\/string>/) || [])[1] || HB_LABEL })
     }
   } else if (process.platform === 'win32') {
     const r = spawnSync('schtasks', ['/Query', '/TN', 'dsh-soul-heartbeat'], { encoding: 'utf8', windowsHide: true })
@@ -2034,13 +2037,21 @@ for (const n of BUNDLE.notes) warn('Soul preset 简介：' + n)
 const FILE_FIXES = patchList(RUNTIME, Object.fromEntries(AP.map((p, i) => [p, PKGS[i]])), DSH_HOME)
 const FIX_GROUPS = [] // 同一个文件上的修复归成一组：{ part, pkg, file, fixes }
 for (const f of FILE_FIXES) {
-  let g = FIX_GROUPS.find((x) => x.pkg === f.pkg && x.file === f.file)
-  if (!g) FIX_GROUPS.push(g = { part: f.part, pkg: f.pkg, file: f.file, fixes: [] })
+  let g = FIX_GROUPS.find((x) => x.pkg === f.pkg && x.file === f.file && x.location === f.location)
+  if (!g) FIX_GROUPS.push(g = { part: f.part, pkg: f.pkg, file: f.file, location: f.location, create: f.create, provided: f.provided, fixes: [] })
   g.fixes.push(f)
+}
+const fixInstalledFile = (g) => path.join(g.location === 'hub' ? HUB : path.join(NM, g.pkg), g.file)
+const fixSourceFile = (g) => path.join(g.location === 'hub' ? path.join(SRC.dir, 'kit', 'echo') : partSrc(g.part), g.file)
+const fixRecordKey = (g) => `${g.location === 'hub' ? 'hub' : g.part}/${g.file}`
+const macHeartbeatInUse = () => {
+  if (process.platform !== 'darwin') return false
+  const label = 'com.dsh-soul.heartbeat.mac.' + crypto.createHash('sha256').update(path.resolve(DSH_HOME)).digest('hex').slice(0, 12)
+  return exists(path.join(os.homedir(), 'Library', 'LaunchAgents', label + '.plist')) || exists(path.join(process.env.YQ_HB_DIR || path.join(HUB, 'heartbeat/runtime'), 'kit-migration.json'))
 }
 const PREVIOUS_KIT_IDS = new Set()
 for (const group of FIX_GROUPS) {
-  const installedFile = path.join(NM, group.pkg, group.file)
+  const installedFile = fixInstalledFile(group)
   if (!exists(installedFile)) continue
   const text = readText(installedFile)
   for (const fix of group.fixes) if (text.includes(fix.new) || fix.any.test(text)) PREVIOUS_KIT_IDS.add(fix.id)
@@ -2051,29 +2062,49 @@ for (const group of FIX_GROUPS) {
  * @returns 每条修复的结论行
  */
 function runFixes({ fresh, apply, record = apply }) {
-  const rows = []
+  const rows = [], prepared = []
   for (const g of FIX_GROUPS) {
-    const i = PKGS.indexOf(g.pkg)
     if (!PKGS_LIVE.includes(g.pkg)) { for (const f of g.fixes) rows.push({ id: f.id, status: 'not-installed', action: 'none' }); continue }
-    const srcFile = path.join(partSrc(g.part), g.file), instFile = path.join(NM, g.pkg, g.file)
-    if (!exists(srcFile)) { for (const f of g.fixes) rows.push({ id: f.id, status: 'manual', action: 'manual', note: `上游这一版没有 ${g.file}` }); continue }
-    const upstream = readText(srcFile)
-    if (!fresh(g.pkg) && exists(path.join(NM, g.pkg)) && !exists(instFile)) {
+    if (g.fixes.every((f) => f.needed === false && !PREVIOUS_KIT_IDS.has(f.id))) {
+      for (const f of g.fixes) rows.push({ id: f.id, status: 'n/a', action: 'none' })
+      continue
+    }
+    const srcFile = fixSourceFile(g), instFile = fixInstalledFile(g)
+    if (!g.provided && !exists(srcFile)) { for (const f of g.fixes) rows.push({ id: f.id, status: 'manual', action: 'manual', note: `上游这一版没有 ${g.file}` }); continue }
+    const upstream = g.provided ? '' : readText(srcFile)
+    if (!g.create && !fresh(g.pkg) && exists(path.join(NM, g.pkg)) && !exists(instFile)) {
       for (const fix of g.fixes) rows.push({ id: fix.id, status: 'manual', action: 'local', note: `${g.pkg}/${g.file} 在本机缺失，未擅自补回` })
       continue
     }
     const installedText = fresh(g.pkg) ? upstream : exists(instFile) ? readText(instFile) : null
     const freeze = FIX_ONLY.length ? g.fixes.filter((f) => !FIX_ONLY.includes(f.id)).map((f) => f.id) : []
-    const key = `${g.part}/${g.file}`
-    const baseFile = BASE && path.join(BASE.dir, 'plugins', g.part, g.file)
+    const key = fixRecordKey(g)
+    const baseFile = BASE && path.join(BASE.dir, ...(g.location === 'hub' ? ['kit', 'echo'] : ['plugins', g.part]), g.file)
     const baseUpstream = baseFile && exists(baseFile) ? readText(baseFile) : null
     const plan = planFile({ upstream, installed: installedText, fixes: g.fixes, skip: FIX_SKIP, freeze, record: FIX_RECORDS.files[key], baseUpstream })
-    if (record && plan.state !== 'local' && !plan.rows.some((r) => r.status === 'manual')) {
-      FIX_RECORDS.files[key] = { upstream, applied: plan.target }
-    }
     const localNote = `${g.pkg}/${g.file} 本机手改过（既不是作者原文，也不是 kit 修复版），整个文件没动；要按清单修，请确认后合并改动或手动换回作者原文`
     for (const r of plan.rows) rows.push({ ...r, note: plan.state === 'local' ? localNote : r.status === 'author' && PREVIOUS_KIT_IDS.has(r.id) ? '改用作者修复' : null })
-    if (apply && (plan.state === 'rewrite' || plan.state === 'missing')) {
+    prepared.push({ g, plan, upstream, instFile, key, created: FIX_RECORDS.files[key]?.created || (g.create && !exists(instFile)) })
+  }
+  if (rows.some((r) => r.id === 'heartbeat-darwin' && ['apply', 'refresh', 'revert'].includes(r.action)) && macHeartbeatInUse()) {
+    for (const row of rows.filter((r) => r.id === 'heartbeat-darwin')) { row.status = 'manual'; row.action = 'manual'; row.note = '请先用包内 kit-macos.mjs --restore-kit（有迁移记录时）及 --disable，再更新或撤回补丁' }
+  }
+  // 一条修复跨多个文件时，任一文件不认识或本机改过，整条都不动。
+  const blocked = new Set(rows.filter((r) => r.status === 'manual' || r.action === 'local').map((r) => r.id))
+  for (const item of prepared) {
+    const { g, plan, upstream, instFile, key, created } = item
+    if (g.fixes.some((f) => blocked.has(f.id))) {
+      for (const r of rows.filter((r) => g.fixes.some((f) => f.id === r.id))) { r.status = 'manual'; r.action = 'local'; r.note ||= '同一修复的配套文件需人工核对，整组未修改' }
+      continue
+    }
+    const remove = created && plan.target === upstream && g.fixes.every((f) => FIX_SKIP.includes(f.id))
+    if (record && plan.state !== 'local') FIX_RECORDS.files[key] = { upstream, applied: plan.target, ...(created ? { created: true } : {}) }
+    if (remove) {
+      if (apply && exists(instFile)) fs.unlinkSync(instFile)
+      if (record) delete FIX_RECORDS.files[key]
+      continue
+    }
+    if (apply && (plan.state === 'rewrite' || (plan.state === 'missing' && plan.rows.some((r) => r.action === 'apply')))) {
       if (/\.(?:m?js|cjs)$/.test(g.file)) {
         const checked = spawnSync(process.execPath, ['--check', '--input-type=' + (g.file.endsWith('.cjs') ? 'commonjs' : 'module')], { input: plan.target, encoding: 'utf8' })
         if (checked.status !== 0) die(`${g.pkg}/${g.file} 修后语法检查失败`)
@@ -2111,7 +2142,11 @@ function runFixes({ fresh, apply, record = apply }) {
   }
   if (apply && target !== cfg) write(cfgPath, target, 'cordis.patch.yml（换气配置修复）')
   rows.push({ id: 'huanqi-config-bool', status, action })
-  return rows
+  const severity = { manual: 8, local: 9, apply: 6, refresh: 5, revert: 4, keep: 2, none: 1 }
+  return [...new Map(rows.map((row) => {
+    const same = rows.filter((r) => r.id === row.id)
+    return [row.id, same.reduce((a, b) => (severity[b.action] || 0) > (severity[a.action] || 0) ? b : a)]
+  })).values()]
 }
 const FIX_CHANGE = ['apply', 'refresh', 'revert', 'reinstall']
 // kit 迭代登记过的退役（kit-iteration.json）：报告里注明作者在哪个提交修好的
@@ -2158,6 +2193,10 @@ function fixFacts() {
   const dshFact = `DSH 家目录：${homePath(DSH_HOME)}（${path.resolve(DSH_HOME) === path.resolve(os.homedir(), '.dsh') ? '就是' : '不是'} ~/.dsh）；DSH 传没传 DSH_HOME 给插件，脚本看不到`
   const up2Hub = path.join(path.dirname(path.dirname(DSH_HOME)), 'memory', 'hub')
   return {
+    'model-statusbar-darwin': [`系统：${process.platform}`, `ComfyUI 安装目录：${process.env.COMFYUI_DIR ? (exists(path.join(process.env.COMFYUI_DIR, 'main.py')) ? '已配置且 main.py 存在' : '已配置但 main.py 不存在') : '本进程未配置；须核实 DSH Host 的实际环境'}`, 'Python、服务归属和真实 GPU 读数需运行时核实'],
+    'yantai-apps-darwin': [`系统：${process.platform}`, `应用目录：/Applications ${exists('/Applications') ? '存在' : '不存在'}`, '安装补丁不会扫描或打开应用；扫描在速达首次请求时进行'],
+    'heartbeat-darwin': [`系统：${process.platform}`, `kit 每日自检安装记录：${state0?.heartbeat?.enabled ? '启用' : '关闭或未知'}（以 launchctl 为准）`, `本机 heartbeat 配置：${exists(path.join(HUB, 'heartbeat/runtime/heartbeat.config.json')) ? '存在' : '尚未初始化'}`, `旧任务文件：${exists(path.join(os.homedir(), 'Library/LaunchAgents/com.dsh-soul.heartbeat.plist')) ? '存在，需核对是否属于本机安装' : '不存在'}`, '先四步实测及桌面验收，再用包内 kit-macos.mjs --replace-kit 切换；不会因安装补丁就停旧任务'],
+    'echo-svc-darwin': [`系统：${process.platform}`, `中枢服务端：${exists(path.join(HUB, 'echo-svc.mjs')) ? '存在' : '缺失'}`, `中枢客户端：${exists(path.join(HUB, 'echo-svc-client.mjs')) ? '存在' : '缺失'}`, '按需手动启动服务；不自动注册常驻任务'],
     'pack-unshipped': PACK_STATE.length ? PACK_STATE.map((x) => `${x.pkg}：上游发布清单漏列 ${x.file}，已装的包里${x.there ? '已经有了' : '没有'}`) : ['上游发布清单没有漏列的文件'],
     'mnemon-runtime': [`dsh-mnemon ${MNEMON_INSTALLED ? '装了' : '没装'}`, `热记忆目录解析到 ${RX || '（解析不出）'}（${MNE.source}）`, `mnemon-probe 上游默认找 ${posix(path.join(os.homedir(), '.mnemon', 'runtime'))}`],
     'memory-home': [selfPath ? `dsh-agent-memory 的 selfPath：${selfPath}（${path.isAbsolute(selfPath) || /^[A-Za-z]:[\\/]/.test(selfPath) ? '绝对路径' : '相对路径'}）` : 'cordis.patch.yml 里没有 dsh-agent-memory 的 selfPath'],
@@ -2181,12 +2220,12 @@ function fixFacts() {
 }
 // 计划绑定本机与源码内容；离线目录没有提交号，也不能拿旧计划修另一份源码。
 function fixFingerprint() {
-  const files = Object.fromEntries(FIX_GROUPS.map((g) => { const f = path.join(NM, g.pkg, g.file); return [`${g.pkg}/${g.file}`, exists(f) ? sha1(fs.readFileSync(f)) : null] }))
+  const files = Object.fromEntries(FIX_GROUPS.map((g) => { const f = fixInstalledFile(g); return [fixRecordKey(g), exists(f) ? sha1(fs.readFileSync(f)) : null] }))
   return fingerprint({
     kit: KIT_VERSION, home: DSH_HOME, profile: PROFILE, runtime: RX, platform: process.platform,
     upstream: SRC.sha || null, source: [...hashDir(SRC.dir)].sort(),
     state: exists(STATE_PATH) ? sha1(fs.readFileSync(STATE_PATH)) : null,
-    skip: [...new Set(state0?.fixSkip || [])].sort(), files, pack: PACK_STATE,
+    skip: [...new Set(state0?.fixSkip || [])].sort(), files, pack: PACK_STATE, patches: FILE_FIXES.map((f) => [f.id, f.new, f.edits]),
     cfg: exists(cfgPath) ? sha1(fs.readFileSync(cfgPath)) : null
   })
 }
@@ -2282,21 +2321,24 @@ function partDiff(i) {
   return { ...diffMaps(oldM, newM), inst: oldM, next: newM }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
+if (UPDATE && PART_DIFF[AP.indexOf('heartbeat')] && !PART_DIFF[AP.indexOf('heartbeat')].same && macHeartbeatInUse()) die('heartbeat 有运行任务或迁移记录，请先用包内 kit-macos.mjs --restore-kit（有迁移记录时）及 --disable，再更新脚本')
 // 3.0 及以前从零件仓 organs 装的（换气、compact-region）：已装那一版的主仓里没有对应原文，分不清哪些是本机改的，
 // 这次换成主仓那份是换源，不算「本机改过」
 const ORGANS_BEFORE = Boolean(state0 && state0.organs)
 const LOCAL_PARTS = new Set()
 for (const g of FIX_GROUPS) {
+  if (g.location === 'hub') continue
   const index = AP.indexOf(g.part)
   if (index < 0 || !INST[index] || (ORGANS_BEFORE && ['huanqi', 'compact-region'].includes(g.part))) continue
   const local = path.join(NM, INST[index], g.file)
   const author = path.join(partSrc(g.part), g.file)
-  if (!exists(local) || !exists(author)) {
+  if (g.create && !exists(local)) continue
+  if (!exists(local) || (!g.provided && !exists(author))) {
     LOCAL_PARTS.add(g.part)
     continue
   }
   const base = BASE && path.join(BASE.dir, 'plugins', g.part, g.file)
-  const plan = planFile({ upstream: readText(author), installed: readText(local), fixes: g.fixes,
+  const plan = planFile({ upstream: g.provided ? '' : readText(author), installed: readText(local), fixes: g.fixes,
     record: FIX_RECORDS.files[`${g.part}/${g.file}`], baseUpstream: base && exists(base) ? readText(base) : null })
   if (plan.state === 'local' || plan.rows.some((row) => row.status === 'manual')) LOCAL_PARTS.add(g.part)
 }
@@ -2307,9 +2349,14 @@ const OLD_KIT = path.join(BASE ? BASE.dir : BODY, 'kit', 'echo'), NEW_KIT = path
 const fh = (f) => (exists(f) ? sha1(fs.readFileSync(f)) : null)
 const HUB_PLAN = !installed ? [] : fs.readdirSync(NEW_KIT).filter((f) => /\.(mjs|json)$/.test(f) && !HUB_EXCLUDE.includes(f) && !KIT_SET.includes(f)).map((f) => {
   const h = fh(path.join(HUB, f)), nw = fh(path.join(NEW_KIT, f)), od = fh(path.join(OLD_KIT, f))
-  const action = !h ? (HUB_FULL ? 'add' : null) : h === nw ? 'same' : h === od ? 'update' : 'local'
+  const managed = FIX_RECORDS.files[`hub/${f}`]
+  const ours = managed && typeof managed.upstream === 'string' && exists(path.join(HUB, f)) && readText(path.join(HUB, f)) === managed.applied
+  const action = !h ? (HUB_FULL ? 'add' : null) : h === nw || (ours && sha1(Buffer.from(managed.upstream)) === nw) ? 'same' : h === od || ours ? 'update' : 'local'
   return { f, action }
 }).filter((x) => x.action)
+if (HUB_PLAN.some((x) => ['echo-svc.mjs', 'echo-svc-client.mjs'].includes(x.f) && x.action === 'local')) {
+  for (const entry of HUB_PLAN) if (['echo-svc.mjs', 'echo-svc-client.mjs'].includes(entry.f) && ['add', 'update'].includes(entry.action)) entry.action = 'local'
+}
 const hubOf = (a) => HUB_PLAN.filter((x) => x.action === a).map((x) => x.f)
 const bodyDiff = installed ? (() => { const inst = hashInstalled(BODY, bodyKeep), next = packHashes(SRC.dir, packMissing(BODY, 'dsh-agent-soul').length ? null : 'dsh-agent-soul'); return { ...diffMaps(inst, next), inst, next } })() : null
 const BODY_SPLIT = splitDiff(bodyDiff, baseMap())
@@ -2526,6 +2573,7 @@ if (!DRY) {
   FIX_TRANSACTION = beginFixTransaction(path.join(BK, 'transaction'), [
     pkgPath, cfgPath, STATE_PATH, ...Object.values(LOCKS), path.join(NM, '.package-map.json'), ...PRESET_SESSION_PLANS.map((plan) => plan.file),
     ...new Set(['dsh-agent-soul', ...PKGS, ...INST.filter(Boolean), PRESET_PKG].map((name) => path.join(NM, name))),
+    ...FIX_GROUPS.filter((g) => g.location === 'hub').map(fixInstalledFile),
     ...(SKILLS_PLAN?.changed ? [SKILLS_DIR] : [])
   ])
 }

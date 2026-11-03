@@ -7,6 +7,8 @@
 
 > 用户要求更新或迭代 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。`--kit-update` 单独检查并同步 kit 的 GitHub 仓库；`--kit-iterate` 先处理 kit 自身更新，再准备插件上游证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
 
+> macOS 兼容修复（kit 5.3）：先走修复报告和计划。`model-statusbar-darwin`、`yantai-apps-darwin`、`heartbeat-darwin`、`echo-svc-darwin` 的核对与验收见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。heartbeat 完整验收后才替换 kit 每日自检，不随安装补丁自动停用旧任务。
+
 ## 一、规矩（动手前先读）
 
 1. 称呼用户按用户自己说的来；不知道就先问。用「大肥鱼」方案时，用户是 **Boss**。本手册涉及本机安装与数据操作的阶段开始前，用一两句话告诉用户要做什么，等用户确认后再动手。kit 源码迭代的授权与验证范围见 `AGENT-ITERATE.md`。
@@ -28,7 +30,7 @@
 | 可选零件 | mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）；面板件：model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务；**macOS 上不可用**）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台：水位 / 未结 / 账本 / 门；macOS 上「速达」用不了）、perf（渲染性能护栏：界面上可随时关掉毛玻璃效果）；上游 v3.0.0 新加的 heartbeat（作者的心跳面板）、chat（手机聊天页）、clawbot（微信通路），照上游原样装、默认不勾（已知问题见下一行）。装哪些按方案；大肥鱼方案装前两个，面板件默认不勾。各系统的已知限制见 README「两种装法」那张表，脚本在问答和干跑里会按这台电脑的系统提示 |
 | Soul preset | 灵魂 / 灵魂 · 创造 / 灵魂 · PTC / 灵魂 · 预判 / 灵魂 · 全能，使用上游 `presets/` 原文；按作者算法展开 include；全能只取 preset 那一块（上游文件后面是作者整份 profile 的导出，不装）。创造和全能用的 4 个技能拷进 profile 的 `skills/`。生成哪些、默认用哪个按方案；大肥鱼默认装五套、默认灵魂；可选第六个「灵魂 · PTC Flash」（见第九节「灵魂 · PTC Flash」，默认不选）。v3.0.0 以前叫砚青四套（`yanqing*`），旧 id 自动换成新的，砚青建的会话留别名照常打开 |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji、perf —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
-| 默认不装的新零件 | heartbeat、chat、clawbot —— 用户要装之前，**先把已知问题原样告诉他**：heartbeat 的心跳脚本已在上游仓库，但未列入零件发布清单、kit 不部署它；面板从 DSH 家目录往上两级推各数据目录，计划任务仍依赖 Windows，别的电脑上基本是空面板，每次工具调用还会试着往 `D:\_yq_guard_probe.txt` 写一行诊断；chat 在 fe3c456 中使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；仍写死作者的会话 id（别的电脑连不到会话），服务绑 `0.0.0.0`、绕开 DSH 的登录鉴权；clawbot 要微信扫码绑定，凭据在 `~/.dsh/clawbot/`、备份不带，自动通知默认全开，本机自己装过的 `dsh-clawbot` 安装包不碰。已有的安装 `--update` 不自动补装，要装加 `--add-part <名字>` |
+| 默认不装的新零件 | heartbeat、chat、clawbot —— 用户要装之前，**先把已知问题原样告诉他**：heartbeat 原版脚本未列入零件发布清单、默认安装不部署；macOS 可选 heartbeat-darwin 补齐并在验收后迁移每日自检；面板从 DSH 家目录往上两级推各数据目录，计划任务仍依赖 Windows，别的电脑上基本是空面板，每次工具调用还会试着往 `D:\_yq_guard_probe.txt` 写一行诊断；chat 在 fe3c456 中使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；仍写死作者的会话 id（别的电脑连不到会话），服务绑 `0.0.0.0`、绕开 DSH 的登录鉴权；clawbot 要微信扫码绑定，凭据在 `~/.dsh/clawbot/`、备份不带，自动通知默认全开，本机自己装过的 `dsh-clawbot` 安装包不碰。已有的安装 `--update` 不自动补装，要装加 `--add-part <名字>` |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
 | 自我层 | `memory/hub/SELF.src.md`：agent 的身份、硬线、说话方式、门 |
@@ -128,7 +130,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
    - **硬线**：从五条内置硬线里勾（把每条的规则念给用户听），再问要不要自己加；
    - **人设**：不设 / 写几句说话风格 / 再附一份完整人设文件；
    - **运行**：多会话、上下文窗口、生成哪几个 Soul preset、默认用哪个、心跳开不开、几点；
-   - **零件**：必装的七个（compaction、pruner、memory、echo、huanqi、huanqi-panel、mcp-hub）直接告诉用户；可选的七个逐个问（分一组两次也行），每个都把「装了有什么、不装会怎样」说清楚。问题清单里带 `platform` 的选项是这台电脑的系统上有已知限制的零件（`unsupported` 装了也用不了，例如 macOS 上的 model-statusbar；`partial` 部分功能用不了），问之前把 `why` 念给用户听，默认别勾 `unsupported` 的。后五个是面板件，默认值是不勾；model-statusbar 要先确认用户本机有没有本地模型服务，riji / yantai 的数据源（日记目录、账本、memq）由安装流程自己接好；
+   - **零件**：必装的七个（compaction、pruner、memory、echo、huanqi、huanqi-panel、mcp-hub）直接告诉用户；可选的七个逐个问（分一组两次也行），每个都把「装了有什么、不装会怎样」说清楚。问题清单里带 `platform` 的选项是这台电脑的系统上有已知限制的零件（`unsupported` 表示原版用不了，例如 macOS 上未修复的 model-statusbar；`partial` 部分功能用不了），问之前把 `why` 念给用户听，默认别勾 `unsupported` 的。后五个是面板件，默认值是不勾；model-statusbar 要先确认用户本机有没有本地模型服务，riji / yantai 的数据源（日记目录、账本、memq）由安装流程自己接好；
    - **保存**：方案名（默认和 agent 名字一样）。
 3. 把回答写成一个 JSON 文件（建议放在 `logs/answers-<名字>.json`），键名就是题目的 `id`。用户没表态的题可以不写，脚本按默认值处理。完整人设文件写它的路径（`personaFile`），脚本会原样拷进方案和书房。
 
@@ -269,7 +271,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 
 ### 修复（`--fix`）
 
-kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有固定 id），是针对安装和使用中的 bug 打的第三方补丁。**修复和安装、更新、恢复分开**：那几步只按作者上游装，一条修复都不打（已经打上的照原样留着，被整包换掉的零件就是作者原文）；装完单独做修复检查。
+kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（27 条，每条有固定 id），是针对安装和使用中的 bug 打的第三方补丁。**修复和安装、更新、恢复分开**：那几步只按作者上游装，一条修复都不打（已经打上的照原样留着，被整包换掉的零件就是作者原文）；装完单独做修复检查。
 
 5.2 对照上游 fe3c456：mcp-hub 和换气在未传 `DSH_HOME` 时会因未导入 `homedir` 报错，分别由 `mcp-hub-homedir` / `huanqi-homedir` 管理；安装收尾会点名这些阻止加载的项。`echo-diag-join` 修复诊断写入缺少 `join`，`huanqi-hub-home` 修复按作者目录布局找记忆中枢。旧的三条硬编码路径修复已退役，旧安装仍可识别。修复计划绑定家目录、profile、安装记录和上游源码内容；本机或离线源码变化后重新出报告。恢复会保留备份里的核对结论与证据，恢复后仍需按新机器事实复核。
 
@@ -412,7 +414,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 | 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`soul`、`soul-ptc`、`yanqing`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
 | 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者的 Soul preset（以前的砚青四套、现在的灵魂五套）在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 修复清单 `preset-summary-model`（2.17 起）：生成 preset 时去掉这两行，和官方预设一样跟会话模型走；本机默认模型本来就走 deepseek-official 时不去掉。有 API key、想照作者写死的，加 `--fix-skip preset-summary-model` |
-| 26 | macOS 上 model-statusbar 一直报错、没有读数 | 它的探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe`，只能在 Windows 上用 | 4.0 起问答和干跑会提示「macOS 不可用」，终端问答里默认不装；选了也不拦，装上就是空面板 |
+| 26 | macOS 上 model-statusbar 一直报错、没有读数 | 它的探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe`，只能在 Windows 上用 | 5.3 可按报告核实并选择 `model-statusbar-darwin`；需本机 ComfyUI 目录和 Mac Python，真实启动/静息/停止另做验收 |
 | 27 | macOS 上回声面板的体检一项都不出 | 面板在 Electron 里要找 DSH 自带的 node，作者只列了 Windows 的布局（`resources/runtime/…/node.exe`）；Mac 上找不到，就拿 DSH 主程序去跑体检脚本 | 修复清单 `echo-node-darwin`（4.0）：补上 `Contents/Resources/runtime/<arch>/…/node` |
 | 28 | 一行装在 Apple 芯片的 Mac 上挑到了 x64 的 node | DSH 同时带 arm64 和 x64 两份运行时，x64 那份要走 Rosetta | `install.sh` 和 `install.mjs` 都先挑本机架构那份（4.0） |
 | 29 | 回声面板里改常驻天数 / 内存预算存不上（报「写入失败」），实时状态一栏是空的 | 上游 11-01 新加的设置接口在没有 `ECHO_HUB` 环境变量时兜底写死作者电脑的 `D:/AI/memory/hub`；别的电脑上没有这个目录，而 `echo-mcp` 读写的是它自己所在的中枢 | 修复清单 `echo-settings-path`：改用面板自己 `resolveHub()` 找到的中枢，和 `echo-mcp` 读写同一处；装完重启 DSH 生效 |
@@ -478,7 +480,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（23 条，每条有
 ## 十四、平台说明
 
 - **一行装**：macOS 用 `install.sh`（`curl … | bash`），Windows 用 `install.ps1`（`irm … | iex`），两边只负责找 node、放好安装包、在终端里启动同一份 `install.mjs`。Mac 上的问答从 `/dev/tty` 读，`curl | bash` 也能一问一答；`install.ps1` 只用 ASCII 字符（Windows PowerShell 5.1 读管道来的脚本可能按本地代码页解码），出错时不关窗口。4.0 的 `install.ps1` 还没在 Windows 上真跑过。
-- **各系统用不了的零件**：见 README「两种装法」那张表（model-statusbar 只能在 Windows 上用；yantai 的「速达」只有 Windows 有。换气在 Windows 桌面版上也能装：作者 2026-10-31 更正了「桌面版必然失败」的说法，它是新增型零件，走 insert，缺的宿主包由 DSH 从 app.asar 里提供）。脚本按 `process.platform` 提示，不拦。
+- **各系统用不了的零件**：见 README「两种装法」那张表（原版 model-statusbar 和 yantai 速达依赖 Windows，5.3 可通过可选 macOS 修复适配。换气在 Windows 桌面版上也能装：作者 2026-10-31 更正了「桌面版必然失败」的说法，它是新增型零件，走 insert，缺的宿主包由 DSH 从 app.asar 里提供）。脚本按 `process.platform` 提示，不拦。
 - **不写死路径**：安装包里没有任何一台电脑的路径。写给人和 agent 读的文件（权威源册、自我层、要贴进新会话的话）里，用户目录下的路径写成 `$HOME/…`，zsh、bash 和 Windows 上 DSH 用的 PowerShell 都认；心跳脚本按相对自己的位置找记忆中枢。必须是绝对路径的只有交给操作系统或别的程序执行的几处（launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`），安装时在这台电脑上现算，迁移恢复时换成新电脑的。
 
 - **Boss 那台 Mac 和安装包装出来的有两处不同**：心跳是第一次手工安装时建的 `memory/hub/heartbeat.sh`（launchd 用 `/bin/bash` 调它，日志同样写进 `hub/heartbeat/`），安装包现在生成的是 `soul/60-工具/heartbeat.mjs`，效果一样；mnemon-probe 的补丁是早期手工写法，脚本认得，不会重打。排查那台 Mac 的心跳时看 `heartbeat.sh` 和 `~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist`。

@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 5.2**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 5.3**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -40,7 +40,7 @@
 
   model-statusbar 到 perf 是面板件，默认不勾：装完没有数据源就是空面板，想用再选。最后三个是上游 v3.0.0 新加的，**照上游原样装、默认不勾**，选之前先看清已知问题：
 
-  - heartbeat 的心跳脚本已补进上游仓库，但不在零件发布清单里，kit 不部署该脚本；面板按 DSH 家目录往上两级推书房、记忆中枢和脚本目录，计划任务仍依赖 Windows，别的电脑上基本是空面板；每次工具调用还会试着往 `D:\_yq_guard_probe.txt` 追加一行诊断记录（作者留的探针）。安装包自己的每日心跳和它不是一回事，照常跑。
+  - heartbeat 原版脚本不在零件发布清单里，路径和调度依赖作者的 Windows 布局。Mac 可选择 `heartbeat-darwin` 补齐运行链；默认不启用，完整验收后再替代 kit 每日自检，见 [迁移说明](MACOS-REPAIRS.md)。
   - chat 在 fe3c456 中使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；目标会话 id 仍写死，书房按作者目录布局推算。服务设计为绑定 `0.0.0.0`、绕开 DSH 的登录鉴权，同一网络里谁都能访问。
   - clawbot 是第三方插件（腾讯 ilink 网关），要手机微信扫码绑定；凭据存在 `~/.dsh/clawbot/`，备份不带它，换电脑要重新扫码；三个自动通知默认全开（每次回复都推一条微信）。本机自己从插件市场装过 `dsh-clawbot` 的，安装包不覆盖、也不卸载它。
 
@@ -50,11 +50,11 @@
 
 | 零件 | macOS | Windows |
 |---|---|---|
-| model-statusbar | **不可用**：探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe` | 可用 |
-| yantai | 部分可用：「速达」应用启动器靠 `.ps1` 脚本，只有 Windows 有；水位、未结、账本、门照常 | 可用 |
-| heartbeat | **不可用**：读计划任务靠 `schtasks` / `powershell`，数据路径全是 Windows 盘符 | 只在作者那台电脑上有数据（见上） |
+| model-statusbar | 原版不可用；按需修复 `model-statusbar-darwin`，需本机 ComfyUI 和 Mac Python | 可用 |
+| yantai | 原版速达不可用；按需修复 `yantai-apps-darwin` 扫描并打开 `.app`；其余功能照常 | 可用 |
+| heartbeat | 原版不可用；按需修复 `heartbeat-darwin`，验收后迁移至 launchd | 只在作者那台电脑上有数据（见上） |
 | echo（面板体检） | 作者只按 Windows 布局找 DSH 自带的 node，安装包用修复 `echo-node-darwin` 补上 Mac 的布局 | 可用 |
-| 记忆中枢的常驻检索 `echo-svc` | 用的是 Windows 命名管道，Mac 上不启动；`memq` 自动退回直接读，快路子走 mcp-hub 的 echo | 可用 |
+| 记忆中枢的常驻检索 `echo-svc` | 按需修复 `echo-svc-darwin` 使用 Unix socket；未启动服务时 `memq` 仍回退，mcp-hub echo 不受影响 | 可用 |
 
 ## 怎么用
 
@@ -285,10 +285,13 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 版本记录
 
-这里只保留最近三条更新；4.5 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+5.3 新增四条可选 macOS 修复，沿用报告 → Agent 核实 → 计划安装；补齐 heartbeat 运行链、验收门槛与每日自检切换/恢复。详细流程见 [macOS 修复说明](MACOS-REPAIRS.md)。真实 DSH、ComfyUI、launchd 到点运行仍需目标机验收。
+
+
+这里只保留最近三条更新；5.0 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 5.3 | 2026-11-04 | 新增模型状态栏、速达、heartbeat 和 echo-svc 四条 macOS 可选修复；多文件成组保护，脚本新增/撤回纳入事务和计划指纹。heartbeat 默认关闭，四步验收与代码/配置指纹通过后才允许切换旧每日自检，可恢复原任务；使用说明见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。 |
 | 5.2 | 2026-11-04 | 跟上游 fe3c456（含 6531d30 的路径调整）。新增 mcp-hub-homedir、huanqi-homedir、echo-diag-join、huanqi-hub-home 四条修复，处理缺失导入和换气记忆中枢定位；原 mcp-hub-home、echo-hub-path、huanqi-hub-path 退役但保留旧版识别。安装收尾点名会阻止加载的修复，仍需单独核对计划后应用。认不出的上游代码保持人工核对；计划绑定本机、安装记录及源码内容，离线源变化也拒绝旧计划；备份恢复保留修复核对结论和证据。同步 heartbeat / chat 当前限制。隔离验证覆盖安装、升级、修复计划、备份恢复和卸载，未做桌面验收。 |
 | 5.1 | 2026-11-04 | 修复不再在终端里逐条问：作者代码里有那段毛病不等于这台电脑会撞上，要 agent 对照本机核对过再定。修复清单每条补上不修会怎样（`impact`）、什么时候会撞上（`when`）、怎么核对（`verify`），会让零件加载不了的标「启动 DSH 前要处理」（`blocking`，只能选修或先不动）。新流程：`--fix --report` 出报告（只读，DSH 开着也能跑；带上脚本查到的本机事实，如热记忆目录、自我层路径是相对还是绝对、profile 里有没有换气那一节、默认模型路由、最近会话里的报错）→ agent 逐条核对，填 `fix-plan.json`（会不会撞上、修 / 不修 / 这次先不动、证据）→ 用户确认 → `--fix --plan` 校验后照做（出报告以后本机变了就作废），核对结论和证据记进安装记录，下次报告带出来。已经修好的、以前选过不修的不再要求选，情况变了可以加进计划改。装完、更新完、恢复完不再接着问，改成提示这几步；`--fix-only` / `--fix-skip` / `--fix-revert` 留作手动用。新增 `lib/fix-plan.mjs`。 |
-| 5.0 | 2026-11-04 | 跟上游 c370a69（v3.0.0）。压缩三件套包名照上游换成 `dsh-yanqing-compaction` / `dsh-yanqing-pruner` / `dsh-yanqing-compact-region`，4.x 装的 `--update` 迁移。Soul preset 换成上游去个人化后的灵魂四套（`soul` / `soul-cordis` / `soul-ptc` / `soul-distill`），新增第五套「灵魂 · 全能」（`soul-all`，默认装，只取 preset 本身、不带上游文件后面作者整份 profile 的导出）；砚青 PTC Flash 改名为灵魂 · PTC Flash（`soul-ptc-flash`）；旧的 `yanqing*` 进别名映射，砚青建的会话照常打开，方案、安装记录、默认 preset 自动换到新 id。创造和全能用的 4 个技能（上游 `presets/skills/`）装进 profile 的 `skills/`，三方比对、本机改过的不动，备份只带本机改过的，卸载只删没改过的。注册上游新零件 heartbeat、chat、clawbot：照上游原样装、默认不勾，更新时不自动补装（终端里问、默认不装），新参数 `--add-part` 补装；问答和 README 写明三者的已知问题；本机自己装的 `dsh-clawbot` 安装包不碰。修复清单：作者 v3.0.0 修好的 `echo-load-name`、`panel-load-name` 退役，`preset-summary-model` 改认 `preset-soul*`（含全能）。kit 迭代的扫描不再把本体发布清单里的 `plugins/` 重扫一遍（以前每个面板件都报一条假的 client id 不符），压缩摘要路由已由 `preset-summary-model` 管着的不再当新问题报。 |
