@@ -19,8 +19,8 @@
   "multiSession": true,
   "windowSize": 1000000,
   "parts": ["mnemon-probe", "clock", "huanqi", "huanqi-panel", "mcp-hub"],
-  "presets": ["yanqing", "yanqing-cordis", "yanqing-ptc", "yanqing-distill"],
-  "defaultPreset": "yanqing",
+  "presets": ["soul", "soul-cordis", "soul-ptc", "soul-distill", "soul-all"],
+  "defaultPreset": "soul",
   "heartbeat": { "enabled": true, "time": "12:00" },
   "files": { "authority": "00-authority.md", "self": "SELF.src.md.tpl", "voice": "大肥鱼-声音.md" }
 }

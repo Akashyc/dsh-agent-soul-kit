@@ -12,10 +12,12 @@
 //   node install.mjs --fresh --answers <文件> [--dry-run]   全新安装：按回答文件装，并把设定存成新方案
 //   node install.mjs --update --dry-run     更新：列出上游改了什么、会动哪些文件
 //   node install.mjs --update               更新到最新版
-//   node install.mjs --fix --dry-run        修复检查：对照已装那一版的作者原文，逐条看 kit 修复清单（lib/fixes.mjs）里的问题还在不在，只报不改
-//   node install.mjs --fix                  修复：终端里报完问题逐条问你修哪几条；不在终端里只报问题，选好后用 --fix-only
-//   node install.mjs --fix --fix-only <id,…>  只修这几条（问题还在就修；作者修好了就换回作者原文）
-//                                         安装、更新、恢复只按作者上游装，不打修复；装完单独检查（终端里装完会接着问）
+//   node install.mjs --fix --report [目录]   修复检查：对照已装那一版的作者原文，逐条看 kit 修复清单（lib/fixes.mjs），
+//                                         连同脚本查到的本机事实、不修会怎样、怎么核对，写成报告和计划模板（只读，DSH 开着也能跑）
+//   node install.mjs --fix --plan <fix-plan.json> [--dry-run]   按 agent 核对、用户确认过的修复计划修（先退出 DSH）
+//   node install.mjs --fix                  只报检查结果，不改；修不修不在终端里选，要先由 agent 对照本机实际核对（AGENT-INSTALL.md「修复」）
+//   node install.mjs --fix --fix-only <id,…>  手动指定只修这几条（问题还在就修；作者修好了就换回作者原文）
+//                                         安装、更新、恢复只按作者上游装，不打修复；装完单独做修复检查
 //   node install.mjs --backup               打一个迁移用的备份包（放在本文件夹的 backups/）
 //   node install.mjs --restore [备份包]      在新电脑上：装好并放回备份里的数据（不写包名就用 backups/ 里最新的）
 //   node install.mjs --uninstall --dry-run  卸载：先用 kit 打备份包，再卸掉本体、零件、Soul preset、配置和书房
@@ -27,15 +29,15 @@
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
 //   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
-//   --default-preset <id|keep>   新会话默认用的 preset：yanqing、yanqing-ptc、yanqing-distill、yanqing-cordis 或 keep（更新默认）；安装默认按方案
+//   --default-preset <id|keep>   新会话默认用的 preset：soul、soul-ptc、soul-cordis、soul-distill、soul-all、soul-ptc-flash 或 keep（更新默认）；安装默认按方案
 //   --fix-skip <id,…|none>       修复清单里跳过这几条（已装的 kit 修复会撤掉，换回作者原文）；none 清空。记进安装记录，以后照做
 //   --fix-only <id,…>            只用于 --fix：所有阶段只处理这几条（未选条目的旧写法保持现状）
 //   --fix-revert <id,…>          只用于 --fix：撤掉这几条 kit 修复，换回作者原文，并记进跳过清单
 //   --summary-model <session|author>  2.17 的写法，等于 preset-summary-model 这一条：author = 跳过（照作者写死 deepseek-official），
 //                                session = 不跳过（压缩摘要跟会话模型走，没有 DeepSeek API key 的账号登录也能压缩）
-//   --flash <on|off>             砚青 PTC Flash（dsh-flash-presets v3 的砚青适配）装不装：安装默认按方案，更新默认按安装记录
-//   --flash-ref <标签|分支|提交>  砚青 PTC Flash 的源取哪一版，默认作者最新发布的版本（GitHub releases/latest）
-//   --flash-source <目录|.tar.gz> 砚青 PTC Flash 用本地的 dsh-flash-presets 源码，不联网
+//   --flash <on|off>             灵魂 · PTC Flash（dsh-flash-presets v3 的灵魂适配）装不装：安装默认按方案，更新默认按安装记录
+//   --flash-ref <标签|分支|提交>  灵魂 · PTC Flash 的源取哪一版，默认作者最新发布的版本（GitHub releases/latest）
+//   --flash-source <目录|.tar.gz> 灵魂 · PTC Flash 用本地的 dsh-flash-presets 源码，不联网
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH_NODE > DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → <用户目录>/.dsh → Windows 的 %APPDATA%\dsh 依次找
@@ -44,6 +46,7 @@
 //   --data-dir <目录>            mnemon 数据根目录（热记忆在 <目录>/runtime；代替默认的 ~/.mnemon）
 //   --confirm-quit               无法自动判断 DSH 是否已退出时，由你确认它已完全退出
 //   --skip-part <目录名,…>       不装某个可选零件（例如 mcp-hub）；更新时用它拒掉的，以后也不再补
+//   --add-part <目录名,…>        装上某个可选零件（例如 clawbot）：更新时补装以前拒掉的、或默认不装的；安装时在方案之外多装
 //   --rename <上游称呼=称呼|none>  称呼替换：把上游代码里作者的称呼（爀曦）换成这台的用户称呼，例如 --rename 爀曦=Boss；
 //                                记进安装记录和备份，以后更新、恢复自动照做；none 关掉。不给就安装按方案、更新按安装记录
 //   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
@@ -80,14 +83,16 @@ import { fixQuotedBooleans } from './lib/config-sanitize.mjs'
 import { planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { parseNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, DEFAULT_PRESET_IDS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
+import { PRESET_IDS, DEFAULT_PRESET_IDS, ADDED_PRESETS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL, SUMMARY_MODES } from './lib/soul-presets.mjs'
 import { FLASH_REPO, FLASH_FILE, FLASH_PRESET_ID } from './lib/flash-presets.mjs'
 import { RETIRED_PRESETS, migratePresetDefault, migratePresetBundle, presetBlocks, planPresetSessions, applyPresetSessions } from './lib/preset-migration.mjs'
 import { beginFixTransaction } from './lib/fix-transaction.mjs'
+import { REPORT_KIND, needsDecision, canRevisit, choicesFor, fingerprint, planTemplate, loadPlan, DECISIONS, HITS } from './lib/fix-plan.mjs'
+import { needsSkills, planPresetSkills, pruneEmptyDirs } from './lib/preset-skills.mjs'
 import { planManagedText, changedLines, revertConfigLines, hasMissingApiKey } from './lib/fix-records.mjs'
 import { FIXES, FIX_IDS, fixInfo, fileFixes, planFile, detectConfigBool, detectSummaryRoute, defaultProvider, unpatchText, scanCandidates, STATUS_TEXT, ACTION_TEXT, BASIS_TEXT } from './lib/fixes.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
-import { PARTS, PART_NAMES, PRESET_ONLY, OPTIONAL_PARTS, MUST_HAVE, ADDED_PARTS, PART_INFO, platformText, verLess } from './lib/parts.mjs'
+import { PARTS, PART_NAMES, PRESET_ONLY, OPTIONAL_PARTS, MUST_HAVE, ADDED_PARTS, OPT_IN_PARTS, EXTERNAL_PARTS, PART_INFO, PLATFORM_LABEL, platformText, verLess } from './lib/parts.mjs'
 import { SETUPS, render, parseBool, normalizeAnswers, buildSetupFiles, loadSetup, listSetups, initAnswers, describeSetup, questionSheet, askTerminal } from './lib/setup.mjs'
 import { IS_MAC, NODE_MIN_MAJOR, dshHomeCandidates, nodeVersionOf, nodesOnPath, detectNode, resolveProxy as systemProxy, quitDshMac } from './lib/platform.mjs'
 
@@ -95,15 +100,15 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '4.5'
+const KIT_VERSION = '5.2'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
 // 上游旧版本里还没有的零件（用 --ref 装旧版时不算错）
-const OPTIONAL_SRC = ['mcp-hub']
+const OPTIONAL_SRC = ['mcp-hub', 'perf', 'heartbeat', 'chat', 'clawbot']
 // 中枢同步时不碰的：安装器自己、带写死日志名的测试脚本
 const HUB_EXCLUDE = ['install-kit.mjs', 'test-self-check.mjs']
-// 4.3 以前砚青几套装在这个独立包里；4.3 起照作者写进 profile 的 cordis.patch.yml（lib/soul-presets.mjs 的 findPresetSection），更新时搬过去、把包摘掉
+// 4.3 以前 Soul preset 装在这个独立包里；4.3 起照作者写进 profile 的 cordis.patch.yml（lib/soul-presets.mjs 的 findPresetSection），更新时搬过去、把包摘掉
 const PRESET_PKG = 'dsh-soul-preset'
 const PREDECESSORS = ['dsh-loop-guard', 'dsh-reasoning-only-guard', 'dsh-stalled-turn-continue']
 const KIT_SET = ['echo-doctor.mjs', 'echo-config.mjs'] // 中枢里归仓库管的两个脚本，其余按本机演化
@@ -118,7 +123,8 @@ if (flag('--help') || flag('-h')) {
   console.log(head.slice(0, head.findIndex((l) => l.startsWith('import '))).join('\n'))
   process.exit(0)
 }
-const DRY = flag('--dry-run')
+// 修复报告只读：和干跑一样不写 DSH 里的任何文件（只写报告目录）
+const DRY = flag('--dry-run') || (flag('--fix') && flag('--report'))
 // --fix：单独跑修复（3.0）。它沿用更新的流程，但上游钉在已装的那一版，只做修复清单里的事
 const FIX_MODE = flag('--fix')
 const UPDATE = flag('--update') || FIX_MODE
@@ -152,6 +158,7 @@ const SETUP_OPT = opt('--setup')
 const QUESTIONS_MODE = flag('--questions')
 const TTY = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flag('--no-input')
 let SKIP_PARTS = String(opt('--skip-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
+const ADD_PARTS = String(opt('--add-part', '')).split(',').map((x) => x.trim()).filter(Boolean)
 if ([flag('--update'), FIX_MODE, BACKUP, RESTORE, UNINSTALL, KIT_ITERATE, KIT_ACCEPT, KIT_UPDATE].filter(Boolean).length > 1) {
   console.log('--update、--fix、--backup、--restore、--uninstall、--kit-iterate、--kit-accept、--kit-update 一次只能用一个')
   process.exit(2)
@@ -207,7 +214,7 @@ if ((flag('--old-sessions') || KEEP_DATA) && !UNINSTALL) { console.log('--old-se
 if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSIONS)) { console.log(`--old-sessions 只能是 ${Object.keys(OLD_SESSION_MODES).join(' / ')}：\n${Object.entries(OLD_SESSION_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
-if (flag('--flash') && !['on', 'off'].includes(FLASH_OPT)) { console.log('--flash 只能是 on 或 off（砚青 PTC Flash 装不装）'); process.exit(2) }
+if (flag('--flash') && !['on', 'off'].includes(FLASH_OPT)) { console.log('--flash 只能是 on 或 off（灵魂 · PTC Flash 装不装）'); process.exit(2) }
 if ((flag('--flash') || flag('--flash-ref') || flag('--flash-source')) && !['install', 'update', 'restore'].includes(MODE)) { console.log('--flash、--flash-ref、--flash-source 只用于安装、更新、恢复（--fix 钉在安装记录里那一版）'); process.exit(2) }
 if (flag('--summary-model') && !SUMMARY_MODES[SUMMARY_OPT]) { console.log(`--summary-model 只能是：\n${Object.entries(SUMMARY_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 // 修复清单的参数（lib/fixes.mjs）：id 用逗号隔开
@@ -218,12 +225,20 @@ for (const k of ['--organs-source', '--organs-base-source', '--fix-reinstall']) 
 for (const k of ['--fix-only', '--fix-revert']) if (flag(k) && !FIX_MODE) { console.log(`${k} 只用于 --fix`); process.exit(2) }
 if (FIX_MODE && (flag('--rename') || flag('--default-preset') || flag('--skip-part') || flag('--ref'))) { console.log('--fix 只按已装的那一版修：改称呼替换、默认 preset、零件取舍或换版本请用 --update'); process.exit(2) }
 for (const k of ['--fix-only', '--fix-revert', '--fix-skip']) if (flag(k) && !opt(k)) { console.log(`${k} 后面要跟修复条目的 id（逗号隔开）${k === '--fix-skip' ? '，或者 none 清空' : ''}；全部 id 见 node install.mjs --fix --dry-run`); process.exit(2) }
+const REPORT = FIX_MODE && flag('--report')
+if ((flag('--report') || flag('--plan')) && !FIX_MODE) { console.log('--report、--plan 只用于 --fix'); process.exit(2) }
+if (flag('--plan') && !opt('--plan')) { console.log('--plan 后面要跟修复计划文件（--fix --report 生成的 fix-plan.json，agent 核对后填好）'); process.exit(2) }
+if (flag('--report') && flag('--plan')) { console.log('--report 出报告，--plan 照计划修，一次只用一个'); process.exit(2) }
+if ((flag('--report') || flag('--plan')) && ['--fix-only', '--fix-skip', '--fix-revert', '--summary-model'].some(flag)) { console.log('--report、--plan 管整张修复清单，不能和 --fix-only、--fix-skip、--fix-revert、--summary-model 一起用'); process.exit(2) }
 if (FIX_SKIP_OPT !== undefined && ['backup', 'uninstall', 'kit-update', 'kit-iterate', 'kit-accept'].includes(MODE)) { console.log('--fix-skip 只用于安装、更新、恢复和 --fix'); process.exit(2) }
 {
   const given = [...FIX_ONLY, ...FIX_REVERT, ...(FIX_SKIP_OPT && FIX_SKIP_OPT !== 'none' ? FIX_SKIP_OPT.split(',').map((x) => x.trim()).filter(Boolean) : [])]
   const bad = given.filter((id) => !FIX_IDS.includes(id))
   if (bad.length) { console.log(`不认识的修复条目：${bad.join('、')}。认得的：\n${FIXES.map((f) => `  ${f.id}：${f.title}`).join('\n')}`); process.exit(2) }
 }
+if (flag('--add-part') && !['install', 'update'].includes(MODE)) { console.log('--add-part 只用于安装和更新'); process.exit(2) }
+if (ADD_PARTS.some((p) => !OPTIONAL_PARTS.includes(p))) { console.log(`--add-part 只能给可选零件：${OPTIONAL_PARTS.join('、')}（不认识 ${ADD_PARTS.filter((p) => !OPTIONAL_PARTS.includes(p)).join('、')}）`); process.exit(2) }
+if (ADD_PARTS.some((p) => SKIP_PARTS.includes(p))) { console.log('同一个零件不能既 --add-part 又 --skip-part'); process.exit(2) }
 if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复、卸载不需要选方案'); process.exit(2) }
 if (FRESH && SETUP_OPT) { console.log('--setup（用现成方案）和 --fresh（全新安装）只能选一个'); process.exit(2) }
 if (opt('--heartbeat-time') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(opt('--heartbeat-time'))) { console.log(`--heartbeat-time 格式不对：${opt('--heartbeat-time')}，要 HH:MM`); process.exit(2) }
@@ -562,7 +577,7 @@ function rewritePaths(t, pairs) {
   return t.replace(re, (m) => map.get(m))
 }
 
-// repo / flag：取别的仓库时用（砚青 PTC Flash 取 dsh-flash-presets，见 getFlashSource）
+// repo / flag：取别的仓库时用（灵魂 · PTC Flash 取 dsh-flash-presets，见 getFlashSource）
 async function getSource({ ref = REF, source = SOURCE, soft = false, repo = REPO, flag = '--source' } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-src-'))
   TMP_DIRS.push(tmp)
@@ -595,7 +610,7 @@ async function getSource({ ref = REF, source = SOURCE, soft = false, repo = REPO
   try { r = extractTarGz(file, tmp) } catch (e) { if (soft) { info(`解压失败（${e.message}），这一份先不用`); return null } die(`解压失败：${e.message}`) }
   return { ...r, from: `GitHub ${repo}@${ref}（${d.via}）` }
 }
-// 砚青 PTC Flash 的源（lib/flash-presets.mjs）：默认取作者最新发布的版本（GitHub releases/latest），每次安装 / 更新都重新取，作者发了新版就跟上；
+// 灵魂 · PTC Flash 的源（lib/flash-presets.mjs）：默认取作者最新发布的版本（GitHub releases/latest），每次安装 / 更新都重新取，作者发了新版就跟上；
 // --flash-ref 指定分支 / 标签 / 提交，--flash-source 用本地目录或 .tar.gz；--fix 钉在安装记录里那一版
 async function getFlashSource() {
   let ref = FLASH_REF || (FIX_MODE && state0?.flash?.sha) || null
@@ -605,10 +620,10 @@ async function getFlashSource() {
     const f = path.join(tmp, 'latest.json')
     const d = await download(`https://api.github.com/repos/${FLASH_REPO}/releases/latest`, f)
     ref = d.ok ? (readJson(f) || {}).tag_name : null
-    if (!ref) die(`查不到 ${FLASH_REPO} 最新发布的版本${d.ok ? '' : `（${d.errs.join('；')}）`}：加 --flash-ref <标签或 main> 指定，或者 --flash-source <本地目录或 .tar.gz>；不要砚青 PTC Flash 就加 --flash off`)
+    if (!ref) die(`查不到 ${FLASH_REPO} 最新发布的版本${d.ok ? '' : `（${d.errs.join('；')}）`}：加 --flash-ref <标签或 main> 指定，或者 --flash-source <本地目录或 .tar.gz>；不要灵魂 · PTC Flash 就加 --flash off`)
   }
   const s = await getSource({ ref, source: FLASH_SOURCE, repo: FLASH_REPO, flag: '--flash-source' })
-  if (!exists(path.join(s.dir, ...FLASH_FILE.split('/')))) die(`${s.from} 里没有 ${FLASH_FILE}：作者改了目录结构，这次先加 --flash off 不装砚青 PTC Flash，等安装包跟上`)
+  if (!exists(path.join(s.dir, ...FLASH_FILE.split('/')))) die(`${s.from} 里没有 ${FLASH_FILE}：作者改了目录结构，这次先加 --flash off 不装灵魂 · PTC Flash，等安装包跟上`)
   const v = (readJson(path.join(s.dir, 'package.json')) || {}).version || null
   return { ...s, ref: FLASH_SOURCE ? null : ref, pkgVersion: v, version: `dsh-flash-presets ${v ? 'v' + v : '?'}${s.sha ? `（${s.sha.slice(0, 7)}）` : ''}` }
 }
@@ -643,7 +658,7 @@ const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function patchList(runtime, names, dshHome) { return fileFixes({ runtime, names, dshHome, partNames: PART_NAMES }) }
 // 每个包的 cordis.patch.yml 里要加载的 name，都必须真能在 node_modules 里找到（@deepseek-ai/*、cordis:* 是 DSH 自带的）
 // 找不到 = DSH 启动时 import 失败。这次上游改名漏改的就是这一类
-// extra：另外要查的 [{ label, text }]（profile 里砚青那一节）
+// extra：另外要查的 [{ label, text }]（profile 里 Soul preset 那一节）
 function patchNamesMissing(nm, pkgDirs, parse, extra = []) {
   const bad = []
   const sources = [...pkgDirs.map((d) => ({ d, f: path.join(nm, d, 'cordis.patch.yml') })).filter((x) => exists(x.f)).map((x) => ({ label: `${x.d}/cordis.patch.yml`, d: x.d, text: readText(x.f) })), ...extra.map((x) => ({ ...x, d: x.label }))]
@@ -1069,7 +1084,7 @@ const cfgPath = path.join(PROF, 'cordis.patch.yml')
 const pkg0 = readJson(pkgPath)
 if (!pkg0) die('profile 的 package.json 解析失败')
 const bundles0 = (pkg0.dsh && pkg0.dsh.profile && pkg0.dsh.profile.bundles) || []
-// 砚青几套：profile 里那一节（作者的装法）；没有就看 4.3 以前的独立包 dsh-soul-preset
+// Soul preset：profile 里那一节（作者的装法）；没有就看 4.3 以前的独立包 dsh-soul-preset
 const LEGACY_PRESET_RAW = exists(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) ? readText(path.join(NM, PRESET_PKG, 'cordis.patch.yml')) : ''
 const LEGACY_PRESET = exists(path.join(NM, PRESET_PKG)) || bundles0.includes(PRESET_PKG) || Boolean(pkg0.dependencies && pkg0.dependencies[PRESET_PKG])
 const installedPresetSection = () => (exists(cfgPath) && findPresetSection(readText(cfgPath)))?.text || presetSectionOf(LEGACY_PRESET_RAW)
@@ -1117,7 +1132,7 @@ ok(`书房 ${SOUL}`)
 ok(`记忆中枢 ${MEM}`)
 
 // ═══ 备份（--backup）：只带 dsh-agent-soul 自己的东西 ═══════════════════
-const SOUL_IDS_FALLBACK = ['dsh-agent-soul', 'dsh-agent-compaction', 'dsh-agent-pruner', 'dsh-agent-memory', 'dsh-agent-mnemon-probe', 'dsh-agent-echo', 'dsh-agent-clock', 'huanqi', 'dsh-agent-huanqi-panel', 'dsh-mcp-hub', 'preset-ptc-soul', 'preset-ptc-soul-flash', 'preset-standard-soul', 'preset-minimal-soul', 'preset-cordis-soul']
+const SOUL_IDS_FALLBACK = ['dsh-agent-soul', 'dsh-yanqing-compaction', 'dsh-yanqing-pruner', 'dsh-yanqing-heartbeat', 'dsh-yanqing-chat', 'dsh-clawbot', 'dsh-agent-compaction', 'dsh-agent-pruner', 'dsh-agent-memory', 'dsh-agent-mnemon-probe', 'dsh-agent-echo', 'dsh-agent-clock', 'huanqi', 'dsh-agent-huanqi-panel', 'dsh-mcp-hub', 'preset-ptc-soul', 'preset-ptc-soul-flash', 'preset-standard-soul', 'preset-minimal-soul', 'preset-cordis-soul']
 // 换气的账本，连同它自己留的备份和日志（state/ 下的 dsh-huanqi.json*、huanqi-*）
 const STATE_RE = /^(dsh-huanqi\.json.*|huanqi-.+)$/
 // 打备份包：--backup 和 --uninstall 共用。干跑只清点、不写；suffix 加在文件名最后（例如 pre-uninstall）
@@ -1157,6 +1172,12 @@ async function makeBackup({ suffix = '', soul = SOUL, mem = MEM } = {}) {
   const serversFile = path.join(DSH_HOME, 'mcp-hub', 'servers.json')
   const settings = { _说明: '本架构插件在 cordis.patch.yml 里的设置原文（恢复时路径会换成新电脑的）、默认 preset、mcp-hub 的服务器清单。不含 dsh-mnemon 等别的插件。', cordisEntries, selectedDefault: selM ? selM[1] : null, mcpServers: readJson(serversFile) }
   addFile('config/soul-settings.json', null, JSON.stringify(settings, null, 2))
+  // Soul preset 的 skills（<profile>/skills/）：上游那份恢复时会重新装，这里只带本机改过的
+  counts['preset-skills'] = 0
+  for (const [f, h] of Object.entries(state0?.presetSkills || {})) {
+    const full = path.join(PROF, 'skills', ...f.split('/'))
+    if (exists(full) && sha1(fs.readFileSync(full)) !== h) { addFile(`preset-skills/${f}`, full); counts['preset-skills']++ }
+  }
   if (exists(STATE_PATH)) addFile('install-state.json', STATE_PATH)
   const manifest = {
     kind: 'dsh-agent-soul-backup', format: 1, kitVersion: KIT_VERSION, createdAt: new Date().toISOString(),
@@ -1172,8 +1193,9 @@ async function makeBackup({ suffix = '', soul = SOUL, mem = MEM } = {}) {
   ok(`记忆中枢 ${counts.memory} 个文件（不带索引，恢复时重建）`)
   ok(`会话原文 ${counts.sessions || 0} 个文件（门牌指向它们）`)
   ok(`换气账本 ${counts.state} 个文件`)
+  if (counts['preset-skills']) ok(`Soul preset 的 skills 里本机改过的 ${counts['preset-skills']} 个（没改过的恢复时从上游重装）`)
   ok(`本架构插件的设置：${cordisEntries.length ? cordisEntries.map((b) => b.id).join('、') : '（cordis.patch.yml 里没有）'}；默认 preset ${settings.selectedDefault || '（未设）'}；mcp-hub 清单${settings.mcpServers ? '有' : '没有'}`)
-  info(`不带：dsh-mnemon 的数据和设置、其他插件、skills、表情包、附件、DSH 本身的设置（按约定）`)
+  info(`不带：dsh-mnemon 的数据和设置、其他插件、你自己的 skills、微信通路（clawbot）的凭据、表情包、附件、DSH 本身的设置（按约定）`)
   ok(`合计 ${Object.keys(files).length} 个文件，${mb(bytes)}（压缩前）`)
   const outDir = opt('--out') ? path.resolve(opt('--out')) : path.join(KIT, 'backups')
   const outFile = path.join(outDir, `dsh-soul-backup-${os.hostname().replace(/[^\w.-]+/g, '_')}-${TS}${suffix ? '-' + suffix : ''}.tar.gz`)
@@ -1207,7 +1229,8 @@ ${'─'.repeat(60)}
 // 每改一个配置文件都在原地留一份 .bak-<时间>-pre-uninstall；书房、中枢、会话、换气账本、插件设置都在备份包里。
 if (UNINSTALL) {
   const parse = yamlParser(PROF)
-  const OUR_PKGS = ['dsh-agent-soul', ...new Set(Object.values(PART_NAMES).flat()), PRESET_PKG]
+  // 第三方插件（clawbot）只收安装包装的那份；本机自己装的不卸
+  const OUR_PKGS = ['dsh-agent-soul', ...new Set(PARTS.flatMap((p) => EXTERNAL_PARTS.includes(p) ? PART_NAMES[p].filter((n) => (state0?.parts || []).includes(n)) : PART_NAMES[p])), PRESET_PKG]
   const deps0 = Object.keys({ ...(pkg0.dependencies || {}), ...(pkg0.devDependencies || {}), ...(pkg0.optionalDependencies || {}) })
   const deselected0 = (pkg0.dsh && pkg0.dsh.desktopNextDeselectedBundles) || []
   const present = OUR_PKGS.filter((n) => exists(path.join(NM, n)) || deps0.includes(n) || bundles0.includes(n) || deselected0.includes(n))
@@ -1376,7 +1399,7 @@ if (UNINSTALL) {
   }
   const outside = dataDirs.filter((d) => !inHome(d))
   if (!KEEP_DATA && outside.length) warn(`书房 / 记忆中枢不在 DSH 家目录里，不删它们，只提醒：${outside.map(posix).join('、')}（备份包里有一份）`)
-  info('不碰：dsh-mnemon（含热记忆）、其他插件、skills、表情包、附件、DSH 本身的设置、sessions/ 会话记录、安装包文件夹')
+  info('不碰：dsh-mnemon（含热记忆）、其他插件、你自己的 skills、微信通路（clawbot）的凭据、表情包、附件、DSH 本身的设置、sessions/ 会话记录、安装包文件夹')
 
   // 备份用的书房 / 中枢：以本体配置里写的为准；那里不存在（比如 profile 是别的电脑带过来的）就看 dsh-soul/ 下面默认的位置
   const bkSoul = exists(SOUL) ? SOUL : path.join(SOUL_ROOT, 'soul'), bkMem = exists(MEM) ? MEM : path.join(SOUL_ROOT, 'memory')
@@ -1467,6 +1490,11 @@ if (UNINSTALL) {
   step('本体和零件')
   for (const n of remove) if (exists(path.join(NM, n))) { rm(path.join(NM, n), `node_modules/${n}`); if (!DRY) ok(`node_modules/${n} 已删`) }
   for (const d of bakDirs) { rm(path.join(NM, d), `node_modules/${d}`); if (!DRY) ok(`node_modules/${d} 已删`) }
+  // Soul preset 的 skills：只删安装包装上去、本机没改过的；改过的留着（备份包里有）
+  const skillsOut = planPresetSkills({ src: null, dst: path.join(PROF, 'skills'), want: false, record: state0?.presetSkills || {} })
+  for (const f of skillsOut.remove) rm(path.join(PROF, 'skills', ...f.split('/')), `skills/${f}`)
+  if (!DRY && skillsOut.remove.length) { pruneEmptyDirs(path.join(PROF, 'skills'), skillsOut.remove); ok(`Soul preset 的 skills ${skillsOut.remove.length} 个已删`) }
+  if (skillsOut.local.length) warn(`Soul preset 的 skills 里本机改过的留着没删：${skillsOut.local.join('、')}（${posix(path.join(PROF, 'skills'))}）`)
 
   // ── 6. DSH 家目录里的东西 ──
   step('DSH 家目录里本架构的东西')
@@ -1628,6 +1656,7 @@ if (MODE === 'install') {
     ok(ANSWERS_FILE ? `回答文件：${posix(path.resolve(ANSWERS_FILE))}，校验通过` : '回答收齐了，校验通过')
   }
   for (const l of describeSetup(SETUP, SETUP_NAME)) out('  ' + l)
+  if (ADD_PARTS.length) out(`    方案之外按 --add-part 多装：${ADD_PARTS.join('、')}`)
   if (!MNEMON && SETUP.parts.includes('mnemon-probe')) warn('方案要装 mnemon-probe，但这台电脑还没装 dsh-mnemon：它会每轮报「读盘失败」，建议先在插件市场装 dsh-mnemon 再装这个方案')
   for (const w of SETUP_WARNS) warn(`方案选了这台系统上有限制的零件 ${w}${/不可用/.test(w) ? `；不想装就加 --skip-part ${w.split('：')[0]}` : ''}`)
   if (TTY && !DRY) {
@@ -1657,7 +1686,7 @@ const setupText = (key) => (SETUP_NEW ? SETUP_NEW.files[SETUP.files[key]] : read
 
 // 要生成的 Soul preset、默认 preset、心跳
 const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(installedPresetSection())).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter((id) => PRESET_IDS.includes(id)))] } catch { return [] } })()
-// 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul → 砚青 PTC 之类）：先映射再过滤，认不出的丢掉
+// 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul、yanqing-ptc → soul-ptc 之类）：先映射再过滤，认不出的丢掉
 const mapOldPresetIds = (list) => {
   const out = []
   for (const x of Array.isArray(list) ? list : []) {
@@ -1669,10 +1698,15 @@ const mapOldPresetIds = (list) => {
 const PRESET_CHOICE = MODE === 'install' ? SETUP.presets
   : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : [...DEFAULT_PRESET_IDS])
   : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : [...DEFAULT_PRESET_IDS])
-// --flash on / off：砚青 PTC Flash 加进来或去掉（记进安装记录的 presetIds，以后更新照做）
+// --flash on / off：灵魂 · PTC Flash 加进来或去掉（记进安装记录的 presetIds，以后更新照做）
 if (FLASH_OPT === 'on' && !PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.push(FLASH_PRESET_ID)
 if (FLASH_OPT === 'off' && PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.splice(PRESET_CHOICE.indexOf(FLASH_PRESET_ID), 1)
-if (!PRESET_CHOICE.length) die('--flash off 以后一个 Soul preset 都不剩了：至少留一个砚青 preset')
+if (!PRESET_CHOICE.length) die('--flash off 以后一个 Soul preset 都不剩了：至少留一个灵魂 preset')
+// 安装包后来才加的 preset（灵魂 · 全能）：更新、恢复旧安装时补上；--fix 不动 preset 的取舍
+if (MODE === 'update' || MODE === 'restore') {
+  const kitWas = (MODE === 'restore' ? RB.state : state0)?.kitVersion || '2.0'
+  for (const [id, ver] of Object.entries(ADDED_PRESETS)) if (verLess(kitWas, ver) && !PRESET_CHOICE.includes(id)) { PRESET_CHOICE.push(id); info(`安装包新加了 Soul preset「${PRESET_LABEL[id]}」，这次补上`) }
+}
 // 局部 --fix-only 保持范围；安装、更新、恢复（和不带 --fix-only 的 --fix）清理退役 preset。
 const MIGRATE_PRESETS = !FIX_MODE || !FIX_ONLY.length
 let PRESET_SESSION_PLANS = []
@@ -1683,15 +1717,15 @@ const retiredBlocks = presetBlocks(installedPresetText).some((block) => RETIRED_
 if (MIGRATE_PRESETS) {
   try { PRESET_SESSION_PLANS = planPresetSessions(SESSIONS, RESTORE ? path.join(RB.root, 'sessions') : null) }
   catch (error) { die(error.message) }
-  if ((retiredBlocks || PRESET_SESSION_PLANS.length || migratedConfig !== configBeforeMigration) && !PRESET_CHOICE.includes('yanqing-ptc')) PRESET_CHOICE.push('yanqing-ptc')
-  if (retiredBlocks || PRESET_SESSION_PLANS.length || migratedConfig !== configBeforeMigration) info(`退役 preset 清理：移除旧 Flash，${PRESET_SESSION_PLANS.length} 个会话迁到砚青 PTC；默认入口同步迁移，原文件纳入事务备份`)
+  if ((retiredBlocks || PRESET_SESSION_PLANS.length || migratedConfig !== configBeforeMigration) && !PRESET_CHOICE.includes('soul-ptc')) PRESET_CHOICE.push('soul-ptc')
+  if (retiredBlocks || PRESET_SESSION_PLANS.length || migratedConfig !== configBeforeMigration) info(`退役 preset 清理：移除旧 Flash，${PRESET_SESSION_PLANS.length} 个会话迁到灵魂 · PTC；默认入口同步迁移，原文件纳入事务备份`)
 }
 const presetMigrationPending = PRESET_SESSION_PLANS.length > 0 || migratedConfig !== configBeforeMigration
 if (MIGRATE_PRESETS && RETIRED_PRESETS[DEFAULT_PRESET]) {
   DEFAULT_PRESET = RETIRED_PRESETS[DEFAULT_PRESET]
   if (!PRESET_CHOICE.includes(DEFAULT_PRESET)) PRESET_CHOICE.push(DEFAULT_PRESET)
 }
-if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('yanqing') ? 'yanqing' : PRESET_CHOICE[0]
+if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('soul') ? 'soul' : PRESET_CHOICE[0]
 if (PRESET_IDS.includes(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
 if (MODE === 'install' || MODE === 'restore') {
   const hb = MODE === 'install' ? SETUP.heartbeat : RB.state.heartbeat
@@ -1704,10 +1738,18 @@ HB_TIME = HB_TIME || '12:00'
 if (MODE === 'install') {
   const bad = SKIP_PARTS.filter((p) => MUST_HAVE(p))
   if (bad.length) die(`必装零件不能跳过：${bad.join('、')}`)
-  for (const p of OPTIONAL_PARTS) if (!SETUP.parts.includes(p) && !SKIP_PARTS.includes(p)) SKIP_PARTS.push(p)
+  for (const p of OPTIONAL_PARTS) if (!SETUP.parts.includes(p) && !SKIP_PARTS.includes(p) && !ADD_PARTS.includes(p)) SKIP_PARTS.push(p)
 }
 const DECLINED0 = (state0 && Array.isArray(state0.declined) && state0.declined) || []
-if (UPDATE) for (const p of DECLINED0) if (!SKIP_PARTS.includes(p)) SKIP_PARTS.push(p)
+if (UPDATE) for (const p of DECLINED0) if (!SKIP_PARTS.includes(p) && !ADD_PARTS.includes(p)) SKIP_PARTS.push(p)
+// 别处也单独发布的第三方插件（clawbot）：本机自己装的、安装记录里没有，安装包不覆盖它
+{
+  const own = ((RESTORE ? RB?.state : state0)?.parts) || []
+  for (const p of EXTERNAL_PARTS) {
+    if (SKIP_PARTS.includes(p) || !PART_NAMES[p].some((n) => exists(path.join(NM, n, 'package.json')) && !own.includes(n))) continue
+    SKIP_PARTS.push(p); info(`${PART_NAMES[p][0]} 是本机自己装的（安装记录里没有），安装包不动它`)
+  }
+}
 const isInstalledPart = (p) => PART_NAMES[p].some((n) => exists(path.join(NM, n, 'package.json')))
 // 不能跳过的零件：恢复旧备份（那时还没有这个零件）、以前拒掉过、或者命令行 --skip-part 了都一样
 {
@@ -1718,9 +1760,10 @@ const isInstalledPart = (p) => PART_NAMES[p].some((n) => exists(path.join(NM, n,
 if (UPDATE && !FIX_MODE && TTY && !DRY) {
   // 安装包后来才加的零件：终端里问一句；agent 那条路在下面的变化报告里提示
   const kit0 = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
-  for (const p of PARTS.filter((x) => ADDED_PARTS[x] && verLess(kit0, ADDED_PARTS[x]) && !MUST_HAVE(x) && !SKIP_PARTS.includes(x) && !isInstalledPart(x))) {
-    const i = PART_INFO[p] || {}, note = platformText(p), def = !/不可用/.test(note || '')
-    if (!parseBool(await askLine(`\n安装包新加了零件 ${p}：${i.what || ''}；不装：${i.without || ''}。${note ? note + '。' : ''}装吗？(${def ? 'Y/n' : 'y/N'}) `), def)) { SKIP_PARTS.push(p); info(`不装 ${p}，记下来，以后更新也不再问`) }
+  for (const p of PARTS.filter((x) => ADDED_PARTS[x] && verLess(kit0, ADDED_PARTS[x]) && !MUST_HAVE(x) && !SKIP_PARTS.includes(x) && !ADD_PARTS.includes(x) && !isInstalledPart(x))) {
+    const i = PART_INFO[p] || {}, note = platformText(p), def = !/不可用/.test(note || '') && !OPT_IN_PARTS.includes(p)
+    if (!parseBool(await askLine(`\n安装包新加了零件 ${p}：${i.what || ''}；不装：${i.without || ''}。${i.caveat ? i.caveat + '。' : ''}${note ? note + '。' : ''}装吗？(${def ? 'Y/n' : 'y/N'}) `), def)) { SKIP_PARTS.push(p); info(`不装 ${p}，记下来，以后更新也不再问（想装再加 --add-part ${p}）`) }
+    else if (OPT_IN_PARTS.includes(p)) ADD_PARTS.push(p)
   }
 }
 
@@ -1759,7 +1802,17 @@ const FIX_RECORDS = structuredClone((RESTORE ? RB?.state : state0)?.fixRecords |
 FIX_RECORDS.files ||= {}
 FIX_RECORDS.presets ||= {}
 FIX_RECORDS.config ||= []
-if (FIX_SKIP.length) info(`修复清单里跳过：${FIX_SKIP.map((id) => `${id}（${fixInfo(id).title}）`).join('、')}${FIX_SKIP_OPT === undefined && !FIX_REVERT.length ? '（按' + (MODE === 'install' ? '方案' : UPDATE ? '安装记录' : '备份里的安装记录') + '）' : ''}`)
+// 修复计划（--plan，lib/fix-plan.mjs）：照计划定这次处理哪几条、跳过清单怎么改；报告出完以后本机变没变，要等算出指纹再核（「修复检查」那一步）
+const PLAN = FIX_MODE && opt('--plan') ? (() => { try { return loadPlan(path.resolve(opt('--plan')), FIX_SKIP) } catch (e) { return die(e.message) } })() : null
+if (PLAN) {
+  FIX_ONLY.push(...PLAN.only)
+  FIX_SKIP = PLAN.skip
+  const by = (k) => Object.entries(PLAN.decisions).filter(([, d]) => d.decision === k).map(([id]) => id).join('、') || '无'
+  ok(`修复计划：修 ${by('fix')}；不修 ${by('skip')}；这次先不动 ${by('later')}`)
+  for (const w of PLAN.warnings) warn(w)
+  if (!PLAN.only.length) { out('\n计划里每条都是「这次先不动」，什么都不改。'); process.exit(0) }
+}
+if (FIX_SKIP.length) info(`修复清单里跳过：${FIX_SKIP.map((id) => `${id}（${fixInfo(id).title}）`).join('、')}${PLAN ? '（按修复计划）' : FIX_SKIP_OPT === undefined && !FIX_REVERT.length ? '（按' + (MODE === 'install' ? '方案' : UPDATE ? '安装记录' : '备份里的安装记录') + '）' : ''}`)
 
 // --fix 把上游钉在已装的那一版：对照的是「装进来的那份作者原文」，作者新改的东西要等 --update 才进来
 const SRC0 = await getSource(FIX_SHA && !SOURCE ? { ref: FIX_SHA } : {})
@@ -1779,18 +1832,21 @@ const AP = PARTS.filter((p) => src.names[p] && !SKIP_PARTS.includes(p))
 const PKGS = AP.map((p) => src.names[p])
 const INST = AP.map((p) => PART_NAMES[p].find((n) => exists(path.join(NM, n, 'package.json'))) || null)
 const RENAMES = AP.map((p, i) => (INST[i] && INST[i] !== PKGS[i] ? { part: p, from: INST[i], to: PKGS[i] } : null)).filter(Boolean)
-// 包名迁移（例如 3.0 装的 dsh-yanqing-* → 上游现在的 dsh-agent-*）要重装零件，那是 --update 的事；--fix 不动包名
+// 包名迁移（例如 4.x 装的 dsh-agent-compaction → 上游 v3.0.0 的 dsh-yanqing-compaction）要重装零件，那是 --update 的事；--fix 不动包名
 if (FIX_MODE && LEGACY_PRESET) die(`这台的 Soul preset 还装在 4.3 以前的独立包 ${PRESET_PKG} 里：搬进 profile 的 cordis.patch.yml（作者的装法）是 --update 的事，先跑 --update，再 --fix。`)
 if (FIX_MODE && RENAMES.length) die(`这台装的是旧包名（${RENAMES.map((r) => `${r.from} → ${r.to}`).join('；')}），包名迁移要重装零件：请用 --update，--fix 只修文件不改包名。`)
 const RENAME_MAP = Object.fromEntries(RENAMES.map((r) => [r.from, r.to]))
 const stateKit = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
 // 更新时本机没有也必须补上的：必装零件、Soul preset 要调用的零件（压缩三件套，缺一个 preset 就加载失败、DSH 起不来）
 // --fix 不补装零件（那是更新的事）
-const TO_ADD = FIX_MODE ? new Set() : new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || MUST_HAVE(p) || (ADDED_PARTS[p] && verLess(stateKit, ADDED_PARTS[p])))))
+// 默认不装的新零件（OPT_IN_PARTS）更新时不自动补：终端里答了要装、或者给了 --add-part 才装
+const TO_ADD = FIX_MODE ? new Set() : new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || MUST_HAVE(p) || ADD_PARTS.includes(p) || (ADDED_PARTS[p] && verLess(stateKit, ADDED_PARTS[p]) && !OPT_IN_PARTS.includes(p)))))
 // package.json 里只写这次之后真的在 node_modules 里的零件：写了不存在的 file: 依赖，插件市场一跑 pnpm 就报 ENOENT
 const PKGS_LIVE = PKGS.filter((n, i) => !UPDATE || INST[i] || TO_ADD.has(AP[i]))
 // 这次会装上 / 留着的零件里，这台系统上有已知限制的（安装时在「选方案」那一步已经说过）
-if (MODE !== 'install') for (const [i, p] of AP.entries()) { const t = platformText(p); if (t && PKGS_LIVE.includes(PKGS[i])) warn(`${p}：${t}`) }
+for (const [i, p] of AP.entries()) { const t = platformText(p); if (t && PKGS_LIVE.includes(PKGS[i]) && (MODE !== 'install' || ADD_PARTS.includes(p))) warn(`${p}：${t}`) }
+// 照上游原样装、有已知问题的零件（PART_INFO 的 caveat）：这次新装上的说一遍
+for (const [i, p] of AP.entries()) if (PART_INFO[p]?.caveat && PKGS_LIVE.includes(PKGS[i]) && !INST[i]) warn(`${p}：${PART_INFO[p].caveat}`)
 // 发布清单自洽（lib/package-contract.mjs）：本体和这次要装的零件，入口 import 到的文件都得在 files 里，
 // 否则按清单拷完就缺文件、零件加载失败 → 在动手前停下。用到的 @deepseek-ai/* 没在 peerDependencies 里声明的只提示：
 // 宿主拦不拦随 DSH 版本，上游 v2.0.0 的 compaction、huanqi 都漏过，桌面实测仍能加载。
@@ -1803,6 +1859,8 @@ for (const x of PKG_ISSUES) if (PACK_FIX && x.issue.kind === 'unshipped') (PACK_
 const PACK_LIST = Object.entries(PACK_EXTRA).map(([n, f]) => `${n}：${f.join('、')}`)
 const packDst = (pkg) => (pkg === 'dsh-agent-soul' ? BODY : path.join(NM, pkg))
 const PACK_PENDING = Object.keys(PACK_EXTRA).filter((pkg) => packMissing(packDst(pkg), pkg).length)
+// 上游漏列的文件在已装的包里补上没有（和跳过设置无关：修复报告的本机事实、计划指纹都用它）
+const PACK_STATE = PKG_ISSUES.filter((x) => x.issue.kind === 'unshipped').map((x) => { const pkg = x.part ? x.label : 'dsh-agent-soul'; return { pkg, file: x.issue.target, there: exists(path.join(packDst(pkg), ...x.issue.target.split('/'))) } })
 FIX_ROWS.push({ id: 'pack-unshipped', status: !fixSelected('pack-unshipped') ? 'frozen' : FIX_SKIP.includes('pack-unshipped') ? 'skipped' : PACK_LIST.length ? 'kit' : 'clean',
   action: fixSelected('pack-unshipped') && PACK_PENDING.length ? 'apply' : PACK_LIST.length ? 'keep' : 'none', note: PACK_LIST.length ? `补进发布清单：${PACK_LIST.join('；')}` : null })
 const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer' && !(PACK_FIX && x.issue.kind === 'unshipped'))
@@ -1847,28 +1905,31 @@ function splitDiff(d, base) {
 }
 
 const FLASH_SRC = PRESET_CHOICE.includes(FLASH_PRESET_ID) ? await getFlashSource() : null
-if (FLASH_SRC) ok(`砚青 PTC Flash 的源：${FLASH_SRC.from}，${FLASH_SRC.version}${state0?.flash?.sha && FLASH_SRC.sha && state0.flash.sha !== FLASH_SRC.sha ? `；上次装的是 ${state0.flash.version || state0.flash.sha.slice(0, 7)}` : ''}`)
+if (FLASH_SRC) ok(`灵魂 · PTC Flash 的源：${FLASH_SRC.from}，${FLASH_SRC.version}${state0?.flash?.sha && FLASH_SRC.sha && state0.flash.sha !== FLASH_SRC.sha ? `；上次装的是 ${state0.flash.version || state0.flash.sha.slice(0, 7)}` : ''}`)
 const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir, flash: FLASH_SRC })
 // ═══ 修复清单 · preset：压缩摘要跟会话模型走（preset-summary-model）════════════════
-// 作者砚青四套写死 summarizationProvider: deepseek-official（要 API key）。本机默认模型就走这条路由（有 key）时不用去掉；
+// 作者的灵魂五套写死 summarizationProvider: deepseek-official（要 API key）。本机默认模型就走这条路由（有 key）时不用去掉；
 // 作者哪天不写死了，判定为「作者已修」，照原样装
 /** 仅读取最近会话的末尾，查无 key 错误；不输出会话正文。 */
-function recentMissingApiKey() {
-  if (!exists(SESSIONS)) return false
+// 最近 8 个会话（只看没压缩的 .jsonl）的末尾里，有几个命中 test；只读末尾，不输出会话正文
+function recentSessionsHit(test) {
+  if (!exists(SESSIONS)) return 0
   const files = walk(SESSIONS).filter((file) => /session\.v\d+\.jsonl$/.test(file))
     .map((file) => ({ file: path.join(SESSIONS, file), time: fs.statSync(path.join(SESSIONS, file)).mtimeMs }))
     .sort((a, b) => b.time - a.time).slice(0, 8)
+  let n = 0
   for (const { file } of files) {
     const fd = fs.openSync(file, 'r')
     try {
       const size = fs.fstatSync(fd).size
       const buffer = Buffer.alloc(Math.min(size, 65536))
       fs.readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length))
-      if (hasMissingApiKey(buffer.toString('utf8'))) return true
+      if (test(buffer.toString('utf8'))) n++
     } finally { fs.closeSync(fd) }
   }
-  return false
+  return n
 }
+const recentMissingApiKey = () => recentSessionsHit(hasMissingApiKey) > 0
 let SUMMARY_MODEL = 'author'
 {
   const det = detectSummaryRoute(PRESET_CHOICE.map((id) => SRC_PRESETS[PRESET_SOURCE[id]] && SRC_PRESETS[PRESET_SOURCE[id]].text))
@@ -1876,7 +1937,7 @@ let SUMMARY_MODEL = 'author'
   const skipped = FIX_SKIP.includes('preset-summary-model')
   const missingKey = prov === 'deepseek-official' && recentMissingApiKey()
   const status = !fixSelected('preset-summary-model') ? 'frozen' : skipped ? 'skipped' : prov === 'deepseek-official' && !missingKey ? 'n/a' : det === 'present' ? 'kit' : det === 'absent' ? 'author' : 'manual'
-  const had = det === 'present' && /- id: preset-yanqing/.test(installedPresetText) && !/^\s*summarizationProvider:\s*['"]?deepseek-official/m.test(installedPresetText)
+  const had = det === 'present' && /^ {4}- id: preset-/m.test(installedPresetText) && !/^\s*summarizationProvider:\s*['"]?deepseek-official/m.test(installedPresetText)
   // preset 每次都按作者的重新生成：安装、更新保持已装的选择（打过的照打，没打的不打），改不改由 --fix 定
   if (status === 'kit' || (!FIX_MODE && had)) SUMMARY_MODEL = 'session'
   FIX_ROWS.push({ id: 'preset-summary-model', status, action: status === 'kit' ? (had ? 'keep' : 'apply') : had ? 'revert' : 'none', note: status === 'n/a' ? '本机默认模型走的就是 deepseek-official（有 API key）' : null })
@@ -1943,6 +2004,11 @@ if (MIGRATE_PRESETS && (retiredBlocks || /^#.*PTC.*Flash/m.test(LEGACY_PRESET_RA
   delete PRESET_PLAN.record
   if (BUNDLE.text === targetBundle.text) PRESET_PLAN.record = { upstream: AUTHOR_BUNDLE.text, applied: BUNDLE.text }
 }
+// Soul preset 自带的 skills（lib/preset-skills.mjs）：灵魂 · 创造 / 全能挂 <profile>/skills/；--fix 不动
+const SKILLS_DIR = path.join(PROF, 'skills')
+const SKILLS_SRC = [path.join(SRC.dir, 'presets', 'skills'), path.join(ASSETS, 'presets', 'skills')].find((d) => exists(d)) || null
+const SKILLS_PLAN = FIX_MODE ? null : planPresetSkills({ src: SKILLS_SRC, dst: SKILLS_DIR, want: needsSkills(BUNDLE.text), record: (RESTORE ? RB.state : state0)?.presetSkills || {} })
+const skillsSummary = () => [SKILLS_PLAN.write.length && `拷 ${SKILLS_PLAN.write.length} 个`, SKILLS_PLAN.remove.length && `删 ${SKILLS_PLAN.remove.length} 个（这次的 preset 不用了、本机没改过）`, SKILLS_PLAN.local.length && `本机改过的 ${SKILLS_PLAN.local.length} 个不动：${SKILLS_PLAN.local.join('、')}`].filter(Boolean).join('；') || '和上游一致'
 const parseYaml = yamlParser(PROF)
 if (parseYaml && (MIGRATE_PRESETS || BUNDLE.text !== installedPresetText)) {
   try {
@@ -2067,17 +2133,123 @@ function showFixRows(rows) {
 }
 // 清单外的疑似问题（写死个人电脑路径、加载名 ≠ 包名等，lib/fixes.mjs 的 scanCandidates）：只报不修。
 // 要修先写方案给用户确认，登记进修复清单再走 --fix，不直接手改已装文件（手改过的文件以后整个不动）
-function showCandidates() {
+function candidatesFound() {
   const covered = new Set(FIX_GROUPS.map((g) => `${g.pkg}/${g.file}`))
   const dirs = PKGS_LIVE.map((pkg) => ({ dir: path.join(NM, pkg), rel: pkg })).filter((d) => exists(d.dir)).map((d) => ({ ...d, files: packFiles(d.dir) }))
-  const found = scanCandidates({ dirs, read: (f) => (exists(f) ? readText(f) : null), covered })
+  return scanCandidates({ dirs, read: (f) => (exists(f) ? readText(f) : null), covered })
+}
+function showCandidates(found = candidatesFound()) {
   if (!found.length) return ok('清单外：没扫到同类的疑似问题')
   info(`清单外的疑似问题 ${found.length} 处（只报不修；要修就告诉 Agent，先写方案给你确认、登记进修复清单再修）：`)
   for (const c of found) info(`  ? ${c.file}：${c.message}`)
 }
-// 接着跑 --fix 时带上的参数：找 DSH、找源码、找热记忆目录用的那些
-function passArgs() {
-  return [...['--dsh-home', '--profile', '--proxy', '--source', '--runtime', '--data-dir', '--app-asar'].flatMap((k) => (opt(k) ? [k, opt(k)] : [])), ...(flag('--confirm-quit') ? ['--confirm-quit'] : [])]
+// ── 修复报告（--fix --report，lib/fix-plan.mjs）────────────────────────────────────
+// 脚本自己查得到的本机事实：agent 核对时的起点；DSH 运行时的情况（环境变量传没传、面板有没有读数）脚本看不到，留给每条的 verify
+function fixFacts() {
+  const cfg = exists(cfgPath) ? readText(cfgPath) : ''
+  const lines = cfg.replace(/\r\n/g, '\n').split('\n'), at = lines.findIndex((l) => /^- id: ['"]?dsh-agent-memory['"]?\s*$/.test(l))
+  let selfPath = null
+  for (let i = at + 1; at >= 0 && i < lines.length && !/^\S/.test(lines[i]); i++) { const m = lines[i].match(/^ {4}selfPath:\s*['"]?([^'"]+)['"]?\s*$/); if (m) selfPath = m[1] }
+  const servers = readJson(path.join(DSH_HOME, 'mcp-hub', 'servers.json')), srv = servers && (Array.isArray(servers) ? servers : servers.servers || [])
+  const diary = path.join(SOUL, '50-日记')
+  const authorHub = `作者那台的 D:\\AI\\memory\\hub 在这台上${exists('D:\\AI\\memory\\hub') ? '有' : '没有'}`
+  const idle = recentSessionsHit((t) => t.includes('requires an idle agent'))
+  const prov = defaultProvider(cfg)
+  const dshFact = `DSH 家目录：${homePath(DSH_HOME)}（${path.resolve(DSH_HOME) === path.resolve(os.homedir(), '.dsh') ? '就是' : '不是'} ~/.dsh）；DSH 传没传 DSH_HOME 给插件，脚本看不到`
+  const up2Hub = path.join(path.dirname(path.dirname(DSH_HOME)), 'memory', 'hub')
+  return {
+    'pack-unshipped': PACK_STATE.length ? PACK_STATE.map((x) => `${x.pkg}：上游发布清单漏列 ${x.file}，已装的包里${x.there ? '已经有了' : '没有'}`) : ['上游发布清单没有漏列的文件'],
+    'mnemon-runtime': [`dsh-mnemon ${MNEMON_INSTALLED ? '装了' : '没装'}`, `热记忆目录解析到 ${RX || '（解析不出）'}（${MNE.source}）`, `mnemon-probe 上游默认找 ${posix(path.join(os.homedir(), '.mnemon', 'runtime'))}`],
+    'memory-home': [selfPath ? `dsh-agent-memory 的 selfPath：${selfPath}（${path.isAbsolute(selfPath) || /^[A-Za-z]:[\\/]/.test(selfPath) ? '绝对路径' : '相对路径'}）` : 'cordis.patch.yml 里没有 dsh-agent-memory 的 selfPath'],
+    'mcp-hub-home': [srv ? `${homePath(path.join(DSH_HOME, 'mcp-hub', 'servers.json'))} 在，${srv.some((x) => x && x.serverName === 'echo') ? '里面有 echo' : '里面没有 echo'}` : `${homePath(path.join(DSH_HOME, 'mcp-hub', 'servers.json'))} 不在`],
+    'mcp-hub-homedir': [dshFact],
+    'yantai-soul': [`书房 ${homePath(SOUL)} ${exists(SOUL) ? '在' : '不在'}`],
+    'yantai-memory': [`记忆中枢 ${homePath(MEM)} ${exists(MEM) ? '在' : '不在'}`],
+    'riji-diary': [exists(diary) ? `书房 50-日记/ 下有 ${fs.readdirSync(diary).filter((x) => x.endsWith('.md')).length} 篇` : '书房里没有 50-日记/'],
+    'echo-hub-path': [authorHub],
+    'echo-node-darwin': [`系统：${PLATFORM_LABEL[process.platform] || process.platform}`],
+    'echo-settings-path': [`记忆中枢里${exists(path.join(HUB, 'echo-settings.json')) ? '有' : '没有'} echo-settings.json`],
+    'echo-diag-join': [`记忆中枢里${exists(path.join(HUB, '_plugin-diag.log')) ? '有' : '没有'} _plugin-diag.log`],
+    'panel-ensure-block': [/^- id: ['"]?huanqi['"]?\s*$/m.test(cfg) ? 'profile 的 cordis.patch.yml 里有 `- id: huanqi` 这一节' : 'profile 的 cordis.patch.yml 里没有 `- id: huanqi` 这一节'],
+    'huanqi-hub-path': [authorHub],
+    'huanqi-full-maint': [idle ? `最近 8 个会话里有 ${idle} 个报过 requires an idle agent` : '最近 8 个会话（没压缩的）里没有 requires an idle agent'],
+    'huanqi-homedir': [dshFact],
+    'huanqi-hub-home': [`按上游的推法，换气找的记忆中枢是 ${homePath(up2Hub)}，本机记忆中枢是 ${homePath(HUB)}（${path.resolve(up2Hub) === path.resolve(HUB) ? '同一个' : '不是同一个'}）`],
+    'huanqi-config-bool': [detectConfigBool(cfg) === 'present' ? '换气那一节有被写成字符串的布尔' : '换气那一节没有字符串布尔'],
+    'preset-summary-model': [`默认模型路由：${prov || '（没设）'}`, recentMissingApiKey() ? '最近的会话报过 no API key' : '最近 8 个会话（没压缩的）没报 no API key'],
+  }
+}
+// 计划绑定本机与源码内容；离线目录没有提交号，也不能拿旧计划修另一份源码。
+function fixFingerprint() {
+  const files = Object.fromEntries(FIX_GROUPS.map((g) => { const f = path.join(NM, g.pkg, g.file); return [`${g.pkg}/${g.file}`, exists(f) ? sha1(fs.readFileSync(f)) : null] }))
+  return fingerprint({
+    kit: KIT_VERSION, home: DSH_HOME, profile: PROFILE, runtime: RX, platform: process.platform,
+    upstream: SRC.sha || null, source: [...hashDir(SRC.dir)].sort(),
+    state: exists(STATE_PATH) ? sha1(fs.readFileSync(STATE_PATH)) : null,
+    skip: [...new Set(state0?.fixSkip || [])].sort(), files, pack: PACK_STATE,
+    cfg: exists(cfgPath) ? sha1(fs.readFileSync(cfgPath)) : null
+  })
+}
+// 核对结论（这次 --plan 带来的，或者上次留下的）跟着每一条记进安装记录
+const fixCheck = (id) => { const d = PLAN?.decisions[id], c = d ? { ...d, at: new Date().toISOString(), report: PLAN.fingerprint } : state0?.fixes?.[id]?.check; return c ? { check: c } : {} }
+function fixReportMd(r) {
+  const L = [`# 修复检查报告`, '', `- DSH 家目录：${r.install.dshHome}；profile：${r.install.profile}；系统：${PLATFORM_LABEL[r.install.platform] || r.install.platform}`,
+    `- 已装那一版上游：${r.install.upstream || '（未知）'}${r.install.version ? `（v${r.install.version}）` : ''}；安装包 ${r.kitVersion}；出报告：${r.createdAt}`,
+    `- 跳过清单：${r.install.skip.join('、') || '无'}`, '', '「作者原文」只说明作者代码里有没有这个毛病；这台会不会撞上，要照每条的「核对」查本机再定。']
+  const need = r.items.filter((x) => x.decide), rest = r.items.filter((x) => !x.decide && !x.revisit)
+  const kept = r.items.filter((x) => x.revisit && x.status === 'kit'), skipped = r.items.filter((x) => x.revisit && x.status === 'skipped')
+  L.push('', `## 要核对后选的（${need.length} 条）`, '')
+  if (need.length) {
+    L.push('| id | 是什么 | 作者原文 → 动作 | 不修会怎样 |', '|---|---|---|---|')
+    for (const x of need) L.push(`| ${x.id} | ${x.title} | ${x.statusText} → ${x.actionText} | ${x.impact} |`)
+  } else L.push('没有。')
+  const detail = (x) => {
+    L.push('', `### ${x.id}（${x.title}）${x.blocking ? ' · 启动 DSH 前要处理' : ''}`, '',
+      `- 判定：${x.statusText} → ${x.actionText}${x.note ? `；${x.note}` : ''}`,
+      `- 什么时候会撞上：${x.when}`,
+      `- 本机事实（脚本查的）：${x.facts.length ? x.facts.join('；') : '脚本查不到，靠下面的核对'}`,
+      `- 核对：`, ...x.verify.map((v, i) => `  ${i + 1}. ${v}`),
+      `- 能选：${x.choices.map((c) => DECISIONS[c]).join(' / ')}`)
+    if (x.lastCheck) L.push(`- 上次核对（${x.lastCheck.at || '时间不详'}）：${HITS[x.lastCheck.hit] || '未填'}，选了「${DECISIONS[x.lastCheck.decision] || x.lastCheck.decision}」；证据：${(x.lastCheck.evidence || []).join('；') || '无'}${x.lastCheck.reason ? `；理由：${x.lastCheck.reason}` : ''}`)
+    L.push(`- 依据：${x.basis}，${x.why}`)
+  }
+  need.forEach(detail)
+  const later = (title, list, hint) => { if (!list.length) return; L.push('', `## ${title}（${list.length} 条）`, '', hint); list.forEach(detail) }
+  later('已经修好的', kept, 'kit 修复已经打上，不用再选。情况变了（换了电脑、不再用这个功能）想撤掉，就照核对方法查一遍，在计划里加上这一条选 skip。')
+  later('以前选过不修的', skipped, '不用再选。情况变了（换了电脑、开始用这个功能、日志里出现了这个报错）想改成修，就照核对方法查一遍，在计划里加上这一条选 fix。')
+  L.push('', '## 不用选的', '')
+  for (const x of rest) L.push(`- ${x.id}（${x.title}）：${x.statusText}${x.note ? `；${x.note}` : ''}${x.retired ? `；kit 迭代已登记退役（作者在 ${String(x.retired.upstream || '?').slice(0, 7)} 修好）` : ''}`)
+  L.push('', '## 清单外的疑似问题（只报不修）', '')
+  if (r.candidates.length) for (const c of r.candidates) L.push(`- ${c.file}：${c.message}`)
+  else L.push('没扫到。')
+  L.push('', '要修清单外的问题：先写方案给用户确认，登记进 lib/fixes.mjs 成为新条目，再走报告 → 核对 → 计划。不要直接手改已装文件。',
+    '', '## 下一步', '',
+    '1. 照上面每条的「核对」查本机，把结论填进同目录的 fix-plan.json：hit（yes / no / unknown）、decision（fix / skip / later）、evidence（查到的证据）；核对结论和选择对不上的写 reason。',
+    '2. 把每条的结论、证据、不修的后果整理给用户确认；用户没确认的填 later。',
+    '3. 先校验：node install.mjs --fix --plan <这个目录>/fix-plan.json --dry-run；用户确认、DSH 完全退出后去掉 --dry-run 真跑。',
+    '4. 修完重开 DSH，照每条的「核对」再看一遍，确认现象没了。')
+  return L.join('\n') + '\n'
+}
+function writeFixReport(rows, found) {
+  const dir = path.resolve(opt('--report') || path.join(KIT, 'logs', 'fix-reports', TS))
+  if (exists(dir) && fs.readdirSync(dir).length) die(`报告目录 ${posix(dir)} 里已经有东西（可能是填过的计划），换一个目录`)
+  const byId = new Map(rows.map((r) => [r.id, r])), facts = fixFacts()
+  const items = FIXES.map((f) => {
+    const r = byId.get(f.id) || { id: f.id, status: 'not-installed', action: 'none' }
+    const decide = needsDecision(r), revisit = canRevisit(r, f)
+    return { id: f.id, title: f.title, phase: f.phase, part: f.part, basis: BASIS_TEXT[f.basis], why: f.why, impact: f.impact, when: f.when, verify: f.verify, blocking: Boolean(f.blocking),
+      status: r.status, statusText: STATUS_TEXT[r.status] || r.status, action: r.action, actionText: ACTION_TEXT[r.action] || r.action, note: r.note || null,
+      facts: r.status === 'not-installed' ? [] : facts[f.id] || [], decide, revisit, choices: decide ? choicesFor(r, f) : revisit ? ['fix', 'skip'] : [],
+      lastCheck: state0?.fixes?.[f.id]?.check || null, retired: FIX_RETIRED[f.id] || null }
+  })
+  const report = { kind: REPORT_KIND, format: 1, kitVersion: KIT_VERSION, createdAt: new Date().toISOString(), fingerprint: fixFingerprint(),
+    install: { dshHome: posix(DSH_HOME), profile: PROFILE, platform: process.platform, upstream: SRC.sha || null, version: srcVer || null, skip: FIX_SKIP },
+    items, candidates: found.map((c) => ({ file: c.file, message: c.message })) }
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, 'fix-report.json'), JSON.stringify(report, null, 2) + '\n', 'utf8')
+  fs.writeFileSync(path.join(dir, 'fix-report.md'), fixReportMd(report), 'utf8')
+  fs.writeFileSync(path.join(dir, 'fix-plan.json'), JSON.stringify(planTemplate(report), null, 2) + '\n', 'utf8')
+  return { dir, report }
 }
 // memory 的相对路径补丁在不在（不在，配置就得写绝对路径）：安装、更新不打修复，只看装完后的 memory 里有没有
 // fresh(pkg)：这个零件这次会换成作者原样（干跑时还没换）
@@ -2099,7 +2271,11 @@ function partDiff(i) {
     byFile.get(p.file).push(p)
   }
   for (const [f, list] of byFile) {
-    const t = readText(path.join(dst, f)), u = unpatchText(t, list)
+    // 已装的和上游这一版一字不差就不还原：kit 以前的写法可能和作者的修法一样（上游 v3.0.0 的 echo / 换气面板加载名），
+    // 还原回旧原文反倒像「上游有变化」，每次更新都重装一遍
+    const t = readText(path.join(dst, f))
+    if (exists(path.join(s, f)) && readText(path.join(s, f)) === t) continue
+    const u = unpatchText(t, list)
     if (u !== t) oldM.set(f, sha1(Buffer.from(u, 'utf8')))
   }
   const newM = packHashes(s, packMissing(dst, PKGS[i]).length ? null : PKGS[i])
@@ -2212,7 +2388,7 @@ if (UPDATE && !FIX_MODE) {
   showDiff('本体', bodyDiff, BODY_SPLIT, 40)
   for (let i = 0; i < AP.length; i++) {
     const d = PART_DIFF[i]
-    if (!d) { out(`  零件 ${PKGS[i]}：${!TO_ADD.has(AP[i]) ? '本机没装，跳过' : MUST_HAVE(AP[i]) ? '本机没有，会装上（必装零件，或者 Soul preset 要调用它，不能跳过）' : `本机没有，安装包新加的零件，会装上；不要就加 --skip-part ${AP[i]}（会记下来，以后更新不再补）`}`); continue }
+    if (!d) { out(`  零件 ${PKGS[i]}：${!TO_ADD.has(AP[i]) ? (OPT_IN_PARTS.includes(AP[i]) && verLess(stateKit, ADDED_PARTS[AP[i]]) ? `本机没装，跳过（安装包新加的可选零件，默认不装：${PART_INFO[AP[i]].what}；要装加 --add-part ${AP[i]}）` : '本机没装，跳过') : MUST_HAVE(AP[i]) ? '本机没有，会装上（必装零件，或者 Soul preset 要调用它，不能跳过）' : ADD_PARTS.includes(AP[i]) ? '本机没有，按 --add-part 装上' : `本机没有，安装包新加的零件，会装上；不要就加 --skip-part ${AP[i]}（会记下来，以后更新不再补）`}`); continue }
     const rn = RENAMES.find((r) => r.part === AP[i])
     showDiff(`零件 ${PKGS[i]}${rn ? `（改名，本机是 ${rn.from}）` : ''}${ORGANS_BEFORE && ['huanqi', 'compact-region'].includes(AP[i]) ? '（以前从零件仓 organs 装的，这次换成主仓那份）' : ''}`, d, PART_SPLIT[i], 15)
   }
@@ -2251,6 +2427,7 @@ if (UPDATE && !FIX_MODE) {
     }
     if (oldText === BUNDLE.text) info('（preset 正文完全一样，只是换个位置）')
   } else out('  Soul preset：和源一致，不用重新生成')
+  if (SKILLS_PLAN && (SKILLS_PLAN.changed || SKILLS_PLAN.local.length)) out(`  Soul preset 的 skills（${homePath(SKILLS_DIR)}）：${skillsSummary()}`)
   const willReplace = (pkg) => { const i = PKGS.indexOf(pkg); return !INST[i] || INST[i] !== PKGS[i] || (!LOCAL_PARTS.has(AP[i]) && Boolean(PART_DIFF[i] && !PART_DIFF[i].same)) }
   const cfgPlan = planCordis(readText(cfgPath), { hub: HUB, defaultPreset: DEFAULT_PRESET, dshHome: DSH_HOME, memRelative: memFixed(willReplace) })
   const pkgPlan = planPackageJson(readText(pkgPath), PKGS_LIVE, RENAME_MAP)
@@ -2263,7 +2440,7 @@ if (UPDATE && !FIX_MODE) {
     return Boolean(e) && (e.env || {}).DSH_HOME !== posix(DSH_HOME)
   })()
   if (echoEnvStale) out('  mcp-hub 清单里的 echo：会补上 DSH_HOME（新版 echo-mcp 靠它找会话日志）')
-  if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !hubOf('update').length && !hubOf('add').length && !hubStale && !presetChanged && !presetMigrationPending && !cfgPlan.changed && !pkgPlan.changed && !echoEnvStale) {
+  if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !hubOf('update').length && !hubOf('add').length && !hubStale && !presetChanged && !presetMigrationPending && !SKILLS_PLAN?.changed && !cfgPlan.changed && !pkgPlan.changed && !echoEnvStale) {
     out('\n已经是最新，什么都不用改。')
     out('  修复不在更新里做：要检查就跑 node install.mjs --fix --dry-run')
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
@@ -2288,6 +2465,21 @@ if (UPDATE && !FIX_MODE) {
 if (FIX_MODE) {
   step('修复检查（对照已装那一版的作者原文）')
   const preview = [...FIX_ROWS, ...runFixes({ fresh: () => false, apply: false })]
+  if (REPORT) {
+    const found = candidatesFound()
+    showFixRows(preview)
+    showCandidates(found)
+    const { dir, report } = writeFixReport(preview, found)
+    const need = report.items.filter((x) => x.decide), again = report.items.filter((x) => x.revisit).length
+    out(`\n修复报告：${posix(dir)}/fix-report.md（给人看）、fix-report.json（给 agent）、fix-plan.json（计划模板）。什么都没改。`)
+    out(need.length
+      ? `要核对后选的 ${need.length} 条：${need.map((x) => x.id).join('、')}。交给 agent 照每条的核对方法查本机、填计划、给用户确认；DSH 完全退出后 node install.mjs --fix --plan "${posix(path.join(dir, 'fix-plan.json'))}"`
+      : '没有要选的条目，不用填计划。')
+    if (again) out(`已经修好、或以前选过不修的 ${again} 条不用再选；情况变了想改，照报告核对后把那一条加进计划。`)
+    process.exit(0)
+  }
+  if (PLAN && PLAN.fingerprint !== fixFingerprint()) die('出报告以后本机或上游源码变了（家目录、profile、安装记录或文件内容不一致），这份计划作废：重新跑 --fix --report，核对后再填计划')
+  if (PLAN?.decisions['memory-home']?.decision === 'skip' && /相对路径/.test(fixFacts()['memory-home'][0])) warn('memory-home 选了不修，可配置里自我层是相对路径：修完再跑一次 node install.mjs --update 把配置改回绝对路径，在那之前自我层读不到')
   const skipMoved = JSON.stringify([...(state0?.fixSkip || [])].sort()) !== JSON.stringify([...FIX_SKIP].sort())
   const pending = preview.filter((r) => FIX_CHANGE.includes(r.action))
   const done = !pending.length && !presetChanged && !presetMigrationPending
@@ -2304,7 +2496,7 @@ if (FIX_MODE) {
       runFixes({ fresh: () => false, apply: false, record: true })
       if (PRESET_PLAN.record) FIX_RECORDS.presets = { section: PRESET_PLAN.record }
       const nextState = { ...(state0 || {}), kitVersion: KIT_VERSION, fixRecords: FIX_RECORDS, fixSkip: FIX_SKIP,
-        fixes: Object.fromEntries(preview.map((row) => [row.id, { ...row, kitVersion: KIT_VERSION, upstream: SRC.sha }])) }
+        fixes: Object.fromEntries(preview.map((row) => [row.id, { ...row, kitVersion: KIT_VERSION, upstream: SRC.sha, ...fixCheck(row.id) }])) }
       const nextText = JSON.stringify(nextState, null, 2)
       if (!exists(STATE_PATH) || readText(STATE_PATH) !== nextText) {
         FIX_TRANSACTION = beginFixTransaction(path.join(SOUL_ROOT, '_backup', `${TS}-fix-state-${crypto.randomBytes(3).toString('hex')}`), [STATE_PATH])
@@ -2314,26 +2506,15 @@ if (FIX_MODE) {
     }
     process.exit(0)
   }
-  // 终端里当场逐条问，选完按选择再跑一次 --fix --fix-only；不在终端里就停在这里，由 Agent 把上面的结果贴给用户、按用户的选择再跑
+  // 没给计划也没指定条目：只报结果。修不修不在终端里选——作者原文有毛病不等于这台会撞上，要 agent 照报告核对本机再定
   if (choose) {
-    if (preview.some((r) => r.status === 'manual' || r.action === 'local')) info('「需人工核对」「本机改过」的条目不在这里选：告诉 Agent，先写修复方案给你确认，再按方案处理')
+    if (preview.some((r) => r.status === 'manual' || r.action === 'local')) info('「需人工核对」「本机改过」的条目不走计划：告诉 Agent，先写修复方案给你确认，再按方案处理')
     if (!pending.length) { out('\n修复清单里没有要动的。'); process.exit(0) }
-    if (!TTY) {
-      out('\n上面是检查结果，什么都没改。选好要修的条目后跑：node install.mjs --fix --fix-only <id,…>；不修的同时放进 --fix-only 和 --fix-skip，记下来以后不再提')
-      process.exit(0)
-    }
-    const fix = [], skip = []
-    for (const r of pending) {
-      const f = fixInfo(r.id), back = r.action === 'revert'
-      out(`\n${r.id}（${f.title}）：${STATUS_TEXT[r.status] || r.status} → ${ACTION_TEXT[r.action]}；${f.why}`)
-      const v = (await askLine(back ? '  1 换回作者原文  3 这次先不动\n> 编号（回车用 1）：' : '  1 修  2 不修（保持作者原文，以后不再问）  3 这次先不动\n> 编号（回车用 1）：')).trim() || '1'
-      if (v === '1') fix.push(r.id)
-      else if (v === '2' && !back) skip.push(r.id)
-    }
-    if (!fix.length && !skip.length) { out('\n这次什么都不动。'); process.exit(0) }
-    out(`\n修：${fix.join('、') || '无'}；不修：${skip.join('、') || '无'}`)
-    const args = ['--fix', '--fix-only', [...fix, ...skip].join(','), ...(skip.length ? ['--fix-skip', [...FIX_SKIP, ...skip].join(',')] : []), ...passArgs()]
-    process.exit(spawnSync(process.execPath, [process.argv[1], ...args], { stdio: 'inherit', windowsHide: true }).status ?? 1)
+    out(`\n上面是检查结果，什么都没改。修不修不在这里选：要先由 agent 对照本机实际逐条核对。
+  1. node install.mjs --fix --report    出报告和计划模板（只读，DSH 开着也能跑）
+  2. 把报告交给 agent，照 AGENT-INSTALL.md「修复」一节核对、填计划、给你确认
+  3. DSH 完全退出后：node install.mjs --fix --plan <报告目录>/fix-plan.json`)
+    process.exit(0)
   }
   info(`有要修的，明细见下面「修复」一步${DRY ? '（干跑：只报计划）' : ''}`)
 }
@@ -2344,7 +2525,8 @@ const LOCKS = { 'pnpm-lock.yaml': path.join(PROF, 'pnpm-lock.yaml'), 'pnpm-curre
 if (!DRY) {
   FIX_TRANSACTION = beginFixTransaction(path.join(BK, 'transaction'), [
     pkgPath, cfgPath, STATE_PATH, ...Object.values(LOCKS), path.join(NM, '.package-map.json'), ...PRESET_SESSION_PLANS.map((plan) => plan.file),
-    ...new Set(['dsh-agent-soul', ...PKGS, ...INST.filter(Boolean), PRESET_PKG].map((name) => path.join(NM, name)))
+    ...new Set(['dsh-agent-soul', ...PKGS, ...INST.filter(Boolean), PRESET_PKG].map((name) => path.join(NM, name))),
+    ...(SKILLS_PLAN?.changed ? [SKILLS_DIR] : [])
   ])
 }
 step(`备份`)
@@ -2359,6 +2541,7 @@ else {
     for (const n of new Set(['dsh-agent-soul', ...PKGS, ...INST.filter(Boolean), PRESET_PKG])) { const s = path.join(NM, n); if (exists(s)) fs.cpSync(s, path.join(BK, 'node_modules', n), { recursive: true, preserveTimestamps: true }) }
     for (const f of [...KIT_SET, '.kit-origin.json', ...hubOf('update')]) { const s = path.join(HUB, f); if (exists(s)) { fs.mkdirSync(path.join(BK, 'hub'), { recursive: true }); fs.copyFileSync(s, path.join(BK, 'hub', f)) } }
     for (const [k, f] of Object.entries(LOCKS)) if (exists(f)) { fs.mkdirSync(path.join(BK, 'locks'), { recursive: true }); fs.copyFileSync(f, path.join(BK, 'locks', k)) }
+    if (SKILLS_PLAN?.changed && exists(SKILLS_DIR)) fs.cpSync(SKILLS_DIR, path.join(BK, 'skills'), { recursive: true, preserveTimestamps: true })
     fs.copyFileSync(b1, path.join(BK, 'package.json')); if (b2) fs.copyFileSync(b2, path.join(BK, 'cordis.patch.yml'))
     fs.writeFileSync(path.join(BK, '还原方法.txt'), [
       '先完全退出 DSH，再按下面做：',
@@ -2369,6 +2552,7 @@ else {
       `3. 把这里 hub/ 下的文件拷回 ${HUB}${hubOf('add').length ? `；这次新增的 ${hubOf('add').join('、')} 可以删掉` : ''}`,
       `4. 把这里 locks/ 下的文件拷回：pnpm-lock.yaml → ${PROF}；pnpm-current-lock.yaml → ${path.join(NM, '.pnpm', 'lock.yaml')}；modules.yaml → ${path.join(NM, '.modules.yaml')}`,
       `5. 安装记录 ${STATE_PATH} 里 upstream.sha 改回旧值（或删掉这个文件）`,
+      ...(SKILLS_PLAN?.changed ? [`6. Soul preset 的 skills：${exists(SKILLS_DIR) ? `把这里 skills/ 整个替换回 ${SKILLS_DIR}` : `这次新建的 ${SKILLS_DIR} 可以删掉`}`] : []),
     ].join('\n'), 'utf8')
     ok(`本体、零件、Soul preset、中枢脚本、锁文件 → ${posix(BK)}（附还原方法.txt）`)
   }
@@ -2466,6 +2650,14 @@ else {
     else { fs.rmSync(path.join(NM, PRESET_PKG), { recursive: true, force: true }); ok(`4.3 以前的独立包 node_modules/${PRESET_PKG} 已删（备份里有）`) }
   }
 }
+if (SKILLS_PLAN) {
+  for (const f of SKILLS_PLAN.write) write(path.join(SKILLS_DIR, ...f.split('/')), fs.readFileSync(path.join(SKILLS_SRC, ...f.split('/'))), `skills/${f}`)
+  for (const f of SKILLS_PLAN.remove) { if (DRY) info(`[干跑] 将删掉 skills/${f}`); else fs.rmSync(path.join(SKILLS_DIR, ...f.split('/')), { force: true }) }
+  if (!DRY && SKILLS_PLAN.remove.length) pruneEmptyDirs(SKILLS_DIR, SKILLS_PLAN.remove)
+  if ((SKILLS_PLAN.write.length || SKILLS_PLAN.remove.length) && !DRY) ok(`Soul preset 的 skills（${homePath(SKILLS_DIR)}）：${skillsSummary()}`)
+  else if (!SKILLS_PLAN.write.length && !SKILLS_PLAN.remove.length && Object.keys(SKILLS_PLAN.record).length) ok('Soul preset 的 skills：和上游一致')
+  if (SKILLS_PLAN.local.length) warn(`Soul preset 的 skills 里本机改过的没动：${SKILLS_PLAN.local.join('、')}（和上游不同，需要的话人工对照 ${posix(SKILLS_SRC)}）`)
+}
 
 // ═══ 恢复：放回备份里的数据 ═══════════════════════════════════════════
 if (RESTORE) {
@@ -2501,7 +2693,9 @@ if (RESTORE) {
   const b = copyTree(path.join(RB.root, 'memory'), MEM, '记忆中枢', { rewrite: REWRITE })
   const c = copyTree(path.join(RB.root, 'sessions'), SESSIONS, '会话原文', { overwrite: false })
   const d = copyTree(path.join(RB.root, 'state'), path.join(DSH_HOME, 'state'), '换气账本', { overwrite: false })
-  if (!DRY) ok(`书房 ${a.n} 个、记忆中枢 ${b.n} 个、会话原文 ${c.n} 个${c.skipped ? `（本机已有同名的 ${c.skipped} 个，保留本机的）` : ''}、换气账本 ${d.n} 个`)
+  // 备份里只带了本机改过的 Soul preset skills：盖在刚装的上游版上（安装记录里记的还是上游的哈希，以后更新照样认得出本机改过）
+  const e = copyTree(path.join(RB.root, 'preset-skills'), SKILLS_DIR, 'Soul preset 的 skills（本机改过的）')
+  if (!DRY) ok(`书房 ${a.n} 个、记忆中枢 ${b.n} 个、会话原文 ${c.n} 个${c.skipped ? `（本机已有同名的 ${c.skipped} 个，保留本机的）` : ''}、换气账本 ${d.n} 个${e.n ? `、本机改过的 Soul preset skills ${e.n} 个` : ''}`)
   if (pairs.length) (DRY ? info : ok)(`${DRY ? '[干跑] 将把' : '已把'}记忆中枢配置里的路径换成本机的：${from.dshHome} → ${to.dshHome}`)
   // 本架构插件的设置：本机 cordis.patch.yml 里没有的条目才加；默认 preset 交给下面「profile 配置」那步
   const ents = (RB.settings.cordisEntries || []).filter((e) => e.id !== 'agent-preset-registry')
@@ -2535,7 +2729,7 @@ if (RESTORE) {
 }
 
 if (MIGRATE_PRESETS) {
-  if (DRY && PRESET_SESSION_PLANS.length) info(`[干跑] 将迁移 ${PRESET_SESSION_PLANS.length} 个旧会话入口到砚青 PTC`)
+  if (DRY && PRESET_SESSION_PLANS.length) info(`[干跑] 将迁移 ${PRESET_SESSION_PLANS.length} 个旧会话入口到灵魂 · PTC`)
   if (!DRY) applyPresetSessions(PRESET_SESSION_PLANS)
   const currentConfig = exists(cfgPath) ? readText(cfgPath) : ''
   const nextConfig = migratePresetDefault(currentConfig)
@@ -2801,7 +2995,7 @@ if (!DRY) {
   for (const n of ['dsh-agent-soul', ...partsDone]) if (!exists(path.join(NM, n, 'package.json'))) die(`node_modules/${n} 不见了`)
   ok(`${partsDone.length + 1} 个包都在 node_modules 里`)
   const presetSec = findPresetSection(readText(cfgPath))
-  if (!presetSec) die('profile 的 cordis.patch.yml 里找不到 Soul preset 那一节（- insert:），新会话选不到砚青')
+  if (!presetSec) die('profile 的 cordis.patch.yml 里找不到 Soul preset 那一节（- insert:），新会话选不到 Soul preset')
   ok(`Soul preset 在 profile 的 cordis.patch.yml 里：${Object.keys(presetSummary(presetSec.text)).join('、')}`)
   for (const r of RENAMES) if (exists(path.join(NM, r.from))) die(`旧目录 node_modules/${r.from} 还在，和新包 ${r.to} 会重复注册`)
   const r = runNode(path.join(BODY, 'tools', 'verify-client-ids.mjs'), [PROF], 'verify-client-ids')
@@ -2824,7 +3018,7 @@ if (!DRY) {
     _说明: 'dsh-agent-soul 安装包的安装记录；install.mjs --update 靠它判断从哪一版更新、装了哪些零件、哪些是用户拒掉的。',
     kitVersion: KIT_VERSION,
     upstream: { repo: REPO, ref: SOURCE ? null : REF, sha: SRC.sha, version: srcVer || null, from: SRC.from },
-    // 砚青 PTC Flash 的源（没装就是 null）；--fix 钉在这一版
+    // 灵魂 · PTC Flash 的源（没装就是 null）；--fix 钉在这一版
     flash: FLASH_SRC ? flashState() : null,
     installedAt: (state0 && state0.installedAt) || (UPDATE ? null : now),
     updatedAt: now,
@@ -2834,6 +3028,8 @@ if (!DRY) {
     summaryModel: SUMMARY_MODEL, // 2.17 的写法，留着给旧版 kit 读；3.0 起以 fixSkip 为准
     presetIds: !MIGRATE_PRESETS && state0?.presetIds ? state0.presetIds : PRESET_CHOICE,
     presetAliases: !MIGRATE_PRESETS && state0?.presetAliases ? state0.presetAliases : BUNDLE.aliases,
+    // Soul preset 的 skills 装上去时的哈希（<profile>/skills/ 下的相对路径）：更新时靠它分清哪些是本机改过的
+    presetSkills: SKILLS_PLAN ? SKILLS_PLAN.record : state0?.presetSkills || {},
     presets: !MIGRATE_PRESETS && state0?.presets ? state0.presets : Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
     defaultPreset: finalDefault,
     parts: partsDone,
@@ -2844,7 +3040,7 @@ if (!DRY) {
     // 写进持久配置的那个 node（DSH 自带优先）；DSH 升级换了 app 路径时，这里会跟着变
     node: { bin: posix(NODE_FOR_CONFIG), version: process.versions.node, from: path.resolve(NODE_FOR_CONFIG) === path.resolve(process.execPath) ? '当前进程' : 'DSH 自带' },
     // 安装、更新、恢复不做修复：留着上次 --fix 的结论
-    fixes: !FIX_MODE ? (state0 && state0.fixes) || {} : Object.fromEntries(FIX_ROWS.map((r) => [r.id, { status: r.status, action: r.action, kitVersion: KIT_VERSION, upstream: SRC.sha, evidence: r.note || fixInfo(r.id).why }])),
+    fixes: !FIX_MODE ? (RESTORE ? RB.state : state0)?.fixes || {} : Object.fromEntries(FIX_ROWS.map((r) => [r.id, { status: r.status, action: r.action, kitVersion: KIT_VERSION, upstream: SRC.sha, evidence: r.note || fixInfo(r.id).why, ...fixCheck(r.id) }])),
     fixRecords: FIX_RECORDS,
     fixSkip: FIX_SKIP,
     mcpHub: MCP_STATUS,
@@ -2869,13 +3065,15 @@ if (DRY && running === true && MODE !== 'backup') {
 if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
 // 修复不和安装、更新、恢复一起做：装完单独检查，只报问题，用户逐条选了才修（AGENT-INSTALL.md「修复」一节）
 if (!FIX_MODE) {
-  const howTo = '先别启动 DSH，跑 node install.mjs --fix --dry-run 看检查结果，选好后 node install.mjs --fix --fix-only <id,…>'
-  if (DRY) out(`\n修复不在这一步：装完单独检查（${howTo.replace('先别启动 DSH，', '')}）。`)
-  else if (TTY && parseBool(await askLine('\n接着做修复检查吗？只报问题，你逐条选了才修；修完之前先别启动 DSH (Y/n) '), true)) {
-    spawnSync(process.execPath, [process.argv[1], '--fix', ...passArgs()], { stdio: 'inherit', env: { ...process.env, DSH_SOUL_FIX_CHAINED: '1' }, windowsHide: true })
-  } else out(`\n下一步是修复检查：${howTo}。修完再按下面做。`)
+  const howTo = '修不修要先由 agent 对照本机实际核对再定，不在终端里选：node install.mjs --fix --report 出报告（只读，DSH 开着也能跑），交给 agent 照 AGENT-INSTALL.md「修复」一节核对、填计划、给你确认，DSH 完全退出后 node install.mjs --fix --plan <报告目录>/fix-plan.json'
+  // 会让零件加载不了的（blocking）当场点名：这几条不修，一启动 DSH 就会撞上
+  const packGone = !FIX_SKIP.includes('pack-unshipped') && PACK_STATE.some((x) => !exists(path.join(packDst(x.pkg), ...x.file.split('/'))))
+  const blockers = DRY ? [] : [...(packGone ? ['pack-unshipped'] : []), ...runFixes({ fresh: () => false, apply: false, record: false })
+    .filter((r) => fixInfo(r.id)?.blocking && FIX_CHANGE.includes(r.action)).map((r) => r.id)]
+  out(DRY ? `\n修复不在这一步：装完单独检查。${howTo}。` : `\n下一步是修复检查。${howTo}。`)
+  if (blockers.length) out(`★ 这一版上游有 ${blockers.length} 处会让零件加载不了：${blockers.map((id) => `${id}（${fixInfo(id).title}）`).join('、')}。修好之前别启动 DSH。`)
 }
-if (!DRY && FIX_MODE && !process.env.DSH_SOUL_FIX_CHAINED) {
+if (!DRY && FIX_MODE) {
   out(`
 接下来（详见 AGENT-INSTALL.md「修复」一节）：
   1. 启动 DSH，看有没有崩溃恢复对话框；新建会话，确认 preset 还是「${presetName() || '原来那个'}」。

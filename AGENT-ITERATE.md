@@ -108,6 +108,7 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告只�
 - 判定只看文件内容和本机环境，不看锚点在不在：`problem` 命中 = 问题在；没命中但 `scope` 命中（那段代码还在）= 作者已修；都没命中 = 判断不了。
 - 路径类修复不写死任何一台电脑的路径，用 `lib/home-paths.mjs` 的运行时定位。
 - 不是作者给的修复（Boss 本机实测的）`basis` 写 `boss`，注释里写明来源。
+- 新条目在 `CHECKS` 里写上 `impact`（不修会怎样）、`when`（什么情况下本机会撞上）、`verify`（agent 怎么在本机核对）；会让零件加载不了的标 `blocking`。脚本能自己查的本机事实，加进 `install.mjs` 的 `fixFacts()`。修复报告（`--fix --report`）和计划校验都靠这几项，缺了 agent 没法判断这台会不会撞上。
 
 ## 3. 完成 kit 修正
 
@@ -115,7 +116,7 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告只�
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
-- 改修复清单（`lib/fixes.mjs`、`lib/huanqi-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）或零件目录（`lib/parts.mjs`：包名、必装、各系统的已知限制）后，在隔离目录里跑一遍 `install.mjs --fix --dry-run`：已经装好的环境应全部是「保持」。
+- 改修复清单（`lib/fixes.mjs`、`lib/huanqi-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）或零件目录（`lib/parts.mjs`：包名、必装、各系统的已知限制）后，在隔离目录里跑一遍 `install.mjs --fix --report <空目录>`：已经照计划修过的环境，报告里「要核对后选的」应该是 0 条；再拿一份填好的计划跑 `--fix --plan <计划> --dry-run`，确认校验和照做的计划对得上。
 - 包名或 preset id 变化时保留旧安装、旧会话和旧备份的兼容路径。
 - 备份范围或格式变化时同时维护写入和恢复，并说明旧包如何读取。
 - 本轮若修正了迭代工具自身，用临时目录重跑一遍迭代命令，继续使用本轮固定的上游快照完成分析。

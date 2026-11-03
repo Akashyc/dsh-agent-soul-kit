@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 4.5**（2026-11-01）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 5.2**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -33,9 +33,18 @@
   - riji：日记入口，读的是本机日记目录；
   - splash：启动一屏；
   - yantai：工作台面板（水位 / 未结 / 账本 / 门）；
-  - perf：渲染性能护栏，界面上可以随时关掉高成本的毛玻璃（`backdrop-filter`）效果。
+  - perf：渲染性能护栏，界面上可以随时关掉高成本的毛玻璃（`backdrop-filter`）效果；
+  - heartbeat：作者的心跳面板（自主循环、巡视记录、三档审计）；
+  - chat：手机聊天页（插件自开 8898 端口，edge-tts 朗读）；
+  - clawbot：微信通路（扫码绑定微信 bot，AI 主动发微信通知）。
 
-  后六个是面板件，默认不勾：装完没有数据源就是空面板，想用再选。
+  model-statusbar 到 perf 是面板件，默认不勾：装完没有数据源就是空面板，想用再选。最后三个是上游 v3.0.0 新加的，**照上游原样装、默认不勾**，选之前先看清已知问题：
+
+  - heartbeat 的心跳脚本已补进上游仓库，但不在零件发布清单里，kit 不部署该脚本；面板按 DSH 家目录往上两级推书房、记忆中枢和脚本目录，计划任务仍依赖 Windows，别的电脑上基本是空面板；每次工具调用还会试着往 `D:\_yq_guard_probe.txt` 追加一行诊断记录（作者留的探针）。安装包自己的每日心跳和它不是一回事，照常跑。
+  - chat 在 fe3c456 中使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；目标会话 id 仍写死，书房按作者目录布局推算。服务设计为绑定 `0.0.0.0`、绕开 DSH 的登录鉴权，同一网络里谁都能访问。
+  - clawbot 是第三方插件（腾讯 ilink 网关），要手机微信扫码绑定；凭据存在 `~/.dsh/clawbot/`，备份不带它，换电脑要重新扫码；三个自动通知默认全开（每次回复都推一条微信）。本机自己从插件市场装过 `dsh-clawbot` 的，安装包不覆盖、也不卸载它。
+
+  已有的安装 `--update` 时不会自动补装这三个（终端里会问，默认不装）；以后想装加 `--add-part <名字>`。
 
 各系统上的已知限制（读上游源码核对的；问答和干跑里会按这台电脑的系统提示，选了也不拦）：
 
@@ -43,6 +52,7 @@
 |---|---|---|
 | model-statusbar | **不可用**：探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe` | 可用 |
 | yantai | 部分可用：「速达」应用启动器靠 `.ps1` 脚本，只有 Windows 有；水位、未结、账本、门照常 | 可用 |
+| heartbeat | **不可用**：读计划任务靠 `schtasks` / `powershell`，数据路径全是 Windows 盘符 | 只在作者那台电脑上有数据（见上） |
 | echo（面板体检） | 作者只按 Windows 布局找 DSH 自带的 node，安装包用修复 `echo-node-darwin` 补上 Mac 的布局 | 可用 |
 | 记忆中枢的常驻检索 `echo-svc` | 用的是 Windows 命名管道，Mac 上不启动；`memq` 自动退回直接读，快路子走 mcp-hub 的 echo | 可用 |
 
@@ -90,11 +100,11 @@ node install.mjs
 
 **只检查和修复当前安装**：
 
-```bash
-node install.mjs --fix --dry-run
+```text
+请读这个文件夹里的 AGENT-INSTALL.md，按第九节「修复」操作：先出修复报告，照每条的核对方法查这台电脑的实际情况，把结论和证据整理给我确认，我确认了再按计划修。
 ```
 
-安装、更新、恢复只按作者上游装，不打修复；装完单独做这一步。先看检查结果（每条修复的判定和清单外的疑似问题），逐条选修不修，退出 DSH 后用 `--fix --fix-only <选中的 id>` 执行；在终端里直接跑 `node install.mjs --fix` 会逐条问。筛选、跳过和撤回参数见下方「更新与修复」。
+安装、更新、恢复只按作者上游装，不打修复；装完单独做这一步。修不修不在终端里选：作者代码里有那段毛病，不等于这台电脑会撞上，要 agent 照报告逐条核对本机（会话注入、面板、日志、你用不用那个功能）再定。流程和参数见下方「更新与修复」。
 
 **迁移到另一台电脑**：
 
@@ -134,8 +144,10 @@ node install.mjs --fix --dry-run
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
 node install.mjs --update          # 更新到上游最新版（不打修复，装完单独检查）
-node install.mjs --update --flash on  # 加装砚青 PTC Flash（off 去掉）；装了的每次更新都跟作者最新发布的版本
-node install.mjs --fix             # 修复检查：对照已装那一版的作者原文报问题，逐条选了才修
+node install.mjs --update --flash on  # 加装灵魂 · PTC Flash（off 去掉）；装了的每次更新都跟作者最新发布的版本
+node install.mjs --update --add-part clawbot  # 补装默认不装、或以前拒掉的可选零件
+node install.mjs --fix --report    # 修复检查：出报告和计划模板（只读），交给 agent 核对本机
+node install.mjs --fix --plan <报告目录>/fix-plan.json  # 按核对过、你确认过的计划修
 node install.mjs --backup          # 打迁移用的备份包，放在 backups/
 node install.mjs --restore         # 在新电脑上：装好并放回 backups/ 里最新的备份
 node install.mjs --uninstall       # 卸载：先备份；终端里会问旧会话怎么处理（也可以加 --old-sessions shell|rewrite|keep）
@@ -147,7 +159,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 - **本体和零件**：必装的七个（加上 Soul preset 调用的 compact-region），再加方案里选了的可选零件。
 - **记忆检索**：通过 `memq` 检索；安装并接入 mcp-hub 后，还可在会话里调用 `mcp__echo__echo_search`。
-- **Soul preset**：砚青、砚青创造、砚青 PTC、砚青蒸馏四套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。可选第五个「砚青 PTC Flash」：照 [dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3 适配（压缩、裁剪带门牌），安装问答里和砚青一起选、默认不选，已装的用 `--update --flash on` 加上；每次安装、更新在线取作者最新发布的版本。内置「大肥鱼」默认安装砚青四套，新会话默认使用砚青；已有安装沿用砚青选择，旧 Flash 方案及会话入口迁到砚青 PTC。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
+- **Soul preset**：灵魂、灵魂 · 创造、灵魂 · PTC、灵魂 · 预判、灵魂 · 全能五套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。全能只取 preset 本身那一块：上游 `preset-soul-all.yml` 后面跟着作者整份 profile 的导出（模型列表、第三方插件、局域网绑定、mnemon / 换气配置），照搬会盖掉你自己的配置。创造和全能用到的 4 个技能（上游 `presets/skills/`）放进 profile 的 `skills/`，更新时只换没改过的，本机改过的留着并报出来。可选第六个「灵魂 · PTC Flash」：照 [dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3 适配（压缩、裁剪带门牌），安装问答里和灵魂五套一起选、默认不选，已装的用 `--update --flash on` 加上；每次安装、更新在线取作者最新发布的版本。内置「大肥鱼」默认安装灵魂五套，新会话默认使用灵魂。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
+- **从砚青换到灵魂**：上游 v3.0.0 把砚青四套去个人化，改名为灵魂四套（id `yanqing*` → `soul*`，persona 不再写具体人名）。`--update` 换上新的，以前用砚青建的会话照常能打开（留一个和对应灵魂 preset 一样的别名，列表里标「旧会话用」），新会话默认的 `yanqing` 换成 `soul`；砚青 PTC Flash 同样改名为灵魂 · PTC Flash（`soul-ptc-flash`）。全能是这次新加的，已有的安装更新时补上。
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
 - **心跳**：按方案每天定时重建索引、刷新自我层、跑体检。
@@ -164,14 +177,16 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/parts.mjs` | 零件目录：装配顺序、包名（含旧名，更新时迁移）、必装 / 可选、各系统上的已知限制 |
 | `lib/setup.mjs` | 方案与问答：题库、终端一问一答、给 agent 的问题清单、回答校验、方案文件生成与读取 |
 | `lib/platform.mjs` | 系统差异：找 node（DSH 自带优先、按本机架构挑）、DSH 家目录候选、系统代理、Mac 上帮用户退出 DSH |
-| [CHANGELOG.md](CHANGELOG.md) | 2.17 及以前的历史更新记录 |
+| [CHANGELOG.md](CHANGELOG.md) | 4.5 及以前的历史更新记录 |
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
-| `lib/flash-presets.mjs` | 砚青 PTC Flash：校验 dsh-flash-presets v3 的结构，换 id 和名字、压缩裁剪换成带门牌的零件、补范围压缩，其余照作者 |
-| `lib/soul-presets.mjs` | 砚青四套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开），写进 profile `cordis.patch.yml` 的 `- insert:` 那一节；卸载时可保留使用官方零件的砚青空壳 |
+| `lib/flash-presets.mjs` | 灵魂 · PTC Flash：校验 dsh-flash-presets v3 的结构，换 id 和名字、压缩裁剪换成带门牌的零件、补范围压缩，其余照作者 |
+| `lib/soul-presets.mjs` | 灵魂五套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开，全能只取 preset 那一块），写进 profile `cordis.patch.yml` 的 `- insert:` 那一节；砚青等旧 id 的别名；卸载时可保留使用官方零件的空壳 |
+| `lib/preset-skills.mjs` | Soul preset 自带的 skills：拷进 profile 的 `skills/`，按安装记录三方比对，本机改过的不动 |
 | `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
 | `lib/fixes.mjs` | 修复清单：kit 对上游插件的 19 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
+| `lib/fix-plan.mjs` | 修复报告和修复计划：计划模板、校验（同一次报告、每条要选的都选了、选修 / 不修都有证据）、换算成这次处理哪几条和跳过清单 |
 | `lib/fix-records.mjs` | 修复原文、生成物与行级配置的核对和撤回 |
 | `lib/fix-transaction.mjs` | 修复失败时恢复包、配置、锁文件和安装记录；保留恢复清单 |
 | `lib/huanqi-patches.mjs` | 换气、compact-region 的本机补丁：作者写死的记忆中枢路径改成运行时找家目录，外加 Boss 本机实测的行为修复 |
@@ -182,7 +197,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
-| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照、离线用的砚青四套（跟上游 4606555） |
+| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照、离线用的灵魂五套和 skills（跟上游 c370a69） |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup`、`--uninstall` 打出的备份包；迁移时连同整个文件夹一起拷走 |
 
@@ -190,7 +205,15 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 `--update` 获取上游新版本，更新本体、零件和 Soul preset，并同步未被本机修改的中枢脚本。方案、书房、账本、权威源册、人设和心跳设置保留；需要调整的插件配置、包名及锁文件会在计划中列出。识别出的本机修改和无法判断的修复会提示核对。
 
-**修复清单**：`lib/fixes.mjs` 登记 19 条修复：1 条拷包补漏（上游发布清单漏列的文件）、16 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条；4.1 新增拷包补漏；4.3 新增 echo 面板设置文件路径，删掉作者已修好的 clock 定位、换气触发口等待、compact-region 日志路径 3 条）。**修复和安装分开**：安装、更新、恢复只按作者上游装（称呼替换、preset 独立打包等 kit 固定处理仍保留），一条修复都不打——已经打上的照原样留着，被整包换掉的零件就是作者原文；装完单独做修复检查：先列出问题，逐条选「修 / 不修 / 这次先不动」，只修选中的。终端里装完会接着问要不要检查。清单外的问题（扫出来的疑似问题、使用中遇到的新 bug）先整理修复方案给用户确认，登记进 `lib/fixes.mjs` 再修，不直接手改已装文件。
+**修复清单**：`lib/fixes.mjs` 登记 23 条修复：1 条拷包补漏（上游发布清单漏列的文件）、20 条文件补丁、1 条换气配置修复和 1 条压缩摘要模型修复（4.0 去掉了装前取源 / 包名的 5 条，新增 Mac 上 echo 面板找 node、echo 面板诊断日志路径 2 条；4.1 新增拷包补漏；4.3 新增 echo 面板设置文件路径，删掉作者已修好的 clock 定位、换气触发口等待、compact-region 日志路径 3 条）。**修复和安装分开**：安装、更新、恢复只按作者上游装（称呼替换、preset 独立打包等 kit 固定处理仍保留），一条修复都不打——已经打上的照原样留着，被整包换掉的零件就是作者原文；装完单独做修复检查，分五步：
+
+1. `--fix --report` 出报告。每条写着判定、本机事实、不修会怎样、什么时候会撞上、怎么核对。
+2. agent 照核对方法逐条查本机，把会不会撞上、修 / 不修 / 这次先不动、证据填进计划。
+3. 你确认。
+4. `--fix --plan` 照计划修。
+5. 照核对方法验收。
+
+终端里不再逐条问。清单外的问题（扫出来的疑似问题、使用中遇到的新 bug）先整理修复方案给用户确认，登记进 `lib/fixes.mjs` 再修，不直接手改已装文件。
 
 | 检查结果 | 处理方式 |
 |---|---|
@@ -203,21 +226,22 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 | 参数 | 用途 |
 |---|---|
-| `--fix --dry-run` | 只检查并报告计划 |
-| `--fix` | 终端里报完问题逐条问，选完按选择执行；不在终端里只报不改 |
-| `--fix-only <id,…>` | 本次仅处理指定条目，适用于所有修复阶段 |
+| `--fix --report [目录]` | 出修复报告（`fix-report.md` / `.json`）和计划模板 `fix-plan.json`；只读，DSH 开着也能跑 |
+| `--fix --plan <fix-plan.json>` | 校验计划（同一次报告、每条要选的都选了、选修 / 不修都有证据、出报告以后本机没变），再照计划修，核对结论和证据记进安装记录；加 `--dry-run` 只校验 |
+| `--fix` | 只列检查结果，不改文件 |
+| `--fix-only <id,…>` | 手动指定本次只处理哪几条，适用于所有修复阶段 |
 | `--fix-skip <id,…>` | 跳过指定条目，撤回可识别的 kit 修复，并记入安装记录；`none` 清空跳过设置 |
 | `--fix-revert <id,…>` | 撤回指定修复，并加入跳过清单 |
 
-选过「不修」的条目记进跳过清单，以后检查不再问；备份与恢复会带上这份设置。4.0 去掉了 `--fix-reinstall`、`--organs-source`（取源和包名不再是修复条目，包名迁移走 `--update`）。
+选过「不修」的条目记进跳过清单，已经修好的也一样，以后报告里不再要求选；情况变了想改，核对后把那一条加进计划。备份与恢复会带上这份设置。4.0 去掉了 `--fix-reinstall`、`--organs-source`（取源和包名不再是修复条目，包名迁移走 `--update`）。
 
 实际写入前先备份，修后检查语法和加载契约；失败时自动回滚涉及的包、配置、锁文件和安装记录。备份位于 `dsh-soul/_backup/`。断电或强制终止进程时，按备份清单人工恢复，详见 [安装手册](AGENT-INSTALL.md)。
 
-安装、更新、恢复会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到砚青 PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。修复检查不管这件事。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
+安装、更新、恢复会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到灵魂 · PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。修复检查不管这件事。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
 
 几个常见设置：
 
-- **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（`dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`）。3.0 及以前装的 `dsh-yanqing-*` 和从 organs 装的换气、compact-region，`--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）；`--fix` 不动包名，碰到旧包名会让你先 `--update`。
+- **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（压缩三件套 `dsh-yanqing-*`，其余 `dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`、`dsh-clawbot`）。上游 v3.0.0 把压缩三件套从 `dsh-agent-*` 统一回部署端的 `dsh-yanqing-*`，kit 4.x 装的 `--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件和 Soul preset 里的引用同步换名）；从 organs 装的换气、compact-region 也一样。`--fix` 不动包名，碰到旧包名会让你先 `--update`。
 - **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，修复检查里把它选成「不修」，或用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
 - **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.1 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
 - **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。上游包缺少入口依赖文件（发布清单漏列的会自动补上）、或者 DSH 启动时要加载的文件有语法错误时，会在动手前停下，已装的照常能用（2026-11-01 上游回声面板的 `client.js` 坏过一次，照装 DSH 窗口起不来）；缺少宿主依赖声明时只提示核对。
@@ -251,20 +275,20 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 ## 注意
 
-- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单。4.1 在 macOS（Apple 芯片，DSH NEXT 2.0.21-next）上用 `install.sh` 真装验收过：全新安装的终端问答、13 个零件和 21 条修复、砚青四套 preset、mcp-hub 接入 echo、心跳；新会话里体检 0 错、`/compact` 摘要带门牌、`memq open` 按门牌取回原文。更新到上游 8ba1385 时撞上作者的语法错误、按备份回滚，装前语法检查就是因此加的。4.2 的两处改动只在本机干跑核对过（更新计划里列出给 echo 补 `DSH_HOME`）。`install.ps1` 还没在 Windows 上跑过。
-- **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了（`dsh-agent-*`）；4.3 起 Soul preset 也照作者的装法写进 profile 的 `cordis.patch.yml`，作者 `soul-doctor` 的 L2 能看到。但别用作者的 `tools/soul-preset.mjs build --write` 装：profile 里还没有 preset 时它会把块插到文件最顶上、不带 `- insert:`，配置会坏；不设 `DSH_HOME` 环境变量跑还会报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
+- **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单。4.1 在 macOS（Apple 芯片，DSH NEXT 2.0.21-next）上用 `install.sh` 真装验收过：全新安装的终端问答、13 个零件和 21 条修复、砚青四套 preset、mcp-hub 接入 echo、心跳；新会话里体检 0 错、`/compact` 摘要带门牌、`memq open` 按门牌取回原文。更新到上游 8ba1385 时撞上作者的语法错误、按备份回滚，装前语法检查就是因此加的。4.2 的两处改动只在本机干跑核对过（更新计划里列出给 echo 补 `DSH_HOME`）。5.0 跟上游 c370a69（v3.0.0）只在隔离目录里验证过全新安装、4.5 → 5.0 更新、修复检查、备份 / 恢复 / 卸载，还没在桌面上实装，Soul preset 的 skills 挂没挂上要看灵魂 · 创造里能不能列出 creation 等技能；heartbeat、chat、clawbot 没实测。5.2 对 fe3c456 的安装、更新、备份、恢复、卸载与修复计划完成隔离验证；没有启动真实 DSH。`install.ps1` 还没在 Windows 上跑过。
+- **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了；4.3 起 Soul preset 也照作者的装法写进 profile 的 `cordis.patch.yml`，作者 `soul-doctor` 的 L2 能看到。但别用作者的 `tools/soul-preset.mjs build --write` 装：profile 里还没有 preset 时它会把块插到文件最顶上、不带 `- insert:`，配置会坏；不设 `DSH_HOME` 环境变量跑还会报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
-- **回声面板、换气面板的加载名**：上游把这两个包的名字改回 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字还是 `dsh-yanqing-*`，原样装会加载失败。装完的修复检查里修（修复 `echo-load-name`、`panel-load-name`；修好之前先别启动 DSH），并在收尾时检查每个包要加载的插件都找得到。
+- **回声面板、换气面板的加载名**：上游 v2.0.0 及以前这两个包叫 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字却是 `dsh-yanqing-*`，原样装会加载失败。作者在 v3.0.0 修好了，修复 `echo-load-name`、`panel-load-name` 已退役；还装着旧版的电脑，修复检查照样会修，收尾时也会检查每个包要加载的插件都找得到。
 - **路径不带用户名**：安装包里没有写死任何一台电脑的路径。memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录；权威源册、自我层、要贴进新会话的话里的路径写成 `$HOME/…`（zsh、bash、PowerShell 都认）；心跳脚本按相对自己的位置找记忆中枢。只有交给操作系统和别的程序执行的几处必须是绝对路径，安装时在这台电脑上现算：launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`；迁移恢复时会换成新电脑的。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
 - **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，用 `--backup` / `--restore` 迁移，到了新电脑再任命下一代主导。
 
 ## 版本记录
 
-这里只保留最近三条更新；4.2 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；4.5 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
-| 4.5 | 2026-11-01 | 跟上游 913a7b2（v2.0.0）：注册新零件 perf / `dsh-agent-perf`（渲染性能护栏，界面上可随时关掉高成本的 `backdrop-filter`；服务端 `apply` 是空的，没有配置、不写状态文件），进可选列表、默认不勾，已有的安装 `--update` 时问一句、拒掉就记进安装记录，不想装可加 `--skip-part perf`。没有新修复：本轮扫出的 5 条疑似问题逐条核对过——echo 诊断日志和换气触发口的写死路径已由 `echo-hub-path` / `huanqi-hub-path` 覆盖，clock 的浏览器候选路径是有意列出各系统安装位置、该文件不在发布清单里，换气测试里的 `D:/AI/yanqing-soul` 只是测试夹具、测试目录也不发布，perf 的 client id 与其它面板件同一约定。 |
-| 4.4 | 2026-11-01 | 新增可选的第五个 Soul preset「砚青 PTC Flash」：照 LarryE135/dsh-flash-presets 的 v3 适配（id `yanqing-ptc-flash`，压缩、裁剪换成带门牌的零件、补上范围压缩，其余照作者），安装问答里和砚青四套一起选、默认不选，已装的用 `--update --flash on/off` 开关；每次安装、更新在线取作者最新发布的版本（`--flash-ref`、`--flash-source` 可指定），`--fix` 钉在已装那一版。 |
-| 4.3 | 2026-11-01 | 修复和安装、更新、恢复分开：那几步只按作者上游装、不打修复，装完单独检查——先列出问题（清单里的逐条判定、清单外的疑似问题），用户逐条选修 / 不修 / 这次先不动，只修选中的；终端里装完会接着问，不在终端里的 `--fix` 只报不改。作者发布清单漏列的文件改由 `--fix` 补拷进已装的包，加载名对不上只提醒、不再停下。Soul preset 改照作者的装法：写进 profile 的 `cordis.patch.yml`（顶层 `- insert:`），不再用独立包 `dsh-soul-preset`，旧安装 `--update` 搬过去并摘掉包和锁文件条目；卸载留空壳也写在 profile 里。修复清单新增 `echo-settings-path`（上游 11-01 回声面板的设置兜底写死作者电脑的记忆中枢）。按上游 e6d66f5 逐条核对：clock 定位、换气触发口等待、compact-region 日志路径作者已修，这 3 条从清单删掉（id 不再使用），清单剩 19 条。修复判定改成先还原再比：已装文件是「上一版作者原文 + kit 补丁」时，不再因为作者改过版就误判成「本机改过」——那会让零件永远停在旧版、每次都说「将打上」；有安装记录或 `--source` 基线就照常换上新版。`preset-summary-model` 判成「本机不需要」时不再借用「请手动合并」的说法。 |
+| 5.2 | 2026-11-04 | 跟上游 fe3c456（含 6531d30 的路径调整）。新增 mcp-hub-homedir、huanqi-homedir、echo-diag-join、huanqi-hub-home 四条修复，处理缺失导入和换气记忆中枢定位；原 mcp-hub-home、echo-hub-path、huanqi-hub-path 退役但保留旧版识别。安装收尾点名会阻止加载的修复，仍需单独核对计划后应用。认不出的上游代码保持人工核对；计划绑定本机、安装记录及源码内容，离线源变化也拒绝旧计划；备份恢复保留修复核对结论和证据。同步 heartbeat / chat 当前限制。隔离验证覆盖安装、升级、修复计划、备份恢复和卸载，未做桌面验收。 |
+| 5.1 | 2026-11-04 | 修复不再在终端里逐条问：作者代码里有那段毛病不等于这台电脑会撞上，要 agent 对照本机核对过再定。修复清单每条补上不修会怎样（`impact`）、什么时候会撞上（`when`）、怎么核对（`verify`），会让零件加载不了的标「启动 DSH 前要处理」（`blocking`，只能选修或先不动）。新流程：`--fix --report` 出报告（只读，DSH 开着也能跑；带上脚本查到的本机事实，如热记忆目录、自我层路径是相对还是绝对、profile 里有没有换气那一节、默认模型路由、最近会话里的报错）→ agent 逐条核对，填 `fix-plan.json`（会不会撞上、修 / 不修 / 这次先不动、证据）→ 用户确认 → `--fix --plan` 校验后照做（出报告以后本机变了就作废），核对结论和证据记进安装记录，下次报告带出来。已经修好的、以前选过不修的不再要求选，情况变了可以加进计划改。装完、更新完、恢复完不再接着问，改成提示这几步；`--fix-only` / `--fix-skip` / `--fix-revert` 留作手动用。新增 `lib/fix-plan.mjs`。 |
+| 5.0 | 2026-11-04 | 跟上游 c370a69（v3.0.0）。压缩三件套包名照上游换成 `dsh-yanqing-compaction` / `dsh-yanqing-pruner` / `dsh-yanqing-compact-region`，4.x 装的 `--update` 迁移。Soul preset 换成上游去个人化后的灵魂四套（`soul` / `soul-cordis` / `soul-ptc` / `soul-distill`），新增第五套「灵魂 · 全能」（`soul-all`，默认装，只取 preset 本身、不带上游文件后面作者整份 profile 的导出）；砚青 PTC Flash 改名为灵魂 · PTC Flash（`soul-ptc-flash`）；旧的 `yanqing*` 进别名映射，砚青建的会话照常打开，方案、安装记录、默认 preset 自动换到新 id。创造和全能用的 4 个技能（上游 `presets/skills/`）装进 profile 的 `skills/`，三方比对、本机改过的不动，备份只带本机改过的，卸载只删没改过的。注册上游新零件 heartbeat、chat、clawbot：照上游原样装、默认不勾，更新时不自动补装（终端里问、默认不装），新参数 `--add-part` 补装；问答和 README 写明三者的已知问题；本机自己装的 `dsh-clawbot` 安装包不碰。修复清单：作者 v3.0.0 修好的 `echo-load-name`、`panel-load-name` 退役，`preset-summary-model` 改认 `preset-soul*`（含全能）。kit 迭代的扫描不再把本体发布清单里的 `plugins/` 重扫一遍（以前每个面板件都报一条假的 client id 不符），压缩摘要路由已由 `preset-summary-model` 管着的不再当新问题报。 |
