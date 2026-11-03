@@ -2,11 +2,47 @@
   "format": 1,
   "repo": "cyanwell/dsh-agent-soul",
   "baseline": {
-    "sha": "913a7b27ade7a8e30caef7bc25f39503595a0ba5",
-    "treeDigest": "4796a28180d5764c010c65e0b1c887b9675c07ec1594ae727854314e4389d62b"
+    "sha": "fe3c456189c7731f3941540bb913ec950425cdad",
+    "treeDigest": "b437182e7d8b4cda5038006c428bd2c779967984114498d05e80c812368afa2c"
   },
   "fixes": {
-    "retired": {},
+    "retired": {
+      "echo-load-name": {
+        "at": "2026-11-03T17:04:30.387Z",
+        "kitVersion": "5.0",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "c370a69638e7c134602082e484d15375b43a3bfc",
+        "evidence": "present → absent（plugins/echo/cordis.patch.yml）"
+      },
+      "panel-load-name": {
+        "at": "2026-11-03T17:04:30.387Z",
+        "kitVersion": "5.0",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "c370a69638e7c134602082e484d15375b43a3bfc",
+        "evidence": "present → absent（plugins/huanqi-panel/cordis.patch.yml）"
+      },
+      "mcp-hub-home": {
+        "at": "2026-11-03T18:30:49.949Z",
+        "kitVersion": "5.2",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "fe3c456189c7731f3941540bb913ec950425cdad",
+        "evidence": "present → absent（plugins/mcp-hub/index.js）"
+      },
+      "echo-hub-path": {
+        "at": "2026-11-03T18:30:49.952Z",
+        "kitVersion": "5.2",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "fe3c456189c7731f3941540bb913ec950425cdad",
+        "evidence": "present → absent（plugins/echo/index.js）"
+      },
+      "huanqi-hub-path": {
+        "at": "2026-11-03T18:30:49.952Z",
+        "kitVersion": "5.2",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "fe3c456189c7731f3941540bb913ec950425cdad",
+        "evidence": "present → absent（plugins/huanqi/lib/index.js）"
+      }
+    },
     "catalog": [
       {
         "id": "pack-unshipped",
@@ -16,6 +52,13 @@
         "basis": "kit",
         "title": "上游发布清单漏列的文件拷包时补上",
         "why": "入口导入了、files 却没列（4606555 的 yantai 漏了 env-config.mjs），照清单装上就缺文件、零件加载失败；插件市场 pnpm 重装也按 files 走，所以连 files 一起补",
+        "blocking": true,
+        "impact": "缺文件的那个零件加载失败：DSH 照常启动，但它的面板、工具都没有；插件市场重装一次后照样缺",
+        "when": "报告的本机事实里列出了漏列的文件，而且那个零件这台装了",
+        "verify": [
+          "看本机事实：列出的文件在已装的包里确实不存在",
+          "启动 DSH 之前就要处理；必装零件缺文件，架构少一层"
+        ],
         "type": "pack",
         "target": "<零件>/package.json#files",
         "evidence": [
@@ -38,6 +81,13 @@
         "basis": "kit",
         "title": "mnemon-probe 热记忆目录的默认值",
         "why": "DSH 桌面版不传 MNEMON_RUNTIME，默认的 ~/.mnemon/runtime 不一定是真实位置",
+        "blocking": false,
+        "impact": "mnemon-probe 每轮报「读盘失败」，热记忆容量看不到；记忆本身不受影响",
+        "when": "装了 dsh-mnemon 和 mnemon-probe，热记忆实际目录又不是 ~/.mnemon/runtime（DSH 桌面版不传 MNEMON_RUNTIME）",
+        "verify": [
+          "看本机事实：解析到的热记忆目录和 ~/.mnemon/runtime 是不是同一个",
+          "在 DSH 新会话里看每轮注入的 mnemon-probe 那一行：报「读盘失败」算撞上，有容量读数算没撞上"
+        ],
         "type": "path",
         "target": "mnemon-probe/index.js",
         "evidence": [
@@ -60,6 +110,14 @@
         "basis": "kit",
         "title": "memory 相对路径按 DSH 家目录定位",
         "why": "上游只认 DSH_HOME 环境变量，没有就退回插件目录",
+        "blocking": false,
+        "impact": "配置里自我层是相对路径时，自我层读不到（每轮注入里没有 SELF.md）；是绝对路径时功能照常，只是挪 DSH 家目录、换用户名后要重跑 --update",
+        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）",
+        "verify": [
+          "看本机事实里 dsh-agent-memory 的 selfPath：相对路径（dsh-soul/…）→ 不修会读不到；绝对路径 → 只影响挪家目录",
+          "在 DSH 新会话里看每轮注入有没有自我层的内容",
+          "已经打上、又要选不修的：配置里还是相对路径，选完要再跑一次 --update 把配置改回绝对路径，在那之前自我层读不到"
+        ],
         "type": "path",
         "target": "memory/lib/index.js",
         "evidence": [
@@ -82,6 +140,12 @@
         "basis": "kit",
         "title": "memory 上下文水位找 DSH 家目录",
         "why": "同上",
+        "blocking": false,
+        "impact": "每轮注入里没有上下文水位（或不准），agent 不知道上下文快满了",
+        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传）",
+        "verify": [
+          "在 DSH 新会话里看每轮注入有没有上下文水位那一行，聊几轮后数值会不会涨"
+        ],
         "type": "path",
         "target": "memory/lib/index.js",
         "evidence": [
@@ -104,12 +168,48 @@
         "basis": "kit",
         "title": "mcp-hub 清单位置",
         "why": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home",
+        "blocking": false,
+        "impact": "mcp-hub 找不到清单：面板是空的，会话里没有 mcp__echo__* 检索工具，记忆召回只能走慢路子",
+        "when": "DSH 没传 DSH_HOME（桌面版一般不传），这台又不是作者那台 D:\\AI\\dsh\\home",
+        "verify": [
+          "看本机事实：<DSH 家目录>/mcp-hub/servers.json 在不在、里面有没有 echo",
+          "在 DSH 新会话的工具列表里找 mcp__echo__ 开头的工具；mcp-hub 面板列不列得出 echo"
+        ],
         "type": "path",
         "target": "mcp-hub/index.js",
         "evidence": [
           {
             "source": "lib/fixes.mjs",
             "detail": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home"
+          }
+        ],
+        "applicability": "仅在 mcp-hub 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "mcp-hub-homedir",
+        "phase": "file",
+        "part": "mcp-hub",
+        "since": "5.2",
+        "basis": "kit",
+        "title": "mcp-hub 找 DSH 家目录不再调用没导入的 homedir()",
+        "why": "上游 11-04 把兜底改成 join(homedir(), '.dsh')，却没导入 homedir：DSH 不传 DSH_HOME 时一激活就报错",
+        "blocking": true,
+        "impact": "mcp-hub 一激活就报错（homedir is not defined）：面板没了，会话里没有 mcp__echo__* 检索工具，记忆召回只能走慢路子",
+        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）；上游 6531d30 起才有",
+        "verify": [
+          "看本机事实：DSH 家目录在哪；脚本看不到 DSH 传给插件的环境变量，按已知坑 1 当作不传",
+          "启动 DSH 之前就要处理；已经启动过的，看会话的工具列表里有没有 mcp__echo__ 开头的工具"
+        ],
+        "type": "path",
+        "target": "mcp-hub/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 11-04 把兜底改成 join(homedir(), '.dsh')，却没导入 homedir：DSH 不传 DSH_HOME 时一激活就报错"
           }
         ],
         "applicability": "仅在 mcp-hub 已安装或本次计划安装时适用",
@@ -126,6 +226,12 @@
         "basis": "kit",
         "title": "yantai 书房路径",
         "why": "没配环境变量时找不到书房",
+        "blocking": false,
+        "impact": "工作台面板的账本、未结、门是空的",
+        "when": "装了 yantai，DSH 又不传 YANTAI_SOUL",
+        "verify": [
+          "打开 yantai 面板，看账本、未结有没有内容"
+        ],
         "type": "path",
         "target": "yantai/index.js",
         "evidence": [
@@ -148,6 +254,12 @@
         "basis": "kit",
         "title": "yantai 记忆中枢路径",
         "why": "没配环境变量时找不到记忆中枢",
+        "blocking": false,
+        "impact": "工作台面板的水位、检索没有读数",
+        "when": "装了 yantai，DSH 又不传 YANTAI_MEMORY",
+        "verify": [
+          "打开 yantai 面板，看水位、检索有没有读数"
+        ],
         "type": "path",
         "target": "yantai/index.js",
         "evidence": [
@@ -170,6 +282,13 @@
         "basis": "kit",
         "title": "riji 日记目录",
         "why": "只认 DSH_HOME，日记目录要跟着书房走",
+        "blocking": false,
+        "impact": "顶栏的日记入口列不出日记",
+        "when": "装了 riji，日记在书房 50-日记/ 下，DSH 又不传 DSH_HOME",
+        "verify": [
+          "看本机事实：书房 50-日记/ 下有几篇",
+          "点开顶栏的日记入口，列不列得出这些文件"
+        ],
         "type": "path",
         "target": "riji/index.js",
         "evidence": [
@@ -192,6 +311,13 @@
         "basis": "kit",
         "title": "echo 的加载名等于包名",
         "why": "上游改了包名、cordis.patch.yml 里漏改，DSH 按旧名找不到包",
+        "blocking": true,
+        "impact": "回声面板加载失败：面板空白，严重时应用起不来",
+        "when": "已装那一版上游的 cordis.patch.yml 还用旧包名加载（上游 v3.0.0 起作者已修）",
+        "verify": [
+          "看报告的判定：作者已修的就是「换回作者原文」或不动",
+          "启动 DSH 之前就要处理"
+        ],
         "type": "load-name",
         "target": "echo/cordis.patch.yml",
         "evidence": [
@@ -214,6 +340,13 @@
         "basis": "kit",
         "title": "echo 面板的诊断日志改到 DSH 家目录的记忆中枢",
         "why": "上游 10-30 新加的失败诊断写死作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默写不进去",
+        "blocking": false,
+        "impact": "回声面板体检失败时，诊断日志写不进去，排错没线索；平时没感觉",
+        "when": "这台不是作者那台电脑（没有 D:\\AI\\memory\\hub）",
+        "verify": [
+          "这条只关系到排错：问用户要不要留着诊断日志",
+          "看记忆中枢下有没有 _plugin-diag.log（打上以后，体检失败才会写）"
+        ],
         "type": "path",
         "target": "echo/index.js",
         "evidence": [
@@ -236,6 +369,13 @@
         "basis": "kit",
         "title": "echo 面板在 macOS 上找到 DSH 自带的 node",
         "why": "作者只按 Windows 的安装布局找 node；Mac 上找不到就拿 DSH 主程序去跑体检脚本，面板体检永远是空的",
+        "blocking": false,
+        "impact": "macOS 上回声面板的体检一项都不出",
+        "when": "只在 macOS 上",
+        "verify": [
+          "看本机事实里的系统：不是 macOS 就不会撞上",
+          "macOS 上打开回声面板，看体检有没有结果"
+        ],
         "type": "behavior",
         "target": "echo/index.js",
         "evidence": [
@@ -258,12 +398,47 @@
         "basis": "kit",
         "title": "echo 面板的设置文件改到 echo 自己找到的记忆中枢",
         "why": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来",
+        "blocking": false,
+        "impact": "回声面板改常驻天数、内存预算存不上（报「写入失败」），实时状态一栏是空的",
+        "when": "DSH 不传 ECHO_HUB（桌面版一般不传）",
+        "verify": [
+          "在回声面板里改一次常驻天数，看会不会报「写入失败」"
+        ],
         "type": "path",
         "target": "echo/index.js",
         "evidence": [
           {
             "source": "lib/fixes.mjs",
             "detail": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-diag-join",
+        "phase": "file",
+        "part": "echo",
+        "since": "5.2",
+        "basis": "kit",
+        "title": "echo 面板的诊断日志改用 path.join",
+        "why": "上游 11-04 把诊断日志改成 join(HUB, …)，这个文件却只导入了 path、没有 join：写日志那一行一直抛错被吞掉",
+        "blocking": false,
+        "impact": "回声面板体检失败时，诊断日志写不进去（上游这一行用了没导入的 join，报错被吞掉），排错没线索；平时没感觉",
+        "when": "任何电脑都一样，只是要等体检失败才看得出来；上游 6531d30 起才有",
+        "verify": [
+          "这条只关系到排错：问用户要不要留着诊断日志",
+          "看本机事实：记忆中枢下有没有 _plugin-diag.log"
+        ],
+        "type": "behavior",
+        "target": "echo/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 11-04 把诊断日志改成 join(HUB, …)，这个文件却只导入了 path、没有 join：写日志那一行一直抛错被吞掉"
           }
         ],
         "applicability": "仅在 echo 已安装或本次计划安装时适用",
@@ -280,6 +455,13 @@
         "basis": "kit",
         "title": "换气面板的加载名等于包名",
         "why": "同上",
+        "blocking": true,
+        "impact": "换气面板加载失败：面板空白，严重时应用起不来",
+        "when": "已装那一版上游的 cordis.patch.yml 还用旧包名加载（上游 v3.0.0 起作者已修）",
+        "verify": [
+          "看报告的判定：作者已修的就是「换回作者原文」或不动",
+          "启动 DSH 之前就要处理"
+        ],
         "type": "load-name",
         "target": "huanqi-panel/cordis.patch.yml",
         "evidence": [
@@ -302,6 +484,13 @@
         "basis": "kit",
         "title": "换气面板：profile 没有 `- id: huanqi` 时自建一节",
         "why": "面板只会改已有的节，第一次保存必报错",
+        "blocking": false,
+        "impact": "第一次在换气面板里改参数保存时报错，改不了",
+        "when": "profile 的 cordis.patch.yml 里没有 `- id: huanqi` 这一节（安装包不写这一节，换气是 bundle 层装进来的）",
+        "verify": [
+          "看本机事实：有没有这一节",
+          "没有的话，在换气面板改一个参数保存，会报「没有 `- id: huanqi` 这一节」"
+        ],
         "type": "behavior",
         "target": "huanqi-panel/index.js",
         "evidence": [
@@ -324,6 +513,13 @@
         "basis": "author",
         "title": "换气诊断日志和测试触发口改到 DSH 家目录的记忆中枢",
         "why": "写死作者电脑的 D:\\AI\\memory\\hub，作者自己点过名：装到别人机器就静默失效",
+        "blocking": false,
+        "impact": "换气的诊断日志和测试触发口写到作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默失效：熔断了查不到日志，测试触发口不工作",
+        "when": "这台不是作者那台电脑",
+        "verify": [
+          "问用户会不会用换气的测试触发口、要不要诊断日志",
+          "看记忆中枢下有没有换气的诊断日志"
+        ],
         "type": "path",
         "target": "huanqi/lib/index.js",
         "evidence": [
@@ -346,12 +542,77 @@
         "basis": "boss",
         "title": "换气熔断后的全量压缩去掉多套的一层 runMaintenance",
         "why": "compactNow 自己会排队等空闲，外面再套一层内层必报 requires an idle agent",
+        "blocking": false,
+        "impact": "换气熔断后的全量压缩一次都成不了（报 requires an idle agent），长会话会一路涨到上下文顶上",
+        "when": "用着换气，而且熔断过",
+        "verify": [
+          "看本机事实：最近的会话日志里有没有「requires an idle agent」",
+          "没熔断过的看不出来：按作者代码（外面多套了一层 runMaintenance）和 Boss 2026-10-29 的实测判断"
+        ],
         "type": "behavior",
         "target": "huanqi/lib/index.js",
         "evidence": [
           {
             "source": "lib/fixes.mjs",
             "detail": "compactNow 自己会排队等空闲，外面再套一层内层必报 requires an idle agent"
+          }
+        ],
+        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "huanqi-homedir",
+        "phase": "file",
+        "part": "huanqi",
+        "since": "5.2",
+        "basis": "kit",
+        "title": "换气找 DSH 家目录不再调用没导入的 homedir()",
+        "why": "上游 11-04 加了 join(homedir(), '.dsh')，却没导入 homedir（作者特意不引 node:os，文件里只有自己的 homeDir()）：DSH 不传 DSH_HOME 时一加载就报错",
+        "blocking": true,
+        "impact": "换气一加载就报错（homedir is not defined）：不再自动换气，换气面板没有数据，长会话会一路涨到上下文顶上",
+        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）；上游 6531d30 起才有",
+        "verify": [
+          "看本机事实：DSH 家目录在哪；脚本看不到 DSH 传给插件的环境变量，按已知坑 1 当作不传",
+          "启动 DSH 之前就要处理；已经启动过的，看换气面板有没有数据"
+        ],
+        "type": "path",
+        "target": "huanqi/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 11-04 加了 join(homedir(), '.dsh')，却没导入 homedir（作者特意不引 node:os，文件里只有自己的 homeDir()）：DSH 不传 DSH_HOME 时一加载就报错"
+          }
+        ],
+        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "huanqi-hub-home",
+        "phase": "file",
+        "part": "huanqi",
+        "since": "5.2",
+        "basis": "kit",
+        "title": "换气的记忆中枢按 DSH 家目录定位",
+        "why": "上游 11-04 改成从 DSH 家目录往上推两级拼 memory/hub，只对作者那台的目录布局成立；安装包的记忆中枢在 <DSH 家目录>/dsh-soul/memory/hub",
+        "blocking": false,
+        "impact": "换气的诊断日志和测试触发口落到「DSH 家目录往上两级/memory/hub」，本机记忆中枢不在那儿就静默失效：熔断了查不到日志，测试触发口不工作",
+        "when": "没设 YQ_HUB，记忆中枢又不在 DSH 家目录往上两级的 memory/hub（只有作者那台的目录布局正好对上）；上游 6531d30 起才有",
+        "verify": [
+          "看本机事实：上游推出来的位置和本机记忆中枢是不是同一个，是同一个就不会撞上",
+          "问用户会不会用换气的测试触发口、要不要诊断日志"
+        ],
+        "type": "path",
+        "target": "huanqi/lib/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "上游 11-04 改成从 DSH 家目录往上推两级拼 memory/hub，只对作者那台的目录布局成立；安装包的记忆中枢在 <DSH 家目录>/dsh-soul/memory/hub"
           }
         ],
         "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
@@ -368,6 +629,13 @@
         "basis": "boss",
         "title": "/compact-region 声明参数输入",
         "why": "不声明 input，输入框里带参数的命令会被前端当成普通消息",
+        "blocking": false,
+        "impact": "在输入框里手打带参数的 /compact-region，会被当成普通消息发出去，命令不执行；换气自动调用不受影响",
+        "when": "用户会手打 /compact-region <起> <止>",
+        "verify": [
+          "问用户会不会手打 /compact-region 带参数",
+          "在 DSH 里输入 /compact-region 1 2，看是执行命令还是当成消息发出去"
+        ],
         "type": "behavior",
         "target": "compact-region/index.js",
         "evidence": [
@@ -390,6 +658,12 @@
         "basis": "boss",
         "title": "换气配置的字符串布尔改回真布尔",
         "why": "面板把布尔写成 'true'，过不了 schema，整段配置静默退回默认值",
+        "blocking": false,
+        "impact": "换气配置整段静默退回默认值，面板里改的参数都不生效",
+        "when": "profile 里换气那一节有被写成字符串的 'true' / 'false'",
+        "verify": [
+          "看本机事实：有没有字符串布尔（脚本查得准，不用再核对）"
+        ],
         "type": "config",
         "target": "profile/cordis.patch.yml#huanqi",
         "evidence": [
@@ -412,6 +686,13 @@
         "basis": "boss",
         "title": "压缩摘要跟会话模型走",
         "why": "作者写死 summarizationProvider: deepseek-official，要 API key；账号登录的机器压缩全失败",
+        "blocking": false,
+        "impact": "手动 /compact 和自动压缩都失败（no API key），长会话会一路涨到上下文顶上",
+        "when": "本机默认模型不走 deepseek-official（例如账号登录的 deepseek-account），或者最近的会话报过 no API key",
+        "verify": [
+          "看本机事实：默认模型路由、最近的会话有没有 no API key",
+          "在 DSH 的模型页看有没有填 DeepSeek API key"
+        ],
         "type": "preset",
         "target": "profile/cordis.patch.yml#Soul preset",
         "evidence": [
@@ -1275,6 +1556,566 @@
         "Windows 未验证：本轮只在 macOS 上跑隔离安装/更新/备份/恢复。",
         "Boss 这台 Mac 上的真实更新还没执行（--update 真跑要完全退出 DSH，等 Boss 确认）。",
         "本轮的更新验证是把安装记录的 kitVersion 改回 4.4 来模拟旧安装，不是用真的 4.4 kit 装一遍再升；包名迁移路径本轮没覆盖（上游这 6 个提交没有改名）。"
+      ]
+    },
+    {
+      "completedAt": "2026-11-03T17:04:30.387Z",
+      "reportCreatedAt": "2026-11-03T17:02:42.082Z",
+      "base": "913a7b27ade7a8e30caef7bc25f39503595a0ba5",
+      "target": "c370a69638e7c134602082e484d15375b43a3bfc",
+      "kitVersion": "5.0",
+      "kitUpdate": {
+        "status": "skipped",
+        "reason": "显式使用 --skip-kit-update"
+      },
+      "summary": "kit 自身：11-03 的 --kit-iterate 查过远端 Akashyc/dsh-agent-soul-kit main = 本地 HEAD d247598（current），工作区只有本轮修改和用户未跟踪的 setups/鲸汐（没动），本报告用 --skip-kit-update 生成。插件上游：913a7b2（v2.0.0）→ c370a69（v3.0.0，作者重新发布的定稿；之前 275f0d4 那版传错文件作废）。要改的五件事：① 压缩三件套包名改成 dsh-yanqing-*，PART_NAMES 调换首选名，4.x 安装 --update 自动迁移；② Soul preset 换成上游去个人化的灵魂四套 soul*，新增灵魂 · 全能 soul-all（默认装，verbatim 只取 preset 块、切掉上游文件后面的作者 profile 导出），砚青 PTC Flash 改名 soul-ptc-flash，yanqing* 进 OLD_PRESET_IDS（旧会话别名、默认 preset、方案、安装记录自动映射），ADDED_PRESETS 让更新 / 恢复旧安装补上全能；③ 新增 lib/preset-skills.mjs：创造 / 全能 customSkillDirs 用的上游 presets/skills/ 拷进 <profile>/skills/，按安装记录三方比对，备份只带本机改过的、恢复放回、卸载只删没改过的；④ 注册上游新零件 heartbeat / chat / clawbot（Boss 定：照原样装、默认不勾），OPT_IN_PARTS 更新不自动补、终端里默认否，新参数 --add-part；EXTERNAL_PARTS 让本机自装的 dsh-clawbot 不被覆盖、不被卸载；caveat 写进问答、警告和文档；⑤ 修复清单：echo-load-name / panel-load-name 作者 v3.0.0 修好、登记时退役；preset-summary-model 改认 preset-soul*。另修两处 kit 自身问题：partDiff 在已装文件与上游一字不差时不再「还原」（否则作者修法与 kit 写法相同时每次更新都误判有变化），kit 迭代扫描不再按本体包名重扫 plugins/（去掉一串假的 client id 不符）。版本 4.5 → 5.0，README / CHANGELOG / AGENT-INSTALL 同步，assets/presets 快照换成上游 c370a69。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "上游 v3.0.0 改了压缩三件套包名、把 preset 文件和 id 改成灵魂系列、新增全能和 skills、新增三个零件；kit 原来读 preset-yanqing*.yml，找不到会静默退回旧快照，包名也会按旧名落地。全新安装改为照新包名、灵魂五套、skills 落盘，三个新零件可选默认不勾并带已知问题提示。",
+          "evidence": [
+            "lib/parts.mjs：PARTS / PART_NAMES / OPTIONAL_PARTS / ADDED_PARTS / OPT_IN_PARTS / EXTERNAL_PARTS / PART_INFO.caveat / heartbeat 平台限制",
+            "lib/soul-presets.mjs：SOUL_IDS、PRESET_SOURCE、OLD_PRESET_IDS、ADDED_PRESETS、verbatim() 截到第一行顶格内容",
+            "lib/flash-presets.mjs：FLASH_PRESET_ID=soul-ptc-flash，压缩零件名取 PART_NAMES",
+            "lib/preset-skills.mjs + install.mjs「Soul preset」一步落盘 skills",
+            "install.mjs：--add-part、caveat 警告、OPTIONAL_SRC 加 perf/heartbeat/chat/clawbot",
+            "上游 target/presets/preset-soul-all.yml 第 212 行起是 llm-pi-ai / @linxin666 / webserver / mnemon 等 profile 导出"
+          ],
+          "checks": [
+            "static",
+            "skills-selfcheck",
+            "preset-bundle",
+            "install-fresh",
+            "install-repeat",
+            "install-opt-in",
+            "flash"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "4.x 安装要迁移包名（bundles / dependencies / 锁文件 / preset 引用）、preset id（旧会话别名、默认 preset）、补全能和 skills；三个新零件不能被自动补装（chat 会开局域网无鉴权端口）。另修好 partDiff 的误判：上游把加载名修成和 kit 一样的写法后，原逻辑每次更新都当成有变化。",
+          "evidence": [
+            "install.mjs：TO_ADD 排除 OPT_IN_PARTS（除非 --add-part），终端问答默认否；更新报告写明 --add-part",
+            "install.mjs：ADDED_PRESETS 在 update / restore 补全能；mapOldPresetIds + PRESET_ALIASES 给 yanqing* 留别名",
+            "install.mjs partDiff：已装与上游一字不差时跳过 unpatchText",
+            "install.mjs：SKILLS_PLAN 进「已经是最新」判定、事务和更新备份（还原方法第 6 条）",
+            "lib/preset-migration.mjs：退役 Flash 迁到 soul-ptc"
+          ],
+          "checks": [
+            "static",
+            "install-repeat",
+            "update-45-to-50",
+            "fix-after-update",
+            "add-part",
+            "flash"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "changed",
+          "reason": "新增 kit 管理的 <profile>/skills/：没改过的随上游重装，本机改过的必须进备份才不会在迁移时丢；clawbot 凭据按约定不进备份。备份格式（format 1）不变，旧包照读。",
+          "evidence": [
+            "install.mjs makeBackup：preset-skills/ 只带本机改过的 skills（按安装记录哈希比）",
+            "install.mjs：SOUL_IDS_FALLBACK 加 dsh-yanqing-* / heartbeat / chat / clawbot",
+            "clawbot 凭据在 ~/.dsh/clawbot（homedir），不在备份范围，提示写进「不带」那一行"
+          ],
+          "checks": [
+            "static",
+            "backup-restore",
+            "uninstall"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "changed",
+          "reason": "恢复要把备份里本机改过的 skills 放回；4.5 备份里的 yanqing* id、dsh-agent-* 包名、没有全能的 presetIds 都要能映射到 5.0。",
+          "evidence": [
+            "install.mjs 恢复「放回备份里的数据」：preset-skills/ 盖回 <profile>/skills/",
+            "install.mjs：恢复旧备份时 ADDED_PRESETS 补全能、旧 preset id 映射、manifest 里旧包名按 PART_NAMES 别名认",
+            "lib/uninstall.mjs：SOUL_TO_OFFICIAL 加 soul* 与 soul-ptc-flash"
+          ],
+          "checks": [
+            "static",
+            "backup-restore",
+            "restore-old-backup"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "contract:plugins/compact-region/package.json",
+          "decision": "fixed",
+          "reason": "包名 dsh-agent-compact-region → dsh-yanqing-compact-region：PART_NAMES 首选名调换，旧名留作别名，更新迁移已验证（update-45-to-50）。"
+        },
+        {
+          "id": "contract:plugins/compaction/package.json",
+          "decision": "fixed",
+          "reason": "同上：dsh-agent-compaction → dsh-yanqing-compaction，Soul preset 和 Flash 适配里的引用跟 PART_NAMES 走。"
+        },
+        {
+          "id": "contract:plugins/pruner/package.json",
+          "decision": "fixed",
+          "reason": "同上：dsh-agent-pruner → dsh-yanqing-pruner。"
+        },
+        {
+          "id": "candidate:path:plugins/chat/index.js",
+          "decision": "not-applicable",
+          "reason": "Boss 定：chat 照上游原样装、默认不勾、不打补丁；写死的会话 id、语音目录和 0.0.0.0 无鉴权写进 PART_INFO.caveat、问答、安装警告和文档，不进修复清单。"
+        },
+        {
+          "id": "candidate:path:plugins/heartbeat/index.js",
+          "decision": "not-applicable",
+          "reason": "Boss 定：heartbeat 照上游原样装、默认不勾；核心脚本 heartbeat.mjs 不在上游仓库，路径改了也跑不起来，问题写进 caveat 和 macOS/Linux 不可用说明，不进修复清单。"
+        },
+        {
+          "id": "candidate:path:main/tools/sync-deployed.mjs",
+          "decision": "not-applicable",
+          "reason": "作者对账发布版与部署版的开发工具，随本体拷进 tools/ 但 DSH 和 kit 都不运行它。"
+        },
+        {
+          "id": "candidate:preset-package:main/presets/preset-soul-all.yml:dsh-mnemon",
+          "decision": "not-applicable",
+          "reason": "dsh-mnemon 出现在 preset-soul-all.yml 第 212 行以后的作者 profile 导出里；kit 的 verbatim() 截到第一行顶格内容，装进去的全能 preset 不含它（preset-bundle 检查）。"
+        }
+      ],
+      "organs": null,
+      "fixes": {
+        "retired": [
+          "echo-load-name",
+          "panel-load-name"
+        ],
+        "unretired": [],
+        "changes": [
+          {
+            "id": "preset-summary-model",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs PRESET_FILES 加上 preset-soul / soul-cordis / soul-ptc / soul-distill / soul-all（保留 preset-yanqing* 认旧基线）；上游 v3.0.0 文件改名后原条目被判「不再适用」",
+              "kit-iterate-rerun：改后基线 present → 目标 present"
+            ]
+          },
+          {
+            "id": "echo-load-name",
+            "action": "retire",
+            "evidence": [
+              "上游 c370a69 plugins/echo/cordis.patch.yml：name: dsh-agent-echo（= 包名）",
+              "fix-after-update：作者已修 → 保持；改用作者修复"
+            ]
+          },
+          {
+            "id": "panel-load-name",
+            "action": "retire",
+            "evidence": [
+              "上游 c370a69 plugins/huanqi-panel/cordis.patch.yml：name: dsh-agent-huanqi-panel（= 包名）",
+              "fix-after-update：作者已修 → 保持；改用作者修复"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        {
+          "id": "static",
+          "scope": "static",
+          "command": "for f in install.mjs lib/*.mjs; do node --check $f; done; git diff --check",
+          "status": "passed",
+          "evidence": "全部 exit 0，git diff --check 无输出；18 个已跟踪文件改动 + lib/preset-skills.mjs、assets/presets/preset-soul*.yml、assets/presets/skills/ 新增。"
+        },
+        {
+          "id": "skills-selfcheck",
+          "scope": "simulated",
+          "command": "node --input-type=module -e \"<planPresetSkills / pruneEmptyDirs 断言：首装全拷、重跑无变化、上游改 + 本机改分别 write / local、want=false 只删没改过的、prune 只收删掉文件的上级空目录>\"",
+          "status": "passed",
+          "evidence": "输出 preset-skills self-check ok、prune ok。"
+        },
+        {
+          "id": "preset-bundle",
+          "scope": "simulated",
+          "command": "presetSources(null,{upstreamDir:<target 快照 c370a69>}) + buildPresetBundle(DEFAULT_PRESET_IDS,{summary:author|session, aliases:{yanqing:soul,yanqing-ptc:soul-ptc}})",
+          "status": "passed",
+          "evidence": "5 套全部取自上游；ids soul,soul-cordis,soul-ptc,soul-distill,soul-all,yanqing,yanqing-ptc；文本里没有 llm-pi-ai / dsh-mnemon / linxin，顶格行 0；deepseek-official author 7 处、session 0 处。"
+        },
+        {
+          "id": "install-fresh",
+          "scope": "simulated",
+          "command": "node install.mjs --source <target 快照 c370a69> --dsh-home TMP/hA --setup 大肥鱼 --confirm-quit --no-heartbeat --no-input",
+          "status": "passed",
+          "evidence": "exit 0；安装记录 kitVersion 5.0，parts 含 dsh-yanqing-compaction / pruner / compact-region，presetIds 五套、默认 soul，presetSkills 4 条；profile/skills 下 4 个 SKILL.md；cordis.patch.yml 无 llm-pi-ai 等导出内容、selectedDefault: soul；「注册 id 没有撞车」「每个包要加载的插件都找得到」。"
+        },
+        {
+          "id": "install-repeat",
+          "scope": "simulated",
+          "command": "同一 TMP/hA 再跑一次安装；再跑 node install.mjs --update --source <target 快照 c370a69> --dsh-home TMP/hA --dry-run",
+          "status": "passed",
+          "evidence": "重复安装 exit 0，Soul preset、skills 都报「和上游一致」跳过；修 partDiff 前更新干跑把 echo / huanqi-panel 的 cordis.patch.yml 报成变化，修后输出「已经是最新，什么都不用改。」。"
+        },
+        {
+          "id": "update-45-to-50",
+          "scope": "simulated",
+          "command": "git archive HEAD(4.5) → kit45；kit45: install --source <base 快照 913a7b2> --setup 大肥鱼，再 --fix --fix-only <全部 19 条>；kit5: node install.mjs --update --source <target 快照 c370a69> --base-source <base 快照 913a7b2> --dsh-home TMP/hB --confirm-quit --no-input（会话 s1 用 yanqing-ptc）",
+          "status": "passed",
+          "evidence": "exit 0；三个零件「由 dsh-agent-* 改名」装上、旧目录删掉、bundles / dependencies 换名；preset 写 soul… soul-all，别名 yanqing / yanqing-cordis / yanqing-ptc（1 个会话在用）/ yanqing-distill；「默认 preset 的旧 id yanqing 换成 soul」；「安装包新加了 Soul preset「灵魂 · 全能」，这次补上」；skills 拷 4 个；heartbeat / chat / clawbot「本机没装，跳过（…要装加 --add-part …）」；压缩摘要保持跟会话模型走（deepseek-official 0 处）；没有「本机改过需要核对」的误报。"
+        },
+        {
+          "id": "fix-after-update",
+          "scope": "simulated",
+          "command": "node install.mjs --fix --dry-run --source <target 快照 c370a69> --dsh-home TMP/hB",
+          "status": "passed",
+          "evidence": "exit 0；echo-load-name、panel-load-name「作者已修 → 保持；改用作者修复」，preset-summary-model、mcp-hub-home「保持」，其余仍需修的报「将打上」（4.3 起更新只装作者原版，修复单独做，与 4.5 行为一致）。"
+        },
+        {
+          "id": "add-part",
+          "scope": "simulated",
+          "command": "node install.mjs --update --add-part clawbot --source <target 快照 c370a69> --dsh-home TMP/hB；TMP/hC 预置本机自装的 node_modules/dsh-clawbot（9.9.9）再 --update --add-part clawbot；--add-part nope；--backup --add-part clawbot",
+          "status": "passed",
+          "evidence": "hB：「dsh-clawbot（新装）：已安装（8 个文件）」+ caveat 警告，parts 含 dsh-clawbot；hC：「dsh-clawbot 是本机自己装的（安装记录里没有），安装包不动它」，package.json 仍是 9.9.9；非法零件和非安装/更新模式分别报错退出。"
+        },
+        {
+          "id": "install-opt-in",
+          "scope": "simulated",
+          "command": "node install.mjs --source <target 快照 c370a69> --dsh-home TMP/hF --setup 大肥鱼 --add-part heartbeat,chat,clawbot --confirm-quit --no-heartbeat --no-input",
+          "status": "passed",
+          "evidence": "exit 0；三个包各自装上，三条 caveat 警告在计划和「需要留意」里都出现；注册 id、加载名校验通过。"
+        },
+        {
+          "id": "flash",
+          "scope": "simulated",
+          "command": "git clone LarryE135/dsh-flash-presets（v0.2.6 1a61a43）；kit5 --update --flash on --flash-source …（hA）；kit45 用 --flash on --default-preset yanqing-ptc-flash 装 hG（会话用 yanqing-ptc-flash）后 kit5 --update",
+          "status": "passed",
+          "evidence": "hA 生成 id soul-ptc-flash、名字「灵魂 · PTC Flash」、零件 dsh-yanqing-compaction / pruner / compact-region；hG 更新后别名 yanqing-ptc-flash（1 个会话在用）→ 同「灵魂 · PTC Flash」，selectedDefault 换成 soul-ptc-flash。"
+        },
+        {
+          "id": "backup-restore",
+          "scope": "simulated",
+          "command": "改 TMP/hB/profiles/desktop/skills/creation/SKILL.md → node install.mjs --backup --dsh-home TMP/hB --out TMP/bk；node install.mjs --restore TMP/bk/<tar> --dsh-home TMP/hD --source <target 快照 c370a69>；再 --update --dry-run",
+          "status": "passed",
+          "evidence": "备份 exit 0，包里只有 preset-skills/creation/SKILL.md 一个 skills 文件；恢复 exit 0，「本机改过的 Soul preset skills 1 个」，creation 末行是本机加的那行、distill 与上游逐字节相同；随后的更新干跑报「本机改过的 1 个不动：creation/SKILL.md」并「已经是最新」。"
+        },
+        {
+          "id": "restore-old-backup",
+          "scope": "simulated",
+          "command": "kit45: --backup --dsh-home TMP/hB-45；kit5: node install.mjs --restore <4.5 备份> --dsh-home TMP/hE --source <target 快照 c370a69>",
+          "status": "passed",
+          "evidence": "exit 0；补上全能，别名 yanqing-ptc（1 个会话在用），「默认 preset 的旧 id yanqing 换成 soul」，parts 为 dsh-yanqing-* 新名，presetIds 五套。"
+        },
+        {
+          "id": "uninstall",
+          "scope": "simulated",
+          "command": "node install.mjs --uninstall --old-sessions shell --dsh-home TMP/hB；node install.mjs --uninstall --old-sessions rewrite --dsh-home TMP/hC",
+          "status": "passed",
+          "evidence": "hB exit 0：12 个包（含安装包装的 dsh-clawbot）删掉，skills 删 3 个、改过的 creation/SKILL.md 留着并警告，空壳里 soul* 的压缩换成 @deepseek-ai/dsh-compaction-basic；hC exit 0：本机自装的 dsh-clawbot 没删，会话 s1 的 agentPreset yanqing-ptc → ptc。"
+        },
+        {
+          "id": "kit-iterate-rerun",
+          "scope": "simulated",
+          "command": "node install.mjs --kit-iterate --skip-kit-update --base-source <base 快照 913a7b2> --source <target 快照 c370a69> --out TMP/iter；node install.mjs --kit-iterate --skip-kit-update --ref c370a69",
+          "status": "passed",
+          "evidence": "契约提示 16 → 7，main/plugins/* 的 client id 假阳性消失；preset-summary-model 由「不再适用」变「仍需修」，echo-load-name / panel-load-name 归「作者这次修好了」。"
+        }
+      ],
+      "limitations": [
+        "没有在真实 DSH 里启动验收：skills 放 <profile>/skills/ 是按官方 cordis preset 的 createRequire(baseUrl) 写法推断 baseUrl 指向 profile 的配置文件，要在桌面上打开灵魂 · 创造 / 全能确认能列出 creation 等技能；全能 preset、灵魂四套的门牌实测也没做。",
+        "heartbeat、chat、clawbot 只验证了拷包、注册 id 和加载名，没有在 DSH 里实测（clawbot 需要微信扫码，chat 需要 edge-tts）。",
+        "终端交互路径没跑：更新时问「装不装新零件」（默认否）、全新安装问答里的 caveat 提示，只核对了代码和 --questions 输出。",
+        "隔离测试用的上游是本地快照目录（--source / --base-source），不是带提交号的下载；Windows 未验证；Boss 本机的真实 --update 还没执行。"
+      ]
+    },
+    {
+      "completedAt": "2026-11-03T18:30:49.952Z",
+      "reportCreatedAt": "2026-11-03T18:27:44.606Z",
+      "base": "c370a69638e7c134602082e484d15375b43a3bfc",
+      "target": "fe3c456189c7731f3941540bb913ec950425cdad",
+      "kitVersion": "5.2",
+      "kitUpdate": {
+        "status": "skipped",
+        "reason": "显式使用 --skip-kit-update"
+      },
+      "summary": "恢复中断的 5.0/5.1/5.2 迭代。5.0 已于本地历史登记 c370a69；本轮保留其源码改动与用户方案。kit 远端 main 与本地 HEAD d247598 一致，只读核对后跳过重复自身同步。固定上游 fe3c456（相对中断时 6531d30 仅 INSTALL.md 更改）收尾 5.2：四条新修复、三条旧路径修复退役、安装收尾阻塞项提示，保持安装与修复分开；修正未知源码误判已修，补齐计划本机/源码指纹及恢复核对证据。同步 5.2 文档和可选零件限制。当前完成的是源码迭代与隔离验证，不包含真实 DSH 更新或 Git 提交推送。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "保留 5.0 灵魂五套、skills、上游原样安装及三个新零件默认不装的选择；新增四条修复识别与安装后阻塞项提示。上游 heartbeat 补入脚本但未加入零件发布清单；chat 入口缺失导入等限制同步文档，不扩大默认安装或替它们部署服务。",
+          "evidence": [
+            "install.mjs KIT_VERSION、安装收尾 blockers、fixFacts、writeFixReport",
+            "lib/fixes.mjs 四条 5.2 修复与 detectFix；lib/huanqi-patches.mjs",
+            "lib/parts.mjs heartbeat/chat caveat；target/plugins/heartbeat/package.json 和 index.js；target/plugins/chat/index.js",
+            "target/index.js / client.js 仅路径提示、显示文案变化；presets/ 与 package files 没有本轮契约变化"
+          ],
+          "checks": [
+            "static",
+            "patch-selfcheck",
+            "flows"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "旧三条路径补丁需退役识别，新缺失导入及换气目录修复单独处理；5.1 的报告/计划流程收尾，5.2 绑定本机与源码指纹，防止离线源或安装记录变化后误用旧计划。保留 4.5 包名与 preset/Flash 别名迁移、本机修改、会话原文。",
+          "evidence": [
+            "install.mjs fixFingerprint、PLAN 校验、runFixes、partDiff",
+            "lib/fixes.mjs detectFix/planFile；lib/fix-plan.mjs loadPlan",
+            "lib/soul-presets.mjs OLD_PRESET_IDS；lib/flash-presets.mjs；install.mjs PRESET_ALIASES"
+          ],
+          "checks": [
+            "patch-selfcheck",
+            "flows",
+            "legacy"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "5.0 已加入本机改过的 preset-skills 备份；5.1 修复结论和证据位于已有 install-state.json，现有备份入口已完整包含，无须改备份格式。新增的上游 heartbeat 脚本未由 kit 部署执行，三个可选零件仍保持原选择，clawbot 凭据仍不带。",
+          "evidence": [
+            "install.mjs makeBackup：install-state.json、preset-skills/、manifest format 1",
+            "target/plugins/heartbeat/package.json files 不含 heartbeat.mjs 等新增脚本",
+            "target/plugins/heartbeat/heartbeat.mjs 的 CFG/STATE/LOG 属于独立自主心跳部署；本 kit 未部署它"
+          ],
+          "checks": [
+            "flows",
+            "legacy"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "changed",
+          "reason": "隔离回归发现恢复时 fixes 错读目标旧状态，丢失备份里的逐条核对结论与证据；改为读取 RB.state.fixes。旧 4.5 备份仍能映射包名、preset 默认项与 Flash 会话别名；技能改动、中文目录、空目录、冲突拒绝与强制恢复保持有效。",
+          "evidence": [
+            "install.mjs 安装记录 fixes 字段：RESTORE ? RB.state : state0",
+            "install.mjs 恢复 preset-skills / 会话及冲突保护",
+            "logs/verify-5.2/flows.mjs restore 断言；logs/verify-5.2/legacy.py check(restored)"
+          ],
+          "checks": [
+            "flows",
+            "legacy"
+          ]
+        }
+      ],
+      "findings": [],
+      "organs": null,
+      "fixes": {
+        "retired": [
+          "mcp-hub-home",
+          "echo-hub-path",
+          "huanqi-hub-path"
+        ],
+        "unretired": [],
+        "changes": [
+          {
+            "id": "pack-unshipped",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "mnemon-runtime",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "memory-home",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "memory-pressure",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "mcp-hub-home",
+            "action": "retire",
+            "evidence": [
+              "对照 c370a69 → fe3c456：原写死 Windows 路径已去除，报告归 author-fixed；新引入的问题由独立新 id 管理，旧安装仍按旧条目识别。"
+            ]
+          },
+          {
+            "id": "mcp-hub-homedir",
+            "action": "add",
+            "evidence": [
+              "lib/fixes.mjs / lib/huanqi-patches.mjs：对应 fe3c456 缺失导入或目录布局问题；selfcheck 复现异常、核对修后求值与逐字节还原；flows 验证报告、计划及二次检查。"
+            ]
+          },
+          {
+            "id": "yantai-soul",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "yantai-memory",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "riji-diary",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "echo-load-name",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "echo-hub-path",
+            "action": "retire",
+            "evidence": [
+              "对照 c370a69 → fe3c456：原写死 Windows 路径已去除，报告归 author-fixed；新引入的问题由独立新 id 管理，旧安装仍按旧条目识别。"
+            ]
+          },
+          {
+            "id": "echo-node-darwin",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "echo-settings-path",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "echo-diag-join",
+            "action": "add",
+            "evidence": [
+              "lib/fixes.mjs / lib/huanqi-patches.mjs：对应 fe3c456 缺失导入或目录布局问题；selfcheck 复现异常、核对修后求值与逐字节还原；flows 验证报告、计划及二次检查。"
+            ]
+          },
+          {
+            "id": "panel-load-name",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "panel-ensure-block",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "huanqi-hub-path",
+            "action": "retire",
+            "evidence": [
+              "对照 c370a69 → fe3c456：原写死 Windows 路径已去除，报告归 author-fixed；新引入的问题由独立新 id 管理，旧安装仍按旧条目识别。"
+            ]
+          },
+          {
+            "id": "huanqi-full-maint",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "huanqi-homedir",
+            "action": "add",
+            "evidence": [
+              "lib/fixes.mjs / lib/huanqi-patches.mjs：对应 fe3c456 缺失导入或目录布局问题；selfcheck 复现异常、核对修后求值与逐字节还原；flows 验证报告、计划及二次检查。"
+            ]
+          },
+          {
+            "id": "huanqi-hub-home",
+            "action": "add",
+            "evidence": [
+              "lib/fixes.mjs / lib/huanqi-patches.mjs：对应 fe3c456 缺失导入或目录布局问题；selfcheck 复现异常、核对修后求值与逐字节还原；flows 验证报告、计划及二次检查。"
+            ]
+          },
+          {
+            "id": "cr-input",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "huanqi-config-bool",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          },
+          {
+            "id": "preset-summary-model",
+            "action": "rewrite",
+            "evidence": [
+              "lib/fixes.mjs CHECKS：补齐 impact / when / verify / blocking，供 5.1 修复报告与计划使用；旧 id 保留。"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        {
+          "id": "remote-check",
+          "scope": "static",
+          "command": "git ls-remote origin refs/heads/main; git ls-remote https://github.com/cyanwell/dsh-agent-soul.git refs/heads/main",
+          "status": "passed",
+          "evidence": "只读查询：kit main=d2475982cd8965ea27b542147ece68ea03bcaded，等于本地 HEAD；上游 main=fe3c456189c7731f3941540bb913ec950425cdad。故本轮 --skip-kit-update 不遗漏自身远端更新；保留全部本地改动及 setups/鲸汐。"
+        },
+        {
+          "id": "static",
+          "scope": "static",
+          "command": "for f in install.mjs lib/*.mjs; do node --check \"$f\" || exit; done; git diff --check",
+          "status": "passed",
+          "evidence": "22 个 JS 模块语法检查通过；git diff --check 无输出。"
+        },
+        {
+          "id": "patch-selfcheck",
+          "scope": "simulated",
+          "command": "node logs/verify-5.2/selfcheck.mjs",
+          "status": "passed",
+          "evidence": "113 assertions passed：基线与目标的补丁判定、逐字节还原、重复应用、本机改动保护；三类缺失导入运行片段复现 ReferenceError，修后求值正确；作者补导入识别 absent，未知代码 unknown；计划缺字段/阻塞项 skip 拒绝。"
+        },
+        {
+          "id": "flows",
+          "scope": "simulated",
+          "command": "node logs/verify-5.2/flows.mjs",
+          "status": "passed",
+          "evidence": "23 次安装器调用全部符合预期（含拒绝场景 exit 1）。首装/重复/无变化更新；运行中只读报告；计划干跑和应用；配置变化/换家目录/离线源变更拒绝；c370a69 旧补丁安装升级与本机修改保留；修后两份报告待选均 0；中文及空目录/自定义技能备份恢复；核对证据恢复；已有数据冲突拒绝、强制恢复、损坏包拒绝；卸载只删未改技能；三个零件显式选装。详见 logs/verify-5.2/flows-result.json 与逐命令日志。"
+        },
+        {
+          "id": "legacy",
+          "scope": "simulated",
+          "command": "python3 logs/verify-5.2/legacy.py",
+          "status": "passed",
+          "evidence": "5 次安装器调用：git archive HEAD 的 4.5 + 913a7b2 首装（Flash v0.2.6 本地源）并备份，再以 5.2 / fe3c456 更新与恢复；压缩三件套旧目录/依赖迁移、默认 soul-ptc-flash、旧 yanqing-ptc-flash 会话别名、全能与4技能、会话原字节保留；再次更新报告已经是最新。详见 legacy-result.json。"
+        },
+        {
+          "id": "iteration-refresh",
+          "scope": "simulated",
+          "command": "node install.mjs --kit-iterate --skip-kit-update --ref fe3c456189c7731f3941540bb913ec950425cdad",
+          "status": "passed",
+          "evidence": "完成代码修正后重新联网生成本报告；22 个上游文件变化，契约提示 0；16 条仍需修、3 条作者这次修好、0 条锚点失配。diff -qr 核对本报告 base/target 与实际验证的 18-22-42 快照逐文件一致。"
+        }
+      ],
+      "limitations": [
+        "未安装到用户真实 DSH，未启动/重启桌面，未做新会话工具、压缩门牌、技能加载、真实 MCP 连接验收；VERIFIED 不变。",
+        "macOS 上隔离 HOME/profile、--no-heartbeat 测试；没有注册真实 launchd/计划任务，未做 Windows/PowerShell 或交互终端验收。",
+        "heartbeat/chat/clawbot 仅验证可选装配；保留上轮用户选择照原样、默认不装。chat 缺失导入/硬编码会话/无鉴权、heartbeat 路径与 Windows 依赖等上游限制未修，文档明确说明。",
+        "补丁运行验证是隔离表达式求值与文件检查，不等同于真实宿主加载；Flash 使用本地 v0.2.6 快照，不声称它是远端最新版本。",
+        "本轮不提交或推送；验证脚本和日志在忽略的 logs/verify-5.2/，完成结论随 kit-iteration.json 保存。"
       ]
     }
   ]
