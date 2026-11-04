@@ -25,7 +25,7 @@ kit 5.3 将下列改动放进修复清单。安装、更新仍使用作者原文
 
 heartbeat 面板和 kit 每日自检是两套入口。此次迁移让 heartbeat 的运行链包含旧每日自检的三项工作，并补上日报；在验收前保留旧任务。
 
-修复后的零件目录包含 `index.js`、`heartbeat.mjs`、`heartbeat-core.mjs`、`activity.mjs` 和 `kit-macos.mjs`。运行数据默认位于 `<DSH 家目录>/dsh-soul/memory/hub/heartbeat/runtime`，支持原有 `YQ_HUB`、`YQ_SOUL`、`YQ_HB_DIR` 覆盖。首次加载生成关闭状态的配置，不覆盖已有配置。
+修复后的零件目录包含 `index.js`、`heartbeat.mjs`、`heartbeat-core.mjs`、`activity.mjs` 和 `kit-macos.mjs`。5.4 起修复对准上游 0221d89：原版面板从包外的 `../../lib/paths.mjs` 导入（装进 node_modules 后找不到）、还用了没定义的 `AI_ROOT`，脚本里用了没导入的 `resolveAll`；修复把这几处的路径都交给 `kit-macos.mjs`。已装的还是 fe3c456 的，先 `--update` 再修。运行数据默认位于 `<DSH 家目录>/dsh-soul/memory/hub/heartbeat/runtime`，支持原有 `YQ_HUB`、`YQ_SOUL`、`YQ_HB_DIR` 覆盖。首次加载生成关闭状态的配置，不覆盖已有配置。
 
 以下示例使用默认目录。Agent 必须换成报告中实际的家目录和 profile；不要照抄到另一套安装。
 
@@ -70,7 +70,7 @@ node install.mjs --fix --fix-revert heartbeat-darwin --dry-run
 
 ## 开发验证
 
-固定到已核实上游快照后运行：
+固定到已核实上游快照后运行（要在 macOS 上跑：里面会调用 `plutil` 等系统工具；在 Linux 上只能借 `process.platform` 垫片跑到面板加载和 `heartbeat.mjs --force` 这一步）：
 
 ```bash
 node scripts/verify-macos.mjs <上游源码目录>

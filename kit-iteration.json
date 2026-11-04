@@ -2,8 +2,8 @@
   "format": 1,
   "repo": "cyanwell/dsh-agent-soul",
   "baseline": {
-    "sha": "fe3c456189c7731f3941540bb913ec950425cdad",
-    "treeDigest": "b437182e7d8b4cda5038006c428bd2c779967984114498d05e80c812368afa2c"
+    "sha": "0221d8913e1da9836d63f16c27c5149f503d3264",
+    "treeDigest": "4cf70f02e64865d27419020b4087083626a3025db59b0388d0056addd3051ac8"
   },
   "fixes": {
     "retired": {
@@ -41,6 +41,20 @@
         "repo": "cyanwell/dsh-agent-soul",
         "upstream": "fe3c456189c7731f3941540bb913ec950425cdad",
         "evidence": "present → absent（plugins/huanqi/lib/index.js）"
+      },
+      "huanqi-hub-home": {
+        "at": "2026-11-04T04:15:30.311Z",
+        "kitVersion": "5.4",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "0221d8913e1da9836d63f16c27c5149f503d3264",
+        "evidence": "0221d89 换气改用四级解析，第一候选就是 <DSH_HOME>/dsh-soul/memory；记忆库定位改由 huanqi-paths-import 负责"
+      },
+      "echo-settings-path": {
+        "at": "2026-11-04T04:15:30.311Z",
+        "kitVersion": "5.4",
+        "repo": "cyanwell/dsh-agent-soul",
+        "upstream": "0221d8913e1da9836d63f16c27c5149f503d3264",
+        "evidence": "fe3c456 / 0221d89 的 echo 设置接口已改用面板自己找到的中枢，基线和目标都判作者已修"
       }
     },
     "catalog": [
@@ -112,7 +126,7 @@
         "why": "上游只认 DSH_HOME 环境变量，没有就退回插件目录",
         "blocking": false,
         "impact": "配置里自我层是相对路径时，自我层读不到（每轮注入里没有 SELF.md）；是绝对路径时功能照常，只是挪 DSH 家目录、换用户名后要重跑 --update",
-        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）",
+        "when": "DSH 没把 DSH_HOME 传给插件（有的桌面版不传，已知坑 1；看换气的加载记录能判断这台传不传）",
         "verify": [
           "看本机事实里 dsh-agent-memory 的 selfPath：相对路径（dsh-soul/…）→ 不修会读不到；绝对路径 → 只影响挪家目录",
           "在 DSH 新会话里看每轮注入有没有自我层的内容",
@@ -142,7 +156,7 @@
         "why": "同上",
         "blocking": false,
         "impact": "每轮注入里没有上下文水位（或不准），agent 不知道上下文快满了",
-        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传）",
+        "when": "DSH 没把 DSH_HOME 传给插件（有的桌面版不传；看换气的加载记录能判断这台传不传）",
         "verify": [
           "在 DSH 新会话里看每轮注入有没有上下文水位那一行，聊几轮后数值会不会涨"
         ],
@@ -161,35 +175,6 @@
         ]
       },
       {
-        "id": "mcp-hub-home",
-        "phase": "file",
-        "part": "mcp-hub",
-        "since": "2.1",
-        "basis": "kit",
-        "title": "mcp-hub 清单位置",
-        "why": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home",
-        "blocking": false,
-        "impact": "mcp-hub 找不到清单：面板是空的，会话里没有 mcp__echo__* 检索工具，记忆召回只能走慢路子",
-        "when": "DSH 没传 DSH_HOME（桌面版一般不传），这台又不是作者那台 D:\\AI\\dsh\\home",
-        "verify": [
-          "看本机事实：<DSH 家目录>/mcp-hub/servers.json 在不在、里面有没有 echo",
-          "在 DSH 新会话的工具列表里找 mcp__echo__ 开头的工具；mcp-hub 面板列不列得出 echo"
-        ],
-        "type": "path",
-        "target": "mcp-hub/index.js",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "没有 DSH_HOME 时退到作者电脑的 D:\\AI\\dsh\\home"
-          }
-        ],
-        "applicability": "仅在 mcp-hub 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
         "id": "mcp-hub-homedir",
         "phase": "file",
         "part": "mcp-hub",
@@ -199,9 +184,9 @@
         "why": "上游 11-04 把兜底改成 join(homedir(), '.dsh')，却没导入 homedir：DSH 不传 DSH_HOME 时一激活就报错",
         "blocking": true,
         "impact": "mcp-hub 一激活就报错（homedir is not defined）：面板没了，会话里没有 mcp__echo__* 检索工具，记忆召回只能走慢路子",
-        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）；上游 6531d30 起才有",
+        "when": "DSH 没把 DSH_HOME 传给插件（有的桌面版不传，已知坑 1；Boss 的 Mac 上 2.0.21-next 实测会传）；上游 6531d30 起才有",
         "verify": [
-          "看本机事实：DSH 家目录在哪；脚本看不到 DSH 传给插件的环境变量，按已知坑 1 当作不传",
+          "看本机事实：换气最近一次加载成功时这条修复打没打（对照安装记录的修复结论）；没打还能加载，说明这台 DSH 会传 DSH_HOME，选不修；没有加载记录就按会撞上处理",
           "启动 DSH 之前就要处理；已经启动过的，看会话的工具列表里有没有 mcp__echo__ 开头的工具"
         ],
         "type": "path",
@@ -304,64 +289,6 @@
         ]
       },
       {
-        "id": "echo-load-name",
-        "phase": "file",
-        "part": "echo",
-        "since": "2.2",
-        "basis": "kit",
-        "title": "echo 的加载名等于包名",
-        "why": "上游改了包名、cordis.patch.yml 里漏改，DSH 按旧名找不到包",
-        "blocking": true,
-        "impact": "回声面板加载失败：面板空白，严重时应用起不来",
-        "when": "已装那一版上游的 cordis.patch.yml 还用旧包名加载（上游 v3.0.0 起作者已修）",
-        "verify": [
-          "看报告的判定：作者已修的就是「换回作者原文」或不动",
-          "启动 DSH 之前就要处理"
-        ],
-        "type": "load-name",
-        "target": "echo/cordis.patch.yml",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "上游改了包名、cordis.patch.yml 里漏改，DSH 按旧名找不到包"
-          }
-        ],
-        "applicability": "仅在 echo 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
-        "id": "echo-hub-path",
-        "phase": "file",
-        "part": "echo",
-        "since": "4.0",
-        "basis": "kit",
-        "title": "echo 面板的诊断日志改到 DSH 家目录的记忆中枢",
-        "why": "上游 10-30 新加的失败诊断写死作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默写不进去",
-        "blocking": false,
-        "impact": "回声面板体检失败时，诊断日志写不进去，排错没线索；平时没感觉",
-        "when": "这台不是作者那台电脑（没有 D:\\AI\\memory\\hub）",
-        "verify": [
-          "这条只关系到排错：问用户要不要留着诊断日志",
-          "看记忆中枢下有没有 _plugin-diag.log（打上以后，体检失败才会写）"
-        ],
-        "type": "path",
-        "target": "echo/index.js",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "上游 10-30 新加的失败诊断写死作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默写不进去"
-          }
-        ],
-        "applicability": "仅在 echo 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
         "id": "echo-node-darwin",
         "phase": "file",
         "part": "echo",
@@ -382,34 +309,6 @@
           {
             "source": "lib/fixes.mjs",
             "detail": "作者只按 Windows 的安装布局找 node；Mac 上找不到就拿 DSH 主程序去跑体检脚本，面板体检永远是空的"
-          }
-        ],
-        "applicability": "仅在 echo 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
-        "id": "echo-settings-path",
-        "phase": "file",
-        "part": "echo",
-        "since": "4.3",
-        "basis": "kit",
-        "title": "echo 面板的设置文件改到 echo 自己找到的记忆中枢",
-        "why": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来",
-        "blocking": false,
-        "impact": "回声面板改常驻天数、内存预算存不上（报「写入失败」），实时状态一栏是空的",
-        "when": "DSH 不传 ECHO_HUB（桌面版一般不传）",
-        "verify": [
-          "在回声面板里改一次常驻天数，看会不会报「写入失败」"
-        ],
-        "type": "path",
-        "target": "echo/index.js",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "上游 11-01 新加的常驻天数 / 内存预算设置兜底写死作者电脑的 D:/AI/memory/hub：别的电脑上存不进去，echo-mcp 也读不到，实时状态也显示不出来"
           }
         ],
         "applicability": "仅在 echo 已安装或本次计划安装时适用",
@@ -448,35 +347,6 @@
         ]
       },
       {
-        "id": "panel-load-name",
-        "phase": "file",
-        "part": "huanqi-panel",
-        "since": "2.2",
-        "basis": "kit",
-        "title": "换气面板的加载名等于包名",
-        "why": "同上",
-        "blocking": true,
-        "impact": "换气面板加载失败：面板空白，严重时应用起不来",
-        "when": "已装那一版上游的 cordis.patch.yml 还用旧包名加载（上游 v3.0.0 起作者已修）",
-        "verify": [
-          "看报告的判定：作者已修的就是「换回作者原文」或不动",
-          "启动 DSH 之前就要处理"
-        ],
-        "type": "load-name",
-        "target": "huanqi-panel/cordis.patch.yml",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "同上"
-          }
-        ],
-        "applicability": "仅在 huanqi-panel 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
         "id": "panel-ensure-block",
         "phase": "file",
         "part": "huanqi-panel",
@@ -500,35 +370,6 @@
           }
         ],
         "applicability": "仅在 huanqi-panel 已安装或本次计划安装时适用",
-        "validation": [
-          "syntax-or-yaml",
-          "byte-roundtrip"
-        ]
-      },
-      {
-        "id": "huanqi-hub-path",
-        "phase": "file",
-        "part": "huanqi",
-        "since": "2.16",
-        "basis": "author",
-        "title": "换气诊断日志和测试触发口改到 DSH 家目录的记忆中枢",
-        "why": "写死作者电脑的 D:\\AI\\memory\\hub，作者自己点过名：装到别人机器就静默失效",
-        "blocking": false,
-        "impact": "换气的诊断日志和测试触发口写到作者电脑的 D:\\AI\\memory\\hub，别的电脑上静默失效：熔断了查不到日志，测试触发口不工作",
-        "when": "这台不是作者那台电脑",
-        "verify": [
-          "问用户会不会用换气的测试触发口、要不要诊断日志",
-          "看记忆中枢下有没有换气的诊断日志"
-        ],
-        "type": "path",
-        "target": "huanqi/lib/index.js",
-        "evidence": [
-          {
-            "source": "lib/fixes.mjs",
-            "detail": "写死作者电脑的 D:\\AI\\memory\\hub，作者自己点过名：装到别人机器就静默失效"
-          }
-        ],
-        "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
         "validation": [
           "syntax-or-yaml",
           "byte-roundtrip"
@@ -573,9 +414,9 @@
         "why": "上游 11-04 加了 join(homedir(), '.dsh')，却没导入 homedir（作者特意不引 node:os，文件里只有自己的 homeDir()）：DSH 不传 DSH_HOME 时一加载就报错",
         "blocking": true,
         "impact": "换气一加载就报错（homedir is not defined）：不再自动换气，换气面板没有数据，长会话会一路涨到上下文顶上",
-        "when": "DSH 没把 DSH_HOME 传给插件（桌面版一般不传，已知坑 1）；上游 6531d30 起才有",
+        "when": "DSH 没把 DSH_HOME 传给插件（有的桌面版不传，已知坑 1；Boss 的 Mac 上 2.0.21-next 实测会传）；上游 6531d30 起才有",
         "verify": [
-          "看本机事实：DSH 家目录在哪；脚本看不到 DSH 传给插件的环境变量，按已知坑 1 当作不传",
+          "看本机事实：换气最近一次加载成功时这条修复打没打（对照安装记录的修复结论）；没打还能加载，说明这台 DSH 会传 DSH_HOME，选不修；没有加载记录就按会撞上处理",
           "启动 DSH 之前就要处理；已经启动过的，看换气面板有没有数据"
         ],
         "type": "path",
@@ -593,26 +434,26 @@
         ]
       },
       {
-        "id": "huanqi-hub-home",
+        "id": "huanqi-paths-import",
         "phase": "file",
         "part": "huanqi",
-        "since": "5.2",
+        "since": "5.4",
         "basis": "kit",
-        "title": "换气的记忆中枢按 DSH 家目录定位",
-        "why": "上游 11-04 改成从 DSH 家目录往上推两级拼 memory/hub，只对作者那台的目录布局成立；安装包的记忆中枢在 <DSH 家目录>/dsh-soul/memory/hub",
-        "blocking": false,
-        "impact": "换气的诊断日志和测试触发口落到「DSH 家目录往上两级/memory/hub」，本机记忆中枢不在那儿就静默失效：熔断了查不到日志，测试触发口不工作",
-        "when": "没设 YQ_HUB，记忆中枢又不在 DSH 家目录往上两级的 memory/hub（只有作者那台的目录布局正好对上）；上游 6531d30 起才有",
+        "title": "换气不再从包外导入 lib/paths.mjs",
+        "why": "上游 11-04 第二次改路径，换气从仓库根的 lib/paths.mjs 取记忆库位置；这个文件不在任何包里，装进 node_modules 后找不到，一加载就报错",
+        "blocking": true,
+        "impact": "换气一加载就报错（找不到 lib/paths.mjs）：不再自动换气，换气面板没有数据，长会话会一路涨到上下文顶上",
+        "when": "每台都会撞上：上游 0221d89 起换气从包外的 ../../../lib/paths.mjs 导入，装进 node_modules 后这个文件不存在，DSH_HOME 传不传都一样",
         "verify": [
-          "看本机事实：上游推出来的位置和本机记忆中枢是不是同一个，是同一个就不会撞上",
-          "问用户会不会用换气的测试触发口、要不要诊断日志"
+          "看本机事实：已装的换气 lib/index.js 有没有这行导入、profile 下有没有 lib/paths.mjs",
+          "启动 DSH 之前就要处理"
         ],
         "type": "path",
         "target": "huanqi/lib/index.js",
         "evidence": [
           {
             "source": "lib/fixes.mjs",
-            "detail": "上游 11-04 改成从 DSH 家目录往上推两级拼 memory/hub，只对作者那台的目录布局成立；安装包的记忆中枢在 <DSH 家目录>/dsh-soul/memory/hub"
+            "detail": "上游 11-04 第二次改路径，换气从仓库根的 lib/paths.mjs 取记忆库位置；这个文件不在任何包里，装进 node_modules 后找不到，一加载就报错"
           }
         ],
         "applicability": "仅在 huanqi 已安装或本次计划安装时适用",
@@ -2240,6 +2081,223 @@
         "heartbeat/chat/clawbot 仅验证可选装配；保留上轮用户选择照原样、默认不装。chat 缺失导入/硬编码会话/无鉴权、heartbeat 路径与 Windows 依赖等上游限制未修，文档明确说明。",
         "补丁运行验证是隔离表达式求值与文件检查，不等同于真实宿主加载；Flash 使用本地 v0.2.6 快照，不声称它是远端最新版本。",
         "本轮不提交或推送；验证脚本和日志在忽略的 logs/verify-5.2/，完成结论随 kit-iteration.json 保存。"
+      ]
+    },
+    {
+      "completedAt": "2026-11-04T04:15:30.311Z",
+      "reportCreatedAt": "2026-11-04T04:13:47.222Z",
+      "base": "fe3c456189c7731f3941540bb913ec950425cdad",
+      "target": "0221d8913e1da9836d63f16c27c5149f503d3264",
+      "kitVersion": "5.4",
+      "kitUpdate": {
+        "status": "skipped",
+        "reason": "显式使用 --skip-kit-update"
+      },
+      "summary": "跟上游 0221d89（fe3c456 → 0221d89）。上游第二次改路径：换气、心跳从仓库根的 lib/paths.mjs 导入，装进 node_modules 后找不到，换气一加载就报错；心跳脚本用了没导入的 resolveAll，面板还用了没定义的 AI_ROOT。kit 5.4 按 Boss 定的原则改：安装、更新先同步作者最新版（kit 修复、本机手改、中枢上游脚本一律换回作者原文，原样进 archives/ 快照），问题全部归修复；修复清单只对准最新版，退役的 7 条删掉；新增 huanqi-paths-import，改写 heartbeat-darwin；发布清单检查新增包外导入；自动备份统一到 kit 的 archives/；可选零件全量列出；人设一个输入框；问答和修复计划输出固定弹窗。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "安装以作者为准：上游包问题（含新增的包外导入）不再停下而是写进「需要留意」并在收尾点名；已有的零件和作者原文不同就整包重装；中枢一律走作者的 install-kit --all。问答：可选零件分三组全量列出、兼容问题两档说法、人设一个输入框、输出 popups。",
+          "evidence": [
+            "install.mjs PKG_BROKEN/BLOCKERS、partsDone 循环、syncHub、describeSetup 零件表",
+            "lib/setup.mjs QUESTIONS/normalizeAnswers/questionSheet/askTerminal；lib/popups.mjs；lib/parts.mjs PLATFORM_NOTES/PART_GROUPS",
+            "lib/package-contract.mjs outside；target/plugins/huanqi/lib/index.js 第 166 行、target/plugins/heartbeat/index.js 第 22、56 行"
+          ],
+          "checks": [
+            "static",
+            "sync-update",
+            "fix-plan"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "更新改成同步作者最新版：partDiff 不再还原 kit 补丁、按纯上游比；取消 LOCAL_PARTS 和中枢三方比对；preset 一律按作者生成（摘要路由交给修复）；skills 不再保留本机改动；修复结论清空只留核对证据；4.0 以前的安装停下提示。",
+          "evidence": [
+            "install.mjs partDiff/HUB_DRIFT/syncHub/SUMMARY_MODEL/state fixes reset/fixRecords.files 清空",
+            "lib/fix-records.mjs planManagedText sync；lib/preset-skills.mjs",
+            "lib/fixes.mjs 退役 7 条、新增 huanqi-paths-import；lib/macos-patches.mjs heartbeat-darwin 改写"
+          ],
+          "checks": [
+            "inspect",
+            "sync-update",
+            "fix-plan",
+            "macos-partial"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "changed",
+          "reason": "自动快照从 DSH 家目录搬到 kit 的 archives/，与迁移包 backups/ 区分；快照即事务回滚依据（按 DSH 家目录相对路径存放）；旧 .bak/_backup/node_modules/*.bak 自动迁入 legacy/。迁移包不再带 preset-skills（恢复时从上游重装）。",
+          "evidence": [
+            "lib/archive.mjs",
+            "lib/fix-transaction.mjs place 参数",
+            "install.mjs backup()/快照步骤/legacyBackups 迁移/makeBackup 去掉 preset-skills",
+            "lib/kit-update.mjs 排除 archives",
+            ".gitignore"
+          ],
+          "checks": [
+            "sync-update",
+            "backup-restore-uninstall"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "changed",
+          "reason": "恢复同样装作者最新版；--force 覆盖时原书房和记忆中枢进本次快照的 pre-restore/；旧备份里的 preset-skills 不再拷回；快照与回滚同安装。",
+          "evidence": [
+            "install.mjs 恢复 RB.conflict 分支、copyTree 去掉 preset-skills",
+            "lib/archive.mjs snap"
+          ],
+          "checks": [
+            "backup-restore-uninstall"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "package-integrity:plugins/huanqi/lib/index.js:../../../lib/paths.mjs",
+          "decision": "fixed",
+          "reason": "新增 blocking 修复 huanqi-paths-import，把包外导入换成包内函数（记忆库按 DSH 家目录定位）；安装照装、收尾点名；隔离实测修后加载 OK"
+        },
+        {
+          "id": "package-integrity:plugins/heartbeat/index.js:../../lib/paths.mjs",
+          "decision": "fixed",
+          "reason": "heartbeat 是默认不装的可选零件、照上游原样装：caveat 写明 0221d89 一加载就报错；macOS 的 heartbeat-darwin 改写后用 kit-macos.mjs 接管路径（面板加载、heartbeat.mjs --force 实测通过）；其余系统没有修复，问答里写明「没有修复」"
+        }
+      ],
+      "organs": null,
+      "fixes": {
+        "retired": [
+          "huanqi-hub-home",
+          "echo-settings-path"
+        ],
+        "unretired": [],
+        "changes": [
+          {
+            "id": "huanqi-paths-import",
+            "action": "add",
+            "evidence": [
+              "target/plugins/huanqi/lib/index.js：import { resolveAll } from '../../../lib/paths.mjs'",
+              "隔离实测：node_modules/dsh-huanqi 加载 ERR_MODULE_NOT_FOUND → 修后 OK"
+            ]
+          },
+          {
+            "id": "heartbeat-darwin",
+            "action": "rewrite",
+            "evidence": [
+              "target/plugins/heartbeat/index.js 包外导入、heartbeat.mjs resolveAll 未导入、daily 一步改成 IIFE",
+              "lib/macos-patches.mjs 3+3 处锚点改写；verify-macos 在 darwin 垫片下通过到 check-scheduler"
+            ]
+          },
+          {
+            "id": "huanqi-hub-home",
+            "action": "retire",
+            "evidence": [
+              "0221d89 换气改用四级解析，第一候选就是 <DSH_HOME>/dsh-soul/memory；记忆库定位改由 huanqi-paths-import 负责"
+            ]
+          },
+          {
+            "id": "echo-settings-path",
+            "action": "retire",
+            "evidence": [
+              "fe3c456 / 0221d89 的 echo 设置接口已改用面板自己找到的中枢，基线和目标都判作者已修"
+            ]
+          },
+          {
+            "id": "mcp-hub-home",
+            "action": "retire",
+            "evidence": [
+              "6531d30 起作者去掉 D:\\AI\\dsh\\home，5.2 已判作者修好；5.4 修复只对准最新版，条目删除"
+            ]
+          },
+          {
+            "id": "echo-hub-path",
+            "action": "retire",
+            "evidence": [
+              "6531d30 起作者去掉 D:\\AI\\memory\\hub，5.2 已判作者修好；条目删除"
+            ]
+          },
+          {
+            "id": "huanqi-hub-path",
+            "action": "retire",
+            "evidence": [
+              "6531d30 起作者去掉 D:\\AI\\memory\\hub，5.2 已判作者修好；条目删除"
+            ]
+          },
+          {
+            "id": "echo-load-name",
+            "action": "retire",
+            "evidence": [
+              "c370a69 起作者已修，5.0 已退役；条目删除，kit 3.0 包名别名一并去掉"
+            ]
+          },
+          {
+            "id": "panel-load-name",
+            "action": "retire",
+            "evidence": [
+              "c370a69 起作者已修，5.0 已退役；条目删除"
+            ]
+          },
+          {
+            "id": "mcp-hub-homedir",
+            "action": "rewrite",
+            "evidence": [
+              "核对方法改看 state/huanqi-boot.log；Boss 的 Mac 上换气在未打 huanqi-homedir 时加载成功，说明这台 DSH 传 DSH_HOME"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        {
+          "id": "static",
+          "status": "passed",
+          "scope": "static",
+          "command": "node --check install.mjs lib/*.mjs lib/macos/*.mjs scripts/*.mjs；node scripts/verify-setup.mjs",
+          "evidence": "全部语法检查通过；输出「问答自测通过」（人设解析 7 种写法、弹窗 ≤4 题 2–4 选项 ≤12 字标题、11 个可选零件全列、修复弹窗）"
+        },
+        {
+          "id": "inspect",
+          "status": "passed",
+          "scope": "static",
+          "command": "node insp.mjs <kit> <报告目录>（inspectUpstream 对 base/target 逐条判定）",
+          "evidence": "still-needed 19、unchecked 2；huanqi-paths-import fe3c456 absent → 0221d89 present；heartbeat-darwin 对 0221d89 present、锚点齐全"
+        },
+        {
+          "id": "sync-update",
+          "status": "passed",
+          "scope": "simulated",
+          "command": "隔离 DSH 家目录 hF5：--source base 安装大肥鱼+heartbeat+yantai → --fix --fix-only 打 4 条 → 手改 clock/index.js、放 1 个 .bak 和 1 个 _backup 批次 → --update --source target --base-source base",
+          "evidence": "update 退出 0；逐个零件 diff 已装包与 target/plugins 无 differ；「以前留在 DSH 家目录里的 2 份备份已搬进 …/legacy」；收尾「★ 修好之前别启动 DSH」列出 dsh-yanqing-heartbeat、pack-unshipped、mcp-hub-homedir、huanqi-homedir、huanqi-paths-import；安装记录修复状态全为 reset"
+        },
+        {
+          "id": "fix-plan",
+          "status": "passed",
+          "scope": "simulated",
+          "command": "hF5：--fix --report → 计划全部填 fix → --fix --plan；再在 node_modules 里 import（DSH_HOME 未设，@deepseek-ai 用 Proxy 桩）",
+          "evidence": "报告 popups 4 个（4/4/4/2 题）；plan 退出 0；dsh-huanqi/lib/index.js、dsh-mcp-hub、dsh-agent-echo、dsh-agent-yantai 全部 OK（修前换气 ERR_MODULE_NOT_FOUND …/profiles/desktop/lib/paths.mjs）"
+        },
+        {
+          "id": "backup-restore-uninstall",
+          "status": "passed",
+          "scope": "simulated",
+          "command": "hF5 --backup → 新家目录 hF6 --restore 该备份（--source target）→ hF5 --uninstall",
+          "evidence": "三步退出 0；快照落在 k54/archives/<主机>-<指纹>/ 下的 install/fix/update/restore/uninstall 各目录，带还原方法.txt 与 manifest.json；fix-transaction 按快照回滚单测：改动文件恢复、新建文件删除"
+        },
+        {
+          "id": "macos-partial",
+          "status": "passed",
+          "scope": "simulated",
+          "command": "NODE_OPTIONS=--import darwin-shim.mjs node scripts/verify-macos.mjs <target>（Linux VM 上把 process.platform 垫成 darwin）",
+          "evidence": "五个文件补丁 planFile/unpatch/语法 10 项×9 通过；改写后的 heartbeat 面板在 node_modules 里加载、heartbeat.mjs 与 --force 四步通过；之后 check-scheduler 因 Linux 没有 /usr/bin/plutil 停止"
+        }
+      ],
+      "limitations": [
+        "没在 DSH 桌面上实装 5.4；Boss 本机仍是 fe3c456 + 5.3 的修复，要 --update 后走一遍修复报告",
+        "verify-macos 的 launchd/plutil 部分要在 macOS 上跑，Linux VM 只验证到面板加载和 heartbeat.mjs --force",
+        "heartbeat 在非 macOS 上没有修复，0221d89 装上就加载失败（可选零件，默认不装）",
+        "Windows 没验证；弹窗规范只在手册和 JSON 里，实际弹窗效果要在 Cowork 里看一次"
       ]
     }
   ]
