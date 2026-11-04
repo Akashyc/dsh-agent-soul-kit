@@ -174,8 +174,10 @@ try {
   const fullParts = ['--add-part', 'yantai,heartbeat,riji,model-statusbar,mobile-adapt,perf,chat,clawbot']
   const output = run('install', target, ['--setup', '大肥鱼', '--flash', 'on', ...fullParts, ...defaults, ...sourceArgs])
   let result = installed(target)
-  assert.match(output, /安装流程到此停止/)
-  assert.doesNotMatch(output, /接下来（详见|上游发布清单漏列|按发布清单装上/)
+  assert.match(output, /启动 DSH 前先处理安装完整性问题/)
+  assert.match(output, /不代表 DSH 实际无法启动/)
+  assert.match(output, /┌─ 贴进新会话的话[\s\S]*node mo\.mjs add lead[\s\S]*└─/)
+  assert.doesNotMatch(output, /安装流程到此停止|上游发布清单漏列|按发布清单装上/)
   for (const [part, file] of [['yantai', 'env-config.mjs'], ['heartbeat', 'heartbeat.mjs'], ['heartbeat', 'heartbeat-core.mjs'], ['heartbeat', 'activity.mjs']]) {
     const name = json(path.join(soul, 'plugins', part, 'package.json')).name
     const original = fs.readFileSync(path.join(soul, 'plugins', part, file), 'utf8')
