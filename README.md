@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 6.0**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 6.1**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -153,7 +153,7 @@ node install.mjs
 ```bash
 node install.mjs --setup 大肥鱼     # 用现成方案装
 node install.mjs --update          # 更新到上游最新版（不打修复，装完单独检查）
-node install.mjs --update --flash on  # 加装灵魂 · PTC Flash（off 去掉）；装了的每次更新都跟作者最新发布的版本
+node install.mjs --update --flash on  # 加装 Flash 上游全部预设（off 去掉）；每次更新跟踪作者 main
 node install.mjs --update --add-part clawbot  # 补装默认不装、或以前拒掉的可选零件
 # 以下修复命令在独立 dsh-agent-soul-fix 目录执行
 node fix.mjs --report    # 修复检查：出报告和计划模板（只读），交给 agent 核对本机
@@ -169,8 +169,8 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 - **本体和零件**：必装的七个（加上 Soul preset 调用的 compact-region），再加方案里选了的可选零件。
 - **记忆检索**：通过 `memq` 检索；安装并接入 mcp-hub 后，还可在会话里调用 `mcp__echo__echo_search`。
-- **Soul preset**：灵魂、灵魂 · 创造、灵魂 · PTC、灵魂 · 预判、灵魂 · 全能五套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。全能只取 preset 本身那一块：上游 `preset-soul-all.yml` 后面跟着作者整份 profile 的导出（模型列表、第三方插件、局域网绑定、mnemon / 换气配置），照搬会盖掉你自己的配置。创造和全能用到的 4 个技能（上游 `presets/skills/`）放进 profile 的 `skills/`，更新时只换没改过的，本机改过的留着并报出来。可选第六个「灵魂 · PTC Flash」：照 [dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3 适配（压缩、裁剪带门牌），安装问答里和灵魂五套一起选、默认不选，已装的用 `--update --flash on` 加上；每次安装、更新在线取作者最新发布的版本。内置「大肥鱼」默认安装灵魂五套，新会话默认使用灵魂。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
-- **从砚青换到灵魂**：上游 v3.0.0 把砚青四套去个人化，改名为灵魂四套（id `yanqing*` → `soul*`，persona 不再写具体人名）。`--update` 换上新的，以前用砚青建的会话照常能打开（留一个和对应灵魂 preset 一样的别名，列表里标「旧会话用」），新会话默认的 `yanqing` 换成 `soul`；砚青 PTC Flash 同样改名为灵魂 · PTC Flash（`soul-ptc-flash`）。全能是这次新加的，已有的安装更新时补上。
+- **Soul preset**：灵魂、灵魂 · 创造、灵魂 · PTC、灵魂 · 预判、灵魂 · 全能五套使用上游原文，照作者的装法写进 profile 的 `cordis.patch.yml`（4.3 起；以前装在独立包 `dsh-soul-preset` 里，`--update` 会搬过去）。全能只取 preset 本身那一块：上游 `preset-soul-all.yml` 后面跟着作者整份 profile 的导出（模型列表、第三方插件、局域网绑定、mnemon / 换气配置），照搬会盖掉你自己的配置。创造和全能用到的 4 个技能（上游 `presets/skills/`）放进 profile 的 `skills/`，更新时只换没改过的，本机改过的留着并报出来。可选「灵魂 · Flash（上游全部预设）」：从 [dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 `presets/` 动态发现全部 preset，作者有几套就适配几套，不限定文件名或数量。显示名是「灵魂 · 上游名称」，简介保留上游原文并追加门牌压缩、裁剪和范围压缩的改造说明。问答里默认不选，已有安装用 `--update --flash on` 加上；默认跟踪作者 main，`--flash-ref` 可固定发布标签或提交。内置「大肥鱼」默认安装灵魂五套，新会话默认使用灵魂。压缩摘要和裁剪后的工具输出带门牌，可按 `log:<会话>#seq=<n>` 回取原文。
+- **从砚青换到灵魂**：上游 v3.0.0 把砚青四套去个人化，改名为灵魂四套（id `yanqing*` → `soul*`，persona 不再写具体人名）。`--update` 换上新的，以前用砚青建的会话照常能打开（留一个和对应灵魂 preset 一样的别名，列表里标「旧会话用」），新会话默认的 `yanqing` 换成 `soul`；旧砚青 PTC Flash、灵魂 · PTC Flash 的单预设记录会升级为上游整组，仍被引用的旧 id 保留兼容别名；上游删掉仍被会话或默认入口使用的 Flash id 时停止，先明确迁移。全能是这次新加的，已有的安装更新时补上。
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
 - **心跳**：统一使用作者可选 heartbeat 零件；kit 不再生成或注册每日任务，运行与调度须单独验收、确认启用。
@@ -191,7 +191,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/home-paths.mjs` | 路径自动定位：插件运行时找 DSH 家目录的代码、memory 补丁、memory 配置的核对与改写 |
 | `lib/persona.mjs` | 「说话与样子」的三条规矩：用户没写的才补，句子去重 |
 | `lib/uninstall.mjs` | 卸载的规划：摘配置和锁文件里的条目、换默认 preset、改写旧会话开头的 preset |
-| `lib/flash-presets.mjs` | 灵魂 · PTC Flash：校验 dsh-flash-presets v3 的结构，换 id 和名字、压缩裁剪换成带门牌的零件、补范围压缩，其余照作者 |
+| `lib/flash-presets.mjs` | 动态发现 Flash 上游全部 preset，名称和简介跟随作者，压缩零件取本次 Soul 源码包名，其余规则和参数保留 |
 | `lib/soul-presets.mjs` | 灵魂五套逐字搬上游 `presets/`（`@include` 按作者 `soul-preset build` 的算法展开，全能只取 preset 那一块），写进 profile `cordis.patch.yml` 的 `- insert:` 那一节；砚青等旧 id 的别名；卸载时可保留使用官方零件的空壳 |
 | `lib/preset-skills.mjs` | Soul preset 自带的 skills：拷进 profile 的 `skills/`，和上游不一样的换成上游原文 |
 | `lib/archive.mjs` | 自动快照：每次操作前的原样放进 `archives/`，旧版留在 DSH 家目录里的备份搬进 `legacy/` |
@@ -277,6 +277,10 @@ kit 继续检查发布文件与加载依赖，发现安装完整性问题会提�
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，在旧电脑上 `--backup`、新电脑上 `--restore`，还原后再任命下一代主导。
 
 ## 版本记录
+
+### 6.1（2026-11-04）
+
+Flash 改为整组动态适配：默认跟踪作者 main，不写死文件名、显示名和数量；简介来自上游并追加改造说明。安装记录、更新、恢复、卸载支持动态 id，旧单预设记录保留兼容入口；删除仍有会话引用的 Flash preset 时停止。三件套包名核对为作者 v3.0.0 的 `dsh-yanqing-*`，Flash 使用本次源码实际名称。新增 `node scripts/verify-flash.mjs <Soul源码> <Flash源码>` 隔离自测，未进行真实桌面安装。
 
 ### 6.0（2026-11-04）
 

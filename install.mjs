@@ -23,10 +23,10 @@
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
 //   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
 //   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
-//   --default-preset <id|keep>   新会话默认用的 preset：soul、soul-ptc、soul-cordis、soul-distill、soul-all、soul-ptc-flash 或 keep（更新默认）；安装默认按方案
-//   --flash <on|off>             灵魂 · PTC Flash（dsh-flash-presets v3 的灵魂适配）装不装：安装默认按方案，更新默认按安装记录
-//   --flash-ref <标签|分支|提交>  灵魂 · PTC Flash 的源取哪一版，默认作者最新发布的版本（GitHub releases/latest）
-//   --flash-source <目录|.tar.gz> 灵魂 · PTC Flash 用本地的 dsh-flash-presets 源码，不联网
+//   --default-preset <id|keep>   新会话默认 preset：Soul id、动态 soul-flash-* id 或 keep（更新默认）；安装默认按方案
+//   --flash <on|off>             dsh-flash-presets 全部预设装不装：安装默认按方案，更新默认按安装记录
+//   --flash-ref <标签|分支|提交>  Flash 的源取哪一版，默认作者 main；可指定发布标签
+//   --flash-source <目录|.tar.gz> Flash 用本地的 dsh-flash-presets 源码，不联网
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH_NODE > DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → <用户目录>/.dsh → Windows 的 %APPDATA%\dsh 依次找
@@ -72,14 +72,14 @@ import { planMemoryConfig } from './lib/home-paths.mjs'
 import { inspectPackage, describeIssue } from './lib/package-contract.mjs'
 import { archiveRoot, opDir, snap, snapPath, moveInto, legacyBackups } from './lib/archive.mjs'
 import { parseNameMap, hasNames, nameMapLabel, sameNameMap, renameTree, guessNameMap } from './lib/name-map.mjs'
-import { PRESET_IDS, DEFAULT_PRESET_IDS, ADDED_PRESETS, OLD_PRESET_IDS, PRESET_LABEL, PRESET_SOURCE, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL } from './lib/soul-presets.mjs'
-import { FLASH_REPO, FLASH_FILE, FLASH_PRESET_ID } from './lib/flash-presets.mjs'
+import { PRESET_IDS, DEFAULT_PRESET_IDS, ADDED_PRESETS, OLD_PRESET_IDS, PRESET_LABEL as BASE_PRESET_LABEL, presetSourceKey, isKnownPresetId, presetSources, buildPresetBundle, buildShellBundle, isShellSection, findPresetSection, setPresetSection, presetSectionOf, OLD_PRESET_LABEL } from './lib/soul-presets.mjs'
+import { FLASH_REPO, FLASH_PRESET_ID, LEGACY_FLASH_SOURCE_ID, isFlashPresetId, readFlashPresets } from './lib/flash-presets.mjs'
 import { RETIRED_PRESETS, migratePresetDefault, migratePresetBundle, presetBlocks, planPresetSessions, applyPresetSessions } from './lib/preset-migration.mjs'
 import { beginFileTransaction } from './lib/file-transaction.mjs'
 import { acquireInstallLock } from './lib/install-lock.mjs'
 import { heartbeatInUse } from './lib/runtime-guard.mjs'
 import { needsSkills, planPresetSkills, pruneEmptyDirs } from './lib/preset-skills.mjs'
-import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
+import { OLD_SESSION_MODES, SOUL_PRESET_IDS, isSoulPresetId, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 import { PARTS, PART_NAMES, PRESET_ONLY, OPTIONAL_PARTS, MUST_HAVE, ADDED_PARTS, OPT_IN_PARTS, EXTERNAL_PARTS, PART_INFO, PLATFORM_LABEL, platformNote, platformText, verLess } from './lib/parts.mjs'
 import { SETUPS, render, parseBool, normalizeAnswers, buildSetupFiles, loadSetup, listSetups, initAnswers, describeSetup, questionSheet, askTerminal } from './lib/setup.mjs'
 import { IS_MAC, NODE_MIN_MAJOR, dshHomeCandidates, nodeVersionOf, nodesOnPath, detectNode, resolveProxy as systemProxy, quitDshMac } from './lib/platform.mjs'
@@ -88,7 +88,8 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '6.0'
+const KIT_VERSION = '6.1'
+const PRESET_LABEL = { ...BASE_PRESET_LABEL }
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
@@ -197,7 +198,7 @@ if (KIT_UPDATE && flag('--out') && !opt('--out')) {
 if ((flag('--old-sessions') || KEEP_DATA) && !UNINSTALL) { console.log('--old-sessions、--keep-data 只用于 --uninstall'); process.exit(2) }
 if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSIONS)) { console.log(`--old-sessions 只能是 ${Object.keys(OLD_SESSION_MODES).join(' / ')}：\n${Object.entries(OLD_SESSION_MODES).map(([k, v]) => `  ${k}：${v}`).join('\n')}`); process.exit(2) }
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
-if (DEFAULT_PRESET !== null && ![...PRESET_IDS, 'keep'].includes(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / keep`); process.exit(2) }
+if (DEFAULT_PRESET !== null && DEFAULT_PRESET !== 'keep' && !isKnownPresetId(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / soul-flash-* / keep`); process.exit(2) }
 if (flag('--flash') && !['on', 'off'].includes(FLASH_OPT)) { console.log('--flash 只能是 on 或 off（灵魂 · PTC Flash 装不装）'); process.exit(2) }
 if ((flag('--flash') || flag('--flash-ref') || flag('--flash-source')) && !['install', 'update', 'restore'].includes(MODE)) { console.log('--flash、--flash-ref、--flash-source 只用于安装、更新、恢复（--fix 钉在安装记录里那一版）'); process.exit(2) }
 // 旧修复参数明确退出，避免退化成安装命令。
@@ -557,24 +558,17 @@ async function getSource({ ref = REF, source = SOURCE, soft = false, repo = REPO
   try { r = extractTarGz(file, tmp) } catch (e) { if (soft) { info(`解压失败（${e.message}），这一份先不用`); return null } die(`解压失败：${e.message}`) }
   return { ...r, from: `GitHub ${repo}@${ref}（${d.via}）` }
 }
-// 灵魂 · PTC Flash 的源（lib/flash-presets.mjs）：默认取作者最新发布的版本（GitHub releases/latest），每次安装 / 更新都重新取，作者发了新版就跟上；
-// --flash-ref 指定版本，--flash-source 提供离线源码。
+// Flash 和 Soul 一样默认跟踪作者 main；显式版本和离线目录仍可复现旧安装。
 async function getFlashSource() {
-  let ref = FLASH_REF || null
-  if (!ref && !FLASH_SOURCE) {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-soul-flash-'))
-    TMP_DIRS.push(tmp)
-    const f = path.join(tmp, 'latest.json')
-    const d = await download(`https://api.github.com/repos/${FLASH_REPO}/releases/latest`, f)
-    ref = d.ok ? (readJson(f) || {}).tag_name : null
-    if (!ref) die(`查不到 ${FLASH_REPO} 最新发布的版本${d.ok ? '' : `（${d.errs.join('；')}）`}：加 --flash-ref <标签或 main> 指定，或者 --flash-source <本地目录或 .tar.gz>；不要灵魂 · PTC Flash 就加 --flash off`)
-  }
+  const ref = FLASH_REF || 'main'
   const s = await getSource({ ref, source: FLASH_SOURCE, repo: FLASH_REPO, flag: '--flash-source' })
-  if (!exists(path.join(s.dir, ...FLASH_FILE.split('/')))) die(`${s.from} 里没有 ${FLASH_FILE}：作者改了目录结构，这次先加 --flash off 不装灵魂 · PTC Flash，等安装包跟上`)
+  let presets
+  try { presets = readFlashPresets(s.dir, { parse: yamlParser(PROF) }) }
+  catch (error) { die(`读取 Flash preset 失败：${error.message}；尚未写入 DSH，请核对作者目录或用 --flash-source 指定源码`) }
   const v = (readJson(path.join(s.dir, 'package.json')) || {}).version || null
-  return { ...s, ref: FLASH_SOURCE ? null : ref, pkgVersion: v, version: `dsh-flash-presets ${v ? 'v' + v : '?'}${s.sha ? `（${s.sha.slice(0, 7)}）` : ''}` }
+  return { ...s, presets, ref: FLASH_SOURCE ? null : ref, pkgVersion: v, version: `dsh-flash-presets ${v ? 'v' + v : '?'}${s.sha ? `（${s.sha.slice(0, 7)}）` : ''}` }
 }
-const flashState = () => ({ repo: FLASH_REPO, ref: FLASH_SRC.ref, sha: FLASH_SRC.sha, version: FLASH_SRC.version, from: FLASH_SRC.from })
+const flashState = () => ({ repo: FLASH_REPO, ref: FLASH_SRC.ref, sha: FLASH_SRC.sha, version: FLASH_SRC.version, from: FLASH_SRC.from, presets: FLASH_SRC.presets.map(({ text, ...metadata }) => metadata) })
 
 // ── 源码体检 ──────────────────────────────────────────────────────────
 const REQUIRED_SOURCE_FILES = ['package.json', 'index.js', 'cordis.patch.yml', 'kit/echo/install-kit.mjs', 'kit/echo/scaffold.mjs', 'kit/templates/SELF.src.md', 'tools/init.mjs', 'tools/verify-client-ids.mjs']
@@ -1254,10 +1248,10 @@ if (UNINSTALL) {
   const readSession = (f) => { const b = fs.readFileSync(f); return f.endsWith('.zstd') ? (zstdOk ? zlib.zstdDecompressSync(b).toString('utf8') : null) : b.toString('utf8') }
   const sessions = sessionFiles.map((f) => { let t = null; try { t = readSession(f) } catch { t = null } return { file: f, text: t, preset: t === null ? undefined : sessionPreset(t) } })
   const unreadable = sessions.filter((x) => x.text === null)
-  const soulSessions = sessions.filter((x) => x.preset && SOUL_PRESET_IDS.includes(x.preset))
+  const soulSessions = sessions.filter((x) => x.preset && isSoulPresetId(x.preset))
   const byPreset = {}
   for (const x of soulSessions) byPreset[x.preset] = (byPreset[x.preset] || 0) + 1
-  const PRESET_MAP = Object.fromEntries(SOUL_PRESET_IDS.map((id) => [id, officialPresetFor(id)]))
+  const PRESET_MAP = Object.fromEntries([...new Set([...SOUL_PRESET_IDS, ...soulSessions.map((session) => session.preset)])].map((id) => [id, officialPresetFor(id)]))
   if (!present.length && !heartbeats.length && !dataDirs.length && !ptrOurs && !stateFiles.length) {
     out('\n这台电脑上没有 dsh-agent-soul 的东西，不用卸。')
     if (soulSessions.length) out(`还有 ${soulSessions.length} 个会话记着已经删掉的 Soul preset（${Object.keys(byPreset).join('、')}），多半打不开。想救它们：先用备份包 --restore 装回来，再 --uninstall --old-sessions rewrite。`)
@@ -1496,7 +1490,7 @@ if (UNINSTALL) {
     if (bad.length) warn(`有包要加载的插件找不到：${bad.slice(0, 5).join('；')}`)
     else if (parse) ok('剩下的每个包要加载的插件都找得到')
     const sel = (readText(cfgPath).match(/^ {4}selectedDefault: ['"]?([\w-]+)['"]?\s*$/m) || [])[1]
-    if (sel && SOUL_PRESET_IDS.includes(sel) && OLD !== 'shell') warn(`新会话默认 preset 还是 ${sel}，它已经删了；在 DSH 里选一个官方 preset`)
+    if (sel && isSoulPresetId(sel) && OLD !== 'shell') warn(`新会话默认 preset 还是 ${sel}，它已经删了；在 DSH 里选一个官方 preset`)
     else ok(`新会话默认 preset：${sel || '（没设，用 DSH 默认的）'}`)
   }
 
@@ -1633,22 +1627,22 @@ const USERN = (SETUP && SETUP.user) || (SETUP_INFO && SETUP_INFO.user) || '用�
 const setupText = (key) => (SETUP_NEW ? SETUP_NEW.files[SETUP.files[key]] : readText(path.join(SETUP_DIR, SETUP.files[key])))
 
 // 要生成的 Soul preset、默认 preset
-const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(installedPresetSection())).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter((id) => PRESET_IDS.includes(id)))] } catch { return [] } })()
+const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(installedPresetSection())).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter(isKnownPresetId))] } catch { return [] } })()
 // 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul、yanqing-ptc → soul-ptc 之类）：先映射再过滤，认不出的丢掉
 const mapOldPresetIds = (list) => {
   const out = []
   for (const x of Array.isArray(list) ? list : []) {
     const id = RETIRED_PRESETS[x] || OLD_PRESET_IDS[x] || x
-    if (PRESET_IDS.includes(id) && !out.includes(id)) out.push(id)
+    if (isKnownPresetId(id) && !out.includes(id)) out.push(id)
   }
   return out
 }
-const PRESET_CHOICE = MODE === 'install' ? SETUP.presets
+let PRESET_CHOICE = MODE === 'install' ? [...SETUP.presets]
   : MODE === 'restore' ? (mapOldPresetIds(RB.state.presetIds).length ? mapOldPresetIds(RB.state.presetIds) : [...DEFAULT_PRESET_IDS])
   : (mapOldPresetIds(state0 && state0.presetIds).length ? mapOldPresetIds(state0 && state0.presetIds) : presetsOnDisk.length ? presetsOnDisk : [...DEFAULT_PRESET_IDS])
-// --flash on / off：灵魂 · PTC Flash 加进来或去掉（记进安装记录的 presetIds，以后更新照做）
-if (FLASH_OPT === 'on' && !PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.push(FLASH_PRESET_ID)
-if (FLASH_OPT === 'off' && PRESET_CHOICE.includes(FLASH_PRESET_ID)) PRESET_CHOICE.splice(PRESET_CHOICE.indexOf(FLASH_PRESET_ID), 1)
+// --flash on / off：整组加进来或去掉，实际 id 在取源后展开。
+if (FLASH_OPT === 'on' && !PRESET_CHOICE.some(isFlashPresetId)) PRESET_CHOICE.push(FLASH_PRESET_ID)
+if (FLASH_OPT === 'off') PRESET_CHOICE = PRESET_CHOICE.filter((id) => !isFlashPresetId(id))
 if (!PRESET_CHOICE.length) die('--flash off 以后一个 Soul preset 都不剩了：至少留一个灵魂 preset')
 // 安装包后来增加的 preset：更新、恢复旧安装时按已有策略补上。
 if (MODE === 'update' || MODE === 'restore') {
@@ -1674,7 +1668,7 @@ if (MIGRATE_PRESETS && RETIRED_PRESETS[DEFAULT_PRESET]) {
   if (!PRESET_CHOICE.includes(DEFAULT_PRESET)) PRESET_CHOICE.push(DEFAULT_PRESET)
 }
 if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('soul') ? 'soul' : PRESET_CHOICE[0]
-if (PRESET_IDS.includes(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
+if (isKnownPresetId(DEFAULT_PRESET) && !isFlashPresetId(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
 
 
 // 要装的零件：必装的不许跳；可选的按方案；更新时以前拒掉的不再补
@@ -1799,8 +1793,33 @@ function splitDiff(d, base) {
   return { up, local, extra, missing, both, localCount: local.length + extra.length + missing.length + both.length }
 }
 
-const FLASH_SRC = PRESET_CHOICE.includes(FLASH_PRESET_ID) ? await getFlashSource() : null
-if (FLASH_SRC) ok(`灵魂 · PTC Flash 的源：${FLASH_SRC.from}，${FLASH_SRC.version}${state0?.flash?.sha && FLASH_SRC.sha && state0.flash.sha !== FLASH_SRC.sha ? `；上次装的是 ${state0.flash.version || state0.flash.sha.slice(0, 7)}` : ''}`)
+const FLASH_SRC = PRESET_CHOICE.some(isFlashPresetId) ? await getFlashSource() : null
+const FLASH_ALIASES = {}
+if (FLASH_SRC) {
+  FLASH_SRC.partNames = src.names
+  const discovered = FLASH_SRC.presets.map((preset) => preset.id)
+  const legacy = FLASH_SRC.presets.find((preset) => preset.sourceId === LEGACY_FLASH_SOURCE_ID)
+  if (legacy) {
+    FLASH_ALIASES[FLASH_PRESET_ID] = legacy.id
+    FLASH_ALIASES['yanqing-ptc-flash'] = legacy.id
+  }
+  const requested = PRESET_CHOICE.filter(isFlashPresetId)
+  if (MODE === 'install') {
+    const missing = requested.filter((id) => id !== FLASH_PRESET_ID && !discovered.includes(id))
+    if (missing.length) die(`方案指定的 Flash preset 不在上游目录中：${missing.join('、')}；请重新选择，未写入 DSH`)
+  }
+  PRESET_CHOICE = [...PRESET_CHOICE.filter((id) => !isFlashPresetId(id)), ...discovered]
+  for (const preset of FLASH_SRC.presets) PRESET_LABEL[preset.id] = preset.label
+  if (DEFAULT_PRESET === FLASH_PRESET_ID) {
+    if (MODE === 'install') DEFAULT_PRESET = discovered[0]
+    else if (legacy) DEFAULT_PRESET = legacy.id
+    else die('旧 Flash 默认入口在上游没有对应身份；请用 --default-preset 明确新入口，不能猜替代项')
+  }
+  if (isFlashPresetId(DEFAULT_PRESET) && !discovered.includes(DEFAULT_PRESET)) die(`默认 Flash preset ${DEFAULT_PRESET} 已不在上游，不能猜替代项；请用 --default-preset 指定本次目录中的 id`)
+  ok(`Flash 的源：${FLASH_SRC.from}，${FLASH_SRC.version}；发现 ${discovered.length} 个 preset，全部适配${state0?.flash?.sha && FLASH_SRC.sha && state0.flash.sha !== FLASH_SRC.sha ? `；上次装的是 ${state0.flash.version || state0.flash.sha.slice(0, 7)}` : ''}`)
+  for (const preset of FLASH_SRC.presets) info(`${preset.label}（${preset.id}）：${preset.description}`)
+}
+if (isFlashPresetId(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 未生成；请启用 Flash 或选择其它默认 preset`)
 const SRC_PRESETS = presetSources(NM, { upstreamDir: SRC.dir, flash: FLASH_SRC })
 // 旧会话用的别名：会话开头记着建会话时的 preset id（例如 2.10 以前的 standard-soul、cordis-soul），id 没了会话就打不开。
 // 还有会话在用的旧 id、已装的 preset 里已经有的别名，都留一个和对应新 preset 一样的别名；会话读不了时按安装记录里的旧 id 全留
@@ -1825,7 +1844,7 @@ function sessionPresetCounts(dirs) {
 const PRESET_ALIASES = {}
 let SESS = null // 会话在用的 preset id → 个数
 {
-  const cands = Object.entries(OLD_PRESET_IDS).filter(([o, n]) => !PRESET_IDS.includes(o) && PRESET_CHOICE.includes(n))
+  const cands = Object.entries({ ...OLD_PRESET_IDS, ...FLASH_ALIASES }).filter(([o, n]) => !PRESET_CHOICE.includes(o) && PRESET_CHOICE.includes(n))
   if (cands.length) {
     const sess = SESS = sessionPresetCounts([SESSIONS, ...(RESTORE ? [path.join(RB.root, 'sessions')] : [])])
     let onDisk = []
@@ -1840,6 +1859,18 @@ let SESS = null // 会话在用的 preset id → 个数
 let BUNDLE
 try { BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES }) } catch (e) { die('生成 Soul preset 失败：' + e.message + '。源 preset 的结构变了，要人工看一下，先停下告诉用户。') }
 const AUTHOR_BUNDLE = buildPresetBundle(SRC_PRESETS, PRESET_CHOICE, { aliases: PRESET_ALIASES })
+const previousPresetState = RESTORE ? RB.state : state0
+const droppedFlash = [...new Set([
+  ...Object.keys(presetSummary(installedPresetText)),
+  ...(previousPresetState?.presetIds || []),
+  ...Object.keys(previousPresetState?.presetAliases || {})
+])].filter((id) => (isFlashPresetId(id) || OLD_PRESET_IDS[id] === FLASH_PRESET_ID) && !BUNDLE.made[id] && !BUNDLE.aliases[id])
+if (droppedFlash.length) {
+  const sessions = sessionPresetCounts([SESSIONS, ...(RESTORE ? [path.join(RB.root, 'sessions')] : [])])
+  const selected = configBeforeMigration.match(/^ {4}selectedDefault: ['"]?([\w-]+)['"]?\s*$/m)?.[1]
+  if (sessions.unreadable || droppedFlash.some((id) => sessions.counts[id] || (DEFAULT_PRESET === 'keep' && selected === id))) die(`将移除的 Flash preset 仍被旧会话或默认入口引用：${droppedFlash.join('、')}；请先明确迁移，未写入 DSH`)
+  info(`移除已无会话及默认入口引用的 Flash preset：${droppedFlash.join('、')}`)
+}
 const OLD_PRESET_RECORD = ((RESTORE ? RB.state : state0)?.fixRecords?.presets || {}).section
   || ((RESTORE ? RB.state : state0)?.fixRecords?.presets || {})['cordis.patch.yml']
 if (MIGRATE_PRESETS && (retiredBlocks || /^#.*PTC.*Flash/m.test(LEGACY_PRESET_RAW))) {
@@ -1856,19 +1887,19 @@ if (parseYaml && (MIGRATE_PRESETS || BUNDLE.text !== installedPresetText)) {
   try {
     const d = parseYaml(BUNDLE.text)
     const ids = d[0].insert.map((r) => r.config.id)
-    if (ids.join() !== [...PRESET_IDS.filter((x) => PRESET_CHOICE.includes(x)), ...Object.keys(BUNDLE.aliases)].join()) throw new Error('preset id 不对：' + ids.join())
+    if (ids.join() !== [...PRESET_CHOICE, ...Object.keys(BUNDLE.aliases)].join()) throw new Error('preset id 不对：' + ids.join())
     for (const r of d[0].insert) {
       const comp = r.config.plugins.find((p) => p.id === 'compaction')
       const names = comp && Array.isArray(comp.config) ? comp.config.map((x) => x.name) : []
-      const srcText = SRC_PRESETS[PRESET_SOURCE[BUNDLE.aliases[r.config.id] || r.config.id]].text
+      const srcText = SRC_PRESETS[presetSourceKey(BUNDLE.aliases[r.config.id] || r.config.id)].text
       const needPruner = srcText.indexOf('dsh-compaction-tool-result-pruner') >= 0
       const needRegion = srcText.indexOf('command-compact-region') >= 0
       if (!PART_NAMES.compaction.some((name) => names.includes(name)) || (needPruner && !PART_NAMES.pruner.some((name) => names.includes(name))) || (needRegion && !PART_NAMES['compact-region'].some((name) => names.includes(name)))) throw new Error(r.config.id + ' 的 compaction 组没换成功')
     }
   } catch (e) { die(`生成的 Soul preset 校验没过：${e.message}`) }
 }
-ok('Soul preset 的源：' + PRESET_CHOICE.map((id) => PRESET_LABEL[id] + ' ← ' + SRC_PRESETS[PRESET_SOURCE[id]].from).join('；'))
-const snapIds = PRESET_CHOICE.filter((id) => SRC_PRESETS[PRESET_SOURCE[id]].snapshot)
+ok('Soul preset 的源：' + PRESET_CHOICE.map((id) => PRESET_LABEL[id] + ' ← ' + SRC_PRESETS[presetSourceKey(id)].from).join('；'))
+const snapIds = PRESET_CHOICE.filter((id) => SRC_PRESETS[presetSourceKey(id)].snapshot)
 if (snapIds.length) warn('没找到 DSH 的 app.asar，这些 preset 按安装包里的快照生成，可能和本机 DSH 版本对不上：' + snapIds.map((id) => PRESET_LABEL[id]).join('、') + '；可以用 --app-asar 指定')
 for (const n of BUNDLE.notes) warn('Soul preset 简介：' + n)
 
@@ -2025,7 +2056,8 @@ if (UPDATE) {
     out('  修复不在更新里做：要检查就跑 node fix.mjs --report（在独立 dsh-agent-soul-fix 目录）')
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
     const shaMoved = state0.upstream && SRC.sha && state0.upstream.sha !== SRC.sha
-    const flashMoved = Boolean(FLASH_SRC) && state0.flash?.sha !== FLASH_SRC.sha
+    const nextFlash = FLASH_SRC ? flashState() : null
+    const flashMoved = JSON.stringify(state0.flash || null) !== JSON.stringify(nextFlash)
     const namesMoved = !sameNameMap(state0.nameMap, NAME_MAP)
     const metadataMoved = state0.kitVersion !== KIT_VERSION || state0.profile !== PROFILE || state0.presetSource?.section !== AUTHOR_BUNDLE.text
     if (namesMoved) out(`称呼替换记成：${nameMapLabel(NAME_MAP) || '不换'}${DRY ? '（干跑，不写）' : ''}`)
@@ -2034,7 +2066,7 @@ if (UPDATE) {
       state0.kitVersion = KIT_VERSION
       state0.profile = PROFILE
       state0.presetSource = { section: AUTHOR_BUNDLE.text }
-      if (flashMoved) state0.flash = flashState()
+      if (flashMoved) state0.flash = nextFlash
       if (namesMoved) state0.nameMap = NAME_MAP
       if (shaMoved) state0.upstream.sha = SRC.sha
       if (newDecl.length) { state0.declined = [...DECLINED0, ...newDecl]; out(`记下了：${newDecl.join('、')} 不装，以后更新不再补。`) }
@@ -2386,7 +2418,7 @@ if (!DRY) {
     kitVersion: KIT_VERSION,
     profile: PROFILE,
     upstream: { repo: REPO, ref: SOURCE ? null : REF, sha: SRC.sha, version: srcVer || null, from: SRC.from },
-    // 灵魂 · PTC Flash 的安装来源，供版本比对使用
+    // Flash 整组的安装来源及上游身份、简介，供更新与恢复核对。
     flash: FLASH_SRC ? flashState() : null,
     installedAt: (state0 && state0.installedAt) || (UPDATE ? null : now),
     updatedAt: now,
@@ -2397,7 +2429,7 @@ if (!DRY) {
     presetAliases: BUNDLE.aliases,
     // Soul preset 的 skills 装上去时的哈希（<profile>/skills/ 下的相对路径）：更新时靠它分清哪些是本机改过的
     presetSkills: SKILLS_PLAN ? SKILLS_PLAN.record : state0?.presetSkills || {},
-    presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[PRESET_SOURCE[x]].version])),
+    presets: Object.fromEntries(PRESET_CHOICE.map((x) => [x, SRC_PRESETS[presetSourceKey(x)].version])),
     defaultPreset: finalDefault,
     parts: partsDone,
     declined: [...new Set([...DECLINED0, ...OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p))])].filter((p) => !isInstalledPart(p)),
