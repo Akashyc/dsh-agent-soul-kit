@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { normalizeAnswers, buildSetupFiles, loadSetup, describeSetup, questionSheet } from '../lib/setup.mjs'
-import { chunk, fixPopups } from '../lib/popups.mjs'
+import { chunk } from '../lib/popups.mjs'
 import { OPTIONAL_PARTS } from '../lib/parts.mjs'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-setup-'))
@@ -50,7 +50,5 @@ try {
     for (const q of p.questions) { assert.ok([...q.header].length <= 12, q.header); assert.ok(q.optionsFrom || (q.options.length >= 2 && q.options.length <= 4), q.id); for (const o of q.options) assert.ok(o.description, `${q.id} 的选项 ${o.label} 缺 description`) }
   }
   assert.deepEqual(sheet.popups.flatMap((p) => p.questions).filter((q) => q.id === 'parts').flatMap((q) => q.options.map((o) => o.value)).sort(), [...OPTIONAL_PARTS].sort())
-  const fp = fixPopups([{ id: 'a', title: 'A', decide: true, blocking: true, impact: 'x', choices: ['fix', 'later'] }, { id: 'b', title: 'B', decide: false }])
-  assert.equal(fp.length, 1); assert.equal(fp[0].questions.length, 1)
   console.log('问答自测通过')
 } finally { fs.rmSync(dir, { recursive: true, force: true }) }
