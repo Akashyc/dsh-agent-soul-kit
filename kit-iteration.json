@@ -2714,6 +2714,323 @@
         "上游compaction工具计数与向量全局重试语义仅作风险记录，未扩大为本轮功能重写。",
         "同目录依赖字面扫描不是完整JavaScript解析器，复杂动态路径需人工核对。"
       ]
+    },
+    {
+      "completedAt": "2026-11-04T11:34:02.200Z",
+      "reportCreatedAt": "2026-11-04T11:25:47.764Z",
+      "base": "3d8a7c3777d859353f822e7b90f9b157dfc6ff71",
+      "target": "3d8a7c3777d859353f822e7b90f9b157dfc6ff71",
+      "kitVersion": "6.0",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "10209cb33461003e3371acc4de4a2dd1decc7080",
+        "targetSha": "d2475982cd8965ea27b542147ece68ea03bcaded",
+        "changes": [
+          {
+            "file": ".gitignore",
+            "kind": "changed"
+          },
+          {
+            "file": "AGENT-INSTALL.md",
+            "kind": "changed"
+          },
+          {
+            "file": "AGENT-ITERATE.md",
+            "kind": "changed"
+          },
+          {
+            "file": "CHANGELOG.md",
+            "kind": "changed"
+          },
+          {
+            "file": "README.md",
+            "kind": "changed"
+          },
+          {
+            "file": "assets/presets/_shared/compaction.yml",
+            "kind": "changed"
+          },
+          {
+            "file": "assets/presets/preset-soul-all.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-cordis.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-distill.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-ptc.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-cordis.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-distill.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-ptc.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/skills/cordis-plugin-development/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/creation/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/distill/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/editing-cordis-compositions/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/templates/00-authority.md.tpl",
+            "kind": "changed"
+          },
+          {
+            "file": "assets/templates/heartbeat.mjs.tpl",
+            "kind": "added"
+          },
+          {
+            "file": "install.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "kit-iteration.json",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/archive.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/config-sanitize.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/file-transaction.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/fix-records.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/fix-transaction.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/fixes.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/flash-presets.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/home-paths.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/huanqi-panel-patch.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/huanqi-patches.mjs",
+            "kind": "added"
+          },
+          {
+            "file": "lib/install-lock.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/kit-iterate.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/kit-update.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/package-contract.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/parts.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/popups.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/preset-migration.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/preset-skills.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/runtime-guard.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/setup.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/soul-presets.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/uninstall.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "scripts/verify-macos-install.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "scripts/verify-setup.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "setups/大肥鱼/00-authority.md",
+            "kind": "changed"
+          },
+          {
+            "file": "setups/大肥鱼/setup.json",
+            "kind": "changed"
+          }
+        ],
+        "status": "ahead",
+        "ready": true,
+        "directory": null,
+        "message": "本地 kit 已包含发布源 d2475982cd8965ea27b542147ece68ea03bcaded，且有额外提交；保留本地版本，继续检查插件上游。"
+      },
+      "summary": "kit 发布源仍为 d2475982，已被本地 main 包含，保留本地 6.0 和额外提交。插件 main 仍为 3d8a7c3，与旧基线的 306 个文件完全一致，0 文件变化、0 新增契约提示。本轮仅更正两份手册中的修复职责残留说明；问答自测与四流程隔离 9 次命令通过，未操作真实 DSH，未提交或推送。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "上游发布清单、包名和 preset 无变化，运行行为无需新增适配；更正安装和迭代手册中已迁出的修复职责说明，首次与重复安装通过。",
+          "evidence": [
+            "target/package.json 和 target/plugins/*/package.json 与 base 一致",
+            "install.mjs: checkSource、PKG_ISSUES、buildPresetBundle；lib/parts.mjs、lib/setup.mjs",
+            "AGENT-INSTALL.md 模块/自测/快照说明；AGENT-ITERATE.md 检查边界"
+          ],
+          "checks": [
+            "live-upstream",
+            "static-checks",
+            "setup",
+            "four-flows"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "unchanged",
+          "reason": "没有新增包名、发布文件、配置或 preset 变化，作者原文同步和独立修复边界保持；同版本更新与重复更新通过，不声称不同版本升级已验收。",
+          "evidence": [
+            "base 与 target 共 306 个文件指纹完全一致",
+            "install.mjs: partDiff、PART_DIFF、splitDiff、syncHub、无变化更新分支",
+            "lib/file-transaction.mjs、lib/install-lock.mjs"
+          ],
+          "checks": [
+            "live-upstream",
+            "static-checks",
+            "four-flows"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "上游没有新增持久化数据契约，现有备份范围保持。临时备份含中文日记、空目录、会话原文和独立 fix 历史，恢复后原文断言通过。",
+          "evidence": [
+            "target/README.md 与 base 相同",
+            "install.mjs: makeBackup、addTree、manifest、fix 目录显式备份",
+            "verification/summary.json: backup 退出 0 与恢复后的原文断言"
+          ],
+          "checks": [
+            "live-upstream",
+            "static-checks",
+            "four-flows"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "格式与目标契约未变；跨目录恢复、冲突拒绝、强制恢复和损坏归档拒绝通过；拒绝后用户数据未改变，独立 fix 历史原样保留。",
+          "evidence": [
+            "install.mjs: RESTORE、pathPairs、rewritePaths、copyTree、恢复收尾",
+            "lib/preset-migration.mjs、lib/uninstall.mjs: 会话头契约",
+            "verification/summary.json: restore 与三项恢复保护用例"
+          ],
+          "checks": [
+            "live-upstream",
+            "static-checks",
+            "four-flows"
+          ]
+        }
+      ],
+      "findings": [],
+      "organs": null,
+      "checks": [
+        {
+          "id": "live-upstream",
+          "scope": "static",
+          "command": "node install.mjs --kit-iterate",
+          "status": "passed",
+          "evidence": "联网重跑成功：kit d2475982 已由本地 HEAD 10209cb 包含；插件基线与 main 都是 3d8a7c3777d859353f822e7b90f9b157dfc6ff71；306 文件指纹相同、0 变化、0 新增契约提示。首次沙箱 fetch 失败不计成功，联网重跑结果为准。"
+        },
+        {
+          "id": "static-checks",
+          "scope": "static",
+          "command": "node --check install.mjs && node --check lib/kit-iterate.mjs && node --check lib/kit-update.mjs && node --check lib/package-contract.mjs && git diff --check",
+          "status": "passed",
+          "evidence": "四个模块的语法检查及文档差异检查均退出 0。"
+        },
+        {
+          "id": "setup",
+          "scope": "simulated",
+          "command": "node scripts/verify-setup.mjs",
+          "status": "passed",
+          "evidence": "实际输出：问答自测通过。"
+        },
+        {
+          "id": "four-flows",
+          "scope": "simulated",
+          "command": "node logs/kit-iterations/2026-11-04T11-25-47-764Z-cN59UC/verify-iteration.mjs logs/kit-iterations/2026-11-04T11-25-47-764Z-cN59UC/target /private/var/folders/g7/6thmlmbj7dl_vt8k9r7rkv980000gn/T/kit-iterate-yaml-pVM5Of/package",
+          "status": "passed",
+          "evidence": "9 次命令符合预期：install、install-repeat、backup、update、update-repeat、restore、restore-force 退出 0；restore-conflict-reject 和 restore-corrupt-reject 按预期退出 1。中文日记、空目录、会话、fix 历史和无真实 launchd 注册的断言通过，见 verification/summary.json。初版新增会话样本缺 type:session，被预检拒绝；按实际契约补全样本后重跑通过。"
+        }
+      ],
+      "limitations": [
+        "未执行真实 DSH 安装、更新、启动或重启；业务插件加载、会话压缩、真实 launchd 和 Windows 桌面未验收。",
+        "本机默认 ~/.dsh 不存在；隔离验证使用官方 js-yaml 4.1.0 临时依赖，已校验 SHA-512 完整性，不能代表真实宿主版本。",
+        "上游既有的缺文件和路径问题与基线相同，本轮没有运行独立 fix 清单或应用修复。",
+        "基线与目标相同，仅验证同版本及重复更新，未验证不同上游版本之间升级。"
+      ]
     }
   ]
 }

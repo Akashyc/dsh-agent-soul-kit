@@ -55,8 +55,8 @@ AGENT-INSTALL.md             本手册
 install.sh / install.ps1     一行装的引导（macOS / Windows）：找 node、放好安装包、在终端里启动 install.mjs
 install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
 lib/                         install.mjs 用的模块：零件目录与系统限制（parts）、方案与问答（setup）、弹窗（popups）、系统差异（platform）、
-                             修复清单、Soul preset 生成与迁移、路径自动定位、人设规矩、发布清单核对、快照（archive）、卸载规划、kit 迭代
-scripts/                     自测：verify-setup.mjs（问答和弹窗）、verify-macos*.mjs（macOS 修复，要在 Mac 上跑）
+                             Soul preset 生成与迁移、配置路径、人设规矩、发布清单核对、文件事务、安装写锁、快照（archive）、卸载规划、kit 迭代
+scripts/                     自测：verify-setup.mjs（问答和弹窗）、verify-macos-install.mjs（隔离安装、更新、备份和恢复）
 setups/                      方案：每个子文件夹一套
   大肥鱼/
     setup.json               名字、称呼、硬线、人设类型、零件、preset
@@ -73,7 +73,7 @@ assets/
   presets/preset-soul*.yml、_shared/、skills/   上游灵魂五套和 skills 的快照（上游没有时才用，例如 --ref 装 v3.0.0 以前的版本）
 logs/                        每次运行的输出（脚本自动建，可以删）
 backups/                     --backup、--uninstall 打出的备份包（迁移时连同文件夹一起拷走）
-archives/                    安装、更新、修复、恢复、卸载前自动留的本机快照，一套 DSH 一个子文件夹（只给本机回滚用）
+archives/                    安装、更新、恢复、卸载前自动留的本机快照，一套 DSH 一个子文件夹（只给本机回滚用）；修复快照由独立 fix 管理
 ```
 
 模板里的记号：`{{名字}}` 换成值；行首 `{{?条件}}` / `{{!条件}}` 表示条件成立 / 不成立时才保留这一行。名字、称呼、硬线、人设在生成方案时填好；路径、这台电脑有没有 dsh-mnemon 留到安装时按电脑填。
