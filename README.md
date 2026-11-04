@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 5.6**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 6.0**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -10,7 +10,7 @@
 工具包（下文简称 kit）支持：
 
 - 安装：使用现成方案，或自定义名字、称呼、人设、零件和 preset。
-- 更新与修复：升级上游插件，或单独检查已安装版本的问题。
+- 更新：升级上游插件；修复另由独立 dsh-agent-soul-fix 工具处理。
 - 备份：把书房、账本、会话和相关配置打成一个备份包。
 - 还原：在新电脑或重装后的电脑上，用备份包装好并放回数据。
 - 卸载：先备份，再移除插件；旧会话可选择保留兼容入口。
@@ -41,7 +41,7 @@
 
   可选零件分三组（常用、面板件、上游新零件）**全部列给你选**，有兼容问题的也列，只是默认不勾。面板件装完没有数据源就是空面板，想用再选。最后三个是上游 v3.0.0 新加的，**照上游原样装、默认不勾**，选之前先看清已知问题：
 
-  - heartbeat 在上游 0221d89 里面板从包外的 `lib/paths.mjs` 导入、还用了没定义的 `AI_ROOT`，一加载就报错；心跳脚本不在零件发布清单里，调度依赖作者的 Windows 布局。Mac 可选择 `heartbeat-darwin` 修好并补齐运行链；默认不启用，先显式退役旧 kit 任务，完整验收后手动启用作者零件，见 [迁移说明](MACOS-REPAIRS.md)。
+  - heartbeat 在上游 0221d89 里面板从包外的 `lib/paths.mjs` 导入、还用了没定义的 `AI_ROOT`，一加载就报错；心跳脚本不在零件发布清单里，调度依赖作者的 Windows 布局。Mac 可选择 `heartbeat-darwin` 修好并补齐运行链；默认不启用，先显式退役旧 kit 任务，完整验收后手动启用作者零件，见独立 fix 工具的 `MACOS-REPAIRS.md`。
   - chat 从 fe3c456 起使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；目标会话 id 仍写死，书房按作者目录布局推算。服务设计为绑定 `0.0.0.0`、绕开 DSH 的登录鉴权，同一网络里谁都能访问。
   - clawbot 是第三方插件（腾讯 ilink 网关），要手机微信扫码绑定；凭据存在 `~/.dsh/clawbot/`，备份不带它，换电脑要重新扫码；三个自动通知默认全开（每次回复都推一条微信）。本机自己从插件市场装过 `dsh-clawbot` 的，安装包不覆盖、也不卸载它。
 
@@ -155,8 +155,9 @@ node install.mjs --setup 大肥鱼     # 用现成方案装
 node install.mjs --update          # 更新到上游最新版（不打修复，装完单独检查）
 node install.mjs --update --flash on  # 加装灵魂 · PTC Flash（off 去掉）；装了的每次更新都跟作者最新发布的版本
 node install.mjs --update --add-part clawbot  # 补装默认不装、或以前拒掉的可选零件
-node install.mjs --fix --report    # 修复检查：出报告和计划模板（只读），交给 agent 核对本机
-node install.mjs --fix --plan <报告目录>/fix-plan.json  # 按核对过、你确认过的计划修
+# 以下修复命令在独立 dsh-agent-soul-fix 目录执行
+node fix.mjs --report    # 修复检查：出报告和计划模板（只读），交给 agent 核对本机
+node fix.mjs --plan <报告目录>/fix-plan.json  # 按核对过、你确认过的计划修
 node install.mjs --backup          # 打备份包，放在 backups/
 node install.mjs --restore         # 还原：装好并放回 backups/ 里最新的备份
 node install.mjs --uninstall       # 卸载：先备份；终端里会问旧会话怎么处理（也可以加 --old-sessions shell|rewrite|keep）
@@ -196,12 +197,6 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/archive.mjs` | 自动快照：每次操作前的原样放进 `archives/`，旧版留在 DSH 家目录里的备份搬进 `legacy/` |
 | `lib/popups.mjs` | 给 agent 的弹窗：问答和修复计划排成固定的弹窗，每次一样 |
 | `lib/preset-migration.mjs` | 清理退役 preset，迁移旧会话和默认入口；会话原文纳入事务备份 |
-| `lib/fixes.mjs` | 修复清单：kit 对上游插件的 19 处修改逐条登记，判定问题还在不在、按文件对照作者原文重算、给 kit 迭代归类和找疑似新问题 |
-| `lib/fix-plan.mjs` | 修复报告和修复计划：计划模板、校验（同一次报告、每条要选的都选了、选修 / 不修都有证据）、换算成这次处理哪几条和跳过清单 |
-| `lib/fix-records.mjs` | 修复原文、生成物与行级配置的核对和撤回 |
-| `lib/fix-transaction.mjs` | 修复失败时恢复包、配置、锁文件和安装记录；保留恢复清单 |
-| `lib/huanqi-patches.mjs` | 换气、compact-region 的本机补丁：作者写死的记忆中枢路径改成运行时找家目录，外加 Boss 本机实测的行为修复 |
-| `lib/huanqi-panel-patch.mjs` | 换气面板「没有 `- id: huanqi` 时自建一节」的补丁 |
 | `lib/name-map.mjs` | 称呼替换：在上游源码的临时副本上把作者的称呼换成用户称呼；认出手工改过却没记下的情况 |
 | `lib/package-contract.mjs` | 上游包核对：入口导入的文件要在 `files` 里、DSH 启动时会加载的文件要能通过语法检查（`node --check`，只解析不执行），用到的 `@deepseek-ai/*` 要声明 `peerDependencies`；拷包前和 kit 迭代报告共用 |
 | `lib/kit-iterate.mjs` | 上游差异与契约检查、源码快照、迭代基线和完成证据管理 |
@@ -212,50 +207,23 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup`、`--uninstall` 打出的备份包；到新电脑还原时连同整个文件夹一起拷走 |
 
-## 更新与修复
+## 更新与独立修复
 
-**安装、更新以作者为准**（5.4）：`--update` 把本体、零件、中枢脚本、Soul preset 和它的 skills 同步成作者最新版，kit 修复、本机手改一律换成作者原文，换之前原样存进快照；上游包本身有问题也照装，问题交给修复检查，收尾会点名哪些修好之前不能启动 DSH。方案、书房、账本、权威源册、人设、心跳设置、索引等数据保留；需要调整的插件配置、包名及锁文件会在计划中列出。
+`node install.mjs --update` 将本体、零件、中枢脚本、Soul preset 及 skills 同步为作者版本，修改前保存快照。书房、人设、账本和用户数据按现有规则保留。
 
-**修复清单**：`lib/fixes.mjs` 登记 21 条修复：1 条拷包补漏（上游发布清单漏列的文件）、1 条换气配置修复、1 条压缩摘要模型修复，其余是文件补丁（含 4 条可选的 macOS 修复）。**修复清单只对准作者最新版**：作者修好的条目从清单删掉，id 记在 `kit-iteration.json` 里不再复用。**修复和安装分开**：安装、更新、恢复只按作者上游装（称呼替换、preset 独立打包等 kit 固定处理仍保留），以前打的修复也一起清掉；装完单独做修复检查，分五步：
+**6.0 起，全部修复能力迁至独立工具 dsh-agent-soul-fix，首版为 1.0。** kit 不再检查修复清单、应用补丁、填写修复计划或登记修复迭代。旧 `--fix`、`--fix-only`、`--fix-skip`、`--fix-revert`、`--report`、`--plan`、`--summary-model` 参数明确报迁移提示并退出。
 
-1. `--fix --report` 出报告。每条写着判定、本机事实、不修会怎样、什么时候会撞上、怎么核对。
-2. agent 照核对方法逐条查本机，把会不会撞上、修 / 不修 / 这次先不动、证据填进计划。
-3. 你确认。
-4. `--fix --plan` 照计划修（问你的时候照报告里排好的弹窗问）。
-5. 照核对方法验收。
+需要检查修复时，进入独立 fix 工具目录运行：
 
-终端里不再逐条问。清单外的问题（扫出来的疑似问题、使用中遇到的新 bug）先整理修复方案给用户确认，登记进 `lib/fixes.mjs` 再修，不直接手改已装文件。
+```bash
+# 以下修复命令在独立 dsh-agent-soul-fix 目录执行
+node fix.mjs --report
+node fix.mjs --plan <报告目录>/fix-plan.json --dry-run
+```
 
-| 检查结果 | 处理方式 |
-|---|---|
-| 问题仍在 | 应用 kit 修复；已修复的保持，已识别的旧写法更新 |
-| 作者已修 | 停止打补丁；有原文证据时，将旧 kit 修复版换回作者版 |
-| 无法判断 | 保留文件，报告「需人工核对」 |
-| 本机手改过 | `--fix` 保留文件，报告冲突；下次 `--update` 换回作者原文（原样在快照里） |
+核对本机、确认计划并完全退出 DSH 后，去掉 `--dry-run` 执行。fix 只修已安装版本，不负责安装和升级插件。kit 更新可能清除文件补丁，更新后应重新检查；旧计划不可复用。
 
-`--fix` 只处理已安装版本，不升级本体或重装零件（作者发布清单漏列的文件会补拷进已装的包）：
-
-| 参数 | 用途 |
-|---|---|
-| `--fix --report [目录]` | 出修复报告（`fix-report.md` / `.json`）和计划模板 `fix-plan.json`；只读，DSH 开着也能跑 |
-| `--fix --plan <fix-plan.json>` | 校验计划（同一次报告、每条要选的都选了、选修 / 不修都有证据、出报告以后本机没变），再照计划修，核对结论和证据记进安装记录；加 `--dry-run` 只校验 |
-| `--fix` | 只列检查结果，不改文件 |
-| `--fix-only <id,…>` | 手动指定本次只处理哪几条，适用于所有修复阶段 |
-| `--fix-skip <id,…>` | 跳过指定条目，撤回可识别的 kit 修复，并记入安装记录；`none` 清空跳过设置 |
-| `--fix-revert <id,…>` | 撤回指定修复，并加入跳过清单 |
-
-选过「不修」的条目记进跳过清单，已经修好的也一样，以后报告里不再要求选；情况变了想改，核对后把那一条加进计划。备份与恢复会带上这份设置。4.0 去掉了 `--fix-reinstall`、`--organs-source`（取源和包名不再是修复条目，包名迁移走 `--update`）。
-
-**快照**：安装、更新、修复、恢复、卸载动手前，把要改的原样存进安装包的 `archives/<主机>-<家目录指纹>/<时间>-<操作>-<随机码>/`（按 DSH 家目录的相对路径摆放，附「还原方法.txt」）；失败时据此自动回滚，事后也能照着拷回去。5.3 及以前散在 DSH 家目录里的 `.bak-*`、`dsh-soul/_backup/` 下次真跑时搬进 `legacy/`。快照跟着安装包文件夹走，删了安装包文件夹快照也就没了；`backups/` 是另一回事，放 `--backup` 打的迁移包。
-
-安装、更新、恢复会移除旧版 PTC · Soul · Flash，把旧会话入口及默认项迁到灵魂 · PTC；会话正文不变，原文件留在事务备份。会话无法读取时先停止，处理后重试。修复检查不管这件事。卸载旧 Flash 安装时，若选 `shell`，会改为将旧会话迁到官方 preset，不再保留 Flash 空壳。
-
-几个常见设置：
-
-- **零件来源和包名**：全部来自上游主仓 `plugins/`，包名照上游原样（压缩三件套 `dsh-yanqing-*`，其余 `dsh-agent-*`、`dsh-huanqi`、`dsh-mcp-hub`、`dsh-clawbot`）。上游 v3.0.0 把压缩三件套从 `dsh-agent-*` 统一回部署端的 `dsh-yanqing-*`，kit 4.x 装的 `--update` 会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件和 Soul preset 里的引用同步换名）；从 organs 装的换气、compact-region 也一样。`--fix` 不动包名，碰到旧包名会让你先 `--update`。
-- **摘要模型**：作者 preset 指定 `deepseek-official`、而本机使用其他路由或近期会话报缺少 API key 时，修复会让摘要跟随会话模型。想保留作者设置，修复检查里把它选成「不修」，或用 `--fix-skip preset-summary-model`；旧参数 `--summary-model author` 仍兼容。
-- **称呼替换**：作者已把 preset 人设和文档里的人名改掉，4.1 起安装默认不换、问答里也不再问；内置两套方案的 `nameMap` 都是空的。上游代码里还剩几处「爀曦」（例如换气熔断时注入给 agent 的「告诉爀曦『需要手动压缩』」），想换就加 `--rename 爀曦=<称呼>`，选择随安装记录保存，以后更新照做；`--rename none` 关掉。
-- **离线比对**：主仓源码用 `--source`，更新时的旧版本基线用 `--base-source`。上游包缺少入口依赖文件（发布清单漏列的会自动补上）、或者 DSH 启动时要加载的文件有语法错误时，会在动手前停下，已装的照常能用（2026-11-01 上游回声面板的 `client.js` 坏过一次，照装 DSH 窗口起不来）；缺少宿主依赖声明时只提示核对。
+kit 继续检查发布文件与加载依赖，发现安装完整性问题会提示启动前处理。kit 不下载或自动执行 fix。修复状态按 profile 保存在 `<DSH_HOME>/dsh-soul/fix/<profile>/state.json`，kit 备份/恢复携带这些历史记录；首次接管所需的旧安装修复证据保留。两工具共享整套安装的写锁，不能并发修改同一 DSH。
 
 ## 备份
 
@@ -309,6 +277,11 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，在旧电脑上 `--backup`、新电脑上 `--restore`，还原后再任命下一代主导。
 
 ## 版本记录
+
+### 6.0（2026-11-04）
+
+完整分离修复功能至 dsh-agent-soul-fix 1.0；旧修复参数明确退出。新增独立修复状态备份/恢复及整套安装写锁；保留旧修复证据供首次接管，kit 自身迭代不再管理修复清单。
+
 
 5.6 退役 kit 自带的每日心跳：删掉心跳脚本模板、安装时的脚本生成与 launchd / 计划任务注册，问答和 setup.json 里的心跳字段一并拿掉；`--heartbeat-time` 改为明确报错，`--no-heartbeat` 只作旧命令兼容、无动作。保留旧任务（`com.dsh-soul.heartbeat` / `dsh-soul-heartbeat` / `heartbeat.sh`）的识别与停用、作者 heartbeat 可选零件、`heartbeat-darwin` 兼容修复；`kit-macos.mjs` 的 `--replace-kit` / `--restore-kit` 换成只退役旧任务的 `--retire-kit`。已装的旧任务不会被自动停用，本轮也没有在本机部署或停用任何任务。
 

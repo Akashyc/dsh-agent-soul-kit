@@ -1,5 +1,7 @@
 # 给 Agent 的手册：dsh-agent-soul 安装、更新、迁移与卸载
 
+> 版本边界：kit 6.0；修复已迁入独立 dsh-agent-soul-fix 1.0。本文中的 fix 命令必须进入该工具目录执行。
+
 > **你的任务**：在这台电脑上，给 DeepSeek Harness（下称 DSH）装上 dsh-agent-soul 灵魂架构；已经装过的，按第九节更新到最新版；要把一台电脑上的 agent 搬到另一台，按第十节备份和恢复；要卸掉，按第十二节（先备份再卸）。
 > 装成什么样的 agent 由**方案**决定：用现成方案（安装包 `setups/` 里的，例如 Boss 的「大肥鱼」），或者**全新安装**——在对话里引导用户填设定，填完存成新方案再装。
 > 安装包只带方案、模板和脚本，插件本体由 `install.mjs` 从 GitHub（cyanwell/dsh-agent-soul）拉**最新版**。作者还在持续更新，所以不锁死版本。
@@ -7,7 +9,7 @@
 
 > 用户要求更新或迭代 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。`--kit-update` 单独检查并同步 kit 的 GitHub 仓库；`--kit-iterate` 先处理 kit 自身更新，再准备插件上游证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
 
-> macOS 兼容修复（kit 5.3）：先走修复报告和计划。`model-statusbar-darwin`、`yantai-apps-darwin`、`heartbeat-darwin`、`echo-svc-darwin` 的核对与验收见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。kit 自带每日心跳已退役；旧任务须单独核对、显式停用，作者 heartbeat 独立验收后手动启用。
+> macOS 兼容修复（kit 5.3）：先走修复报告和计划。`model-statusbar-darwin`、`yantai-apps-darwin`、`heartbeat-darwin`、`echo-svc-darwin` 的核对与验收见 独立 fix 工具的 `MACOS-REPAIRS.md`。kit 自带每日心跳已退役；旧任务须单独核对、显式停用，作者 heartbeat 独立验收后手动启用。
 
 ## 一、规矩（动手前先读）
 
@@ -171,7 +173,7 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 
 **B6. 成功的样子**：最后是「文件层面的安装完成」；不应出现 kit 每日任务注册或立即触发。「需要留意」里出现的提醒，逐条报给用户。最后一段「接下来」里有一整段要贴进新会话的话（主导、第一条账、重建索引、装配自我层、体检、门牌实测），原样交给用户。
 
-**B7. 修复检查（装完以后）**：安装不打修复，装完单独检查，不在终端里逐条问。按第九节「修复」的步骤：`install.mjs --fix --report` 出报告，照每条的核对方法查本机，填计划给用户确认，DSH 完全退出后 `--fix --plan <计划>` 照做。安装收尾「★ 修好之前别启动 DSH」那一行列出的（上游包本身的问题、报告里标「启动 DSH 前要处理」的修复，例如 0221d89 的 `huanqi-paths-import`）会让零件加载不了，先修完再启动 DSH；其余的可以先启动 DSH、在会话和面板里核对。
+**B7. 独立修复检查**：安装完整性提示需先处理的问题，交给独立 dsh-agent-soul-fix。进入该工具目录阅读 AGENT-FIX.md，运行 `node fix.mjs --report`，核对计划并经确认后执行。kit 不负责生成或执行修复计划。
 
 **弹窗规范**（问用户一律用弹窗；内容由脚本给或照下表，原样弹，每次一样）：
 
@@ -186,7 +188,7 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 | 卸载 | 干跑后先用普通消息发要删的清单，再弹标题「确认卸载」：卸载吗？ | 卸载，保留书房和记忆 / 全部卸载 / 先不卸 |
 
 - 一个弹窗最多 4 道题，每道 2–4 个选项，标题不超过 12 个字；脚本给的都已合规。
-- 不增删、不改写、不合并选项，推荐项放第一个、带「（推荐）」。唯一例外：修复弹窗按你核对后在 `fix-plan.json` 里填的 `decision`，把那一项标「（推荐）」、挪到第一个。
+- 不增删、不改写、不合并选项，推荐项放第一个、带「（推荐）」。修复弹窗的规则见独立 fix 工具的 AGENT-FIX.md。
 - 要填写的内容走选项下面的「其他」输入框；用户选了「在下面「其他」里输入」却没写的，再弹同一道题。
 - 报告全文、零件表、核对表这类长内容用普通消息发，不塞进弹窗。最后一个弹窗选了确认才真跑。
 
@@ -238,7 +240,7 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 
 kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备份字段不会重新启用任务。
 
-按 [MACOS-REPAIRS.md](MACOS-REPAIRS.md) 核实运行链、权限和四步结果；旧 kit 任务先确认归属再显式退役，不把面板加载视为定时巡视已验收。Windows 原版兼容问题仍须单独解决。
+按 独立 fix 工具的 `MACOS-REPAIRS.md` 核实运行链、权限和四步结果；旧 kit 任务先确认归属再显式退役，不把面板加载视为定时巡视已验收。Windows 原版兼容问题仍须单独解决。
 
 ## 九、更新
 
@@ -257,7 +259,7 @@ kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备�
 - **新加的东西**：kit 5.0 新加的「灵魂 · 全能」更新时自动补上；heartbeat、chat、clawbot 不自动补装（终端里会问，默认不装），用户要装再 `--add-part <名字>`，装前先把上面「默认不装的新零件」那一行的已知问题告诉他。
 - **Soul preset 的 skills**（`<profile>/skills/`）：和上游不一样的换成上游原文；不再选创造、全能时，安装包装过的删掉；你自己放进去的文件不碰。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`。
-- **修复清单的跳过设置记在安装记录里**（`fixSkip`）：修复检查里选过「不修」的条目照做、不再问。例如压缩摘要模型 `preset-summary-model` 修的是去掉作者写死的 `summarizationProvider: deepseek-official` / `summarizationModel: deepseek-flash`、跟会话模型走（见第十一节 25）；要照作者原样就把它选成「不修」，或加 `--fix-skip preset-summary-model`（2.17 的 `--summary-model author` 也还认）；
+- **修复选择和证据由独立 fix 管理**：旧安装记录字段只供首次接管参考，kit 不再解释；不再支持通过 kit 的参数修改修复选择。
 - **作者的 `soul-version.json`**：作者 2026-10-31 把它删了，安装包 4.0 不再核对 Soul preset 的哈希和契约版本；更新时以上游 README 的更新记录和干跑报告为准。
 - **报告怎么分来源**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），把变化分成「上游改的」和「和作者原文不同的」（标明是 kit 修复还是本机改过）两类列出来；两类都会换成作者原文。取不到基准时只是分不清来源，不影响更新。
 
@@ -281,85 +283,18 @@ kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备�
 
 第六个 Soul preset，和灵魂五套一起选（安装问答里默认不选）。5.0 以前叫「砚青 PTC Flash」（`yanqing-ptc-flash`），更新时换成新 id，旧会话留别名。它来自 [LarryE135/dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3（`presets/flash-lean-ptc-v3.patch.yml`）：精简行事规则（控轮数、按需折叠、验收通过就交付），上下文用到 25% 就压缩、只留最近约 2 万 token 原文。
 
-- **源**：每次安装、更新都在线取作者**最新发布的版本**（GitHub releases/latest），作者发了新版，下一次 `--update` 就跟上，干跑报告里写从哪一版到哪一版、这个 preset 变没变。`--flash-ref <标签|main|提交>` 指定版本，`--flash-source <目录|.tar.gz>` 离线用本地源码；`--fix` 钉在安装记录里那一版。取不到就停下，不会悄悄去掉已装的那份。
+- **源**：每次安装、更新都在线取作者**最新发布的版本**（GitHub releases/latest），作者发了新版，下一次 `--update` 就跟上，干跑报告里写从哪一版到哪一版、这个 preset 变没变。`--flash-ref <标签|main|提交>` 指定版本，`--flash-source <目录|.tar.gz>` 离线用本地源码。独立 fix 的修复钉在安装记录中的版本。取不到就停下，不会悄悄去掉已装的那份。
 - **适配**（`lib/flash-presets.mjs`，其余逐字照作者）：id 换成 `soul-ptc-flash`、名字「灵魂 · PTC Flash」（更早的 `ptc-soul-flash`、`flash-lean-ptc-v3-soul` 已退役，不能再用）；压缩、裁剪换成带门牌的 `dsh-yanqing-compaction`、`dsh-yanqing-pruner`；在手动压缩后面补上范围压缩 `dsh-yanqing-compact-region`（换气要用）。`workflow-ptc`、`tool-workflow` 照作者关着；压缩摘要本来就跟会话模型走，`preset-summary-model` 管不到它。作者改了结构（找不到 v3 那一块、压缩组里认不出那几个零件）就停下报出来，不猜。
 - **开关**：已装的电脑用 `install.mjs --update --flash on` 加上、`--flash off` 去掉，记进安装记录，以后更新照做。还有会话在用它时去掉，干跑会提醒先停下。
 - **验收**：装上后新建一个「灵魂 · PTC Flash」会话，按阶段 D 做一次门牌实测；Flash 的规则（例如只在用户要求时才用子代理、笔记不超过 60 行）和记账、门牌的流程有没有冲突，以这次实测为准。
 
-### 修复（`--fix`）
+### 独立修复（6.0 起）
 
-kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有固定 id），是针对安装和使用中的 bug 打的第三方补丁。**修复和安装、更新、恢复分开**：那几步把 DSH 同步成作者原文，以前打的修复也一起清掉；装完单独做修复检查。**修复清单只对准作者最新版**（kit 迭代登记的那一版）：作者修好的条目从清单删掉，id 不再复用；已装的是旧版时，报告开头会提示先 `--update`。
+修复已完整迁移到 dsh-agent-soul-fix 1.0。kit 只负责安装生命周期和安装完整性检查，不执行修复，也不调用外部修复工具。
 
-5.4 对照上游 0221d89：换气从包外的 `../../../lib/paths.mjs` 导入，装进 node_modules 后一加载就报错，由 `huanqi-paths-import` 管（必须先修）；`mcp-hub-homedir` / `huanqi-homedir` 管未导入 `homedir` 的两处（DSH 不传 `DSH_HOME` 时才撞上，看 `state/huanqi-boot.log` 能判断这台传不传）；`echo-diag-join` 管诊断日志缺少 `join`。修复计划绑定家目录、profile、安装记录和上游源码内容；本机或离线源码变化后重新出报告。恢复会保留备份里的核对结论与证据，恢复后仍需按新机器事实复核。
+需修复时，请在独立 fix 工具目录阅读 `AGENT-FIX.md`，运行 `node fix.mjs --report`，按本机证据填写计划，经用户确认后执行。原 `install.mjs --fix` 等参数已停止提供功能并明确退出。
 
-
-**修不修不在终端里选，要 agent 核对过本机再定。** 脚本对照作者原文判出来的「问题还在」，只说明作者代码里有这段毛病，不说明这台电脑会撞上：要看 DSH 有没有把环境变量传给插件、用不用那个功能、日志里有没有报错。所以修复分五步：出报告 → 逐条核对 → 用户确认 → 按计划修 → 验收。
-
-1. **出报告**：只读，DSH 开着也能跑，最好开着，核对要看会话和面板。
-
-   ```bash
-   node install.mjs --fix --report            # 默认写到 logs/fix-reports/<时间>/，也可以 --report <空目录>
-   ```
-
-   目录里三个文件：`fix-report.md`（给人看）、`fix-report.json`（给 agent）、`fix-plan.json`（计划模板）。报告分几段：
-   - **要核对后选的**：这次会改本机的（要打上、要换现行写法、作者已修要换回作者原文）；
-   - **已经修好的**、**以前选过不修的**：不用再选，情况变了想改，核对后把那一条加进计划；
-   - **不用选的**：没装这个零件、作者已修、本机没有这个问题、需人工核对、本机改过；
-   - **清单外的疑似问题**：只报不修。
-
-   每条写着判定、什么时候会撞上、脚本查到的本机事实、核对方法、不修会怎样、能选什么，以及上次核对的结论和证据。标「启动 DSH 前要处理」的（发布清单漏列、包外导入、未导入的函数）会让零件加载不了，只能选修或先不动。
-
-2. **逐条核对**：照每条的核对方法查本机：看新会话的注入和工具列表、打开面板试、翻会话日志和记忆中枢、问用户用不用那个功能。结论填进 `fix-plan.json`：
-
-   ```json
-   { "id": "mcp-hub-homedir", "hit": "yes", "decision": "fix",
-     "evidence": ["新会话的工具列表里没有 mcp__echo__ 开头的工具", "mcp-hub 面板是空的"], "reason": "" }
-   ```
-
-   - `hit` 是核对结论：yes 会撞上 / no 不会撞上 / unknown 判断不了；`decision` 是选择：fix 修 / skip 不修 / later 这次先不动。
-   - 选 fix 或 skip 都要写 `evidence`，写查到了什么，不是复述报告。核对结论和选择对不上（不会撞上却修、会撞上却不修）在 `reason` 里写为什么。
-   - 判断不了就照实填 unknown，按「不修会怎样」的轻重给建议，别猜成 yes 或 no。
-
-3. **用户确认**：把每条的结论、证据、不修的后果和你的建议整理成表，用普通消息发给用户，再照 `fix-report.json` 的 `popups` 弹窗让用户选（见第五节「弹窗规范」）。**用户没确认的填 later，不要替用户决定。** 改完计划先校验一遍：`node install.mjs --fix --plan <报告目录>/fix-plan.json --dry-run`。
-
-4. **按计划修**：DSH 完全退出后（Mac 上脚本可以代为退出）跑 `node install.mjs --fix --plan <报告目录>/fix-plan.json`。脚本先核对出报告以后本机有没有变（已装文件、profile 配置、跳过清单），变了就停下，要重新出报告、重新核对；没变就照计划修，选了不修的记进跳过清单，每条的核对结论和证据记进安装记录（`fixes.<id>.check`），下次出报告会带出来。
-
-5. **验收**：重开 DSH，新建会话确认 preset，让 agent 调用 `agent_soul_check`；再照修了的那几条的核对方法看一遍，确认现象没了。
-
-不带参数跑 `--fix`，只列检查结果、不改文件，并提示走上面的步骤。装完、更新完、恢复完也只提示，不在终端里逐条问。
-
-**它怎么判断**：每条修复都带「问题长什么样」。先看作者这一版的原文里问题还在不在，再看本机已装的文件：
-
-| 作者原文 | 本机已装的 | 结果 |
-|---|---|---|
-| 问题还在 | 作者原文 / kit 旧写法 | 打上 kit 修复 / 换成现行写法 |
-| 问题还在 | 已是 kit 修复版 | 保持 |
-| 作者已修 | 还带着 kit 修复 | 撤掉，换回作者原文 |
-| 作者已修 | 作者原文 | 不动 |
-| 判断不了（作者改写了那段） | — | 不修，「需人工核对」 |
-| — | 本机手改过 | 整个文件不动，「本机改过」 |
-
-**`--fix` 对照的是已装那一版**：上游钉在安装记录里的主仓提交号（离线用 `--source <已装那一版的源码>`），作者新改的东西要等 `--update` 才进来。`--fix` 不动本体、不重装零件、不改包名、不碰中枢脚本和其它配置，只做修复清单里的事：文件补丁、换气配置的布尔、按需改写 profile 里的 Soul preset，以及把作者发布清单漏列的文件补拷进已装的包（`pack-unshipped`）。安装包 4.0 以前装的会停下（先用 4.x 的安装包更新，或者重装）；Soul preset 还在 4.3 以前的独立包 `dsh-soul-preset` 里的，`--fix` 会停下让你先跑一次 `--update`。
-
-- 改动的文件先把原样存进快照 `archives/<主机>-<家目录指纹>/<时间>-fix-…/`。
-- 修后检查 JavaScript 语法、YAML 和加载契约；失败自动按快照还原本次涉及的包、配置、锁文件和安装记录。强制杀进程或断电无法运行退出处理器，可照快照里的「还原方法.txt」和 `manifest.json` 人工恢复。
-- memory 的相对路径修复（`memory-home`）打上以前，安装写进配置的是绝对路径；打上以后第一次 `--update` 会把它换成相对写法（`dsh-soul/memory/hub/SELF.md`），之后不再变。
-
-**清单外的问题**（报告里的「清单外的疑似问题」「需人工核对」「本机改过」，以及用户使用中遇到的、清单里没有的 bug）：不直接手改已装文件（手改过的文件以后会被判成「本机改过」，整个文件都不再修）。先由 agent 整理修复方案交给用户确认：现象、原因（指到作者原文的文件和行）、改哪个文件的哪几行、以后怎么判断作者自己修好了、有什么风险。用户确认后，把它登记成 `lib/fixes.mjs` 里的新条目（新 id，带「问题长什么样」的判定，以及不修会怎样、什么时候会撞上、怎么核对），再走上面的报告 → 核对 → 计划。
-
-**参数**（id 用逗号隔开；报告里每条都写着 id）：
-
-- `--fix --report [目录]`：出修复报告和计划模板，只读。目录要是空的（防止盖掉填过的计划），不给就用 `logs/fix-reports/<时间>/`。
-- `--fix --plan <fix-plan.json>`：照核对过、用户确认过的计划修；加 `--dry-run` 只校验、报计划。计划要和同目录的 `fix-report.json` 是同一次出的。
-- 下面三个是不走报告和计划时手动用的，不能和 `--report`、`--plan` 一起用：
-- `--fix-skip <id,…>`：跳过这几条，已装的 kit 修复会撤掉、换回作者原文；记进安装记录，以后安装、更新、`--fix` 都跳过。`--fix-skip none` 清空。安装、更新、恢复也能用。
-- `--fix-revert <id,…>`：撤掉这几条 kit 修复，并记进跳过清单。
-- `--fix-only <id,…>`：这次只处理这几条，文件、配置、preset 和补拷都按此筛选；同一个文件里未选条目的旧写法也保持现状。
-- 4.0 去掉了 `--fix-reinstall`、`--organs-source`：取源和包名不再是修复条目（作者弃用了 organs、包名统一了），包名迁移走 `--update`。
-
-安装记录的 `fixRecords` 保存文件/preset 的作者原文和 kit 结果，配置仅保存修改过的行；撤回须与这些证据或旧作者原文匹配。没有记录的旧版布尔配置无法推断原来的引号/空白，不伪造还原内容。
-
-**「本机改过」怎么办**：那个文件在上次安装或更新以后被手改过，`--fix` 不覆盖。问用户：要保留就不动；要的话把改动整理成修复方案、登记进清单（见上面「清单外的问题」）。下次 `--update` 会照作者原文换掉它，原样在快照里。
+kit 更新会将文件换回作者原文；更新后重新检查，不能复用旧计划。旧安装记录的修复字段只保留作首次接管证据，kit 不再解释或更新它们。独立修复状态随迁移备份携带，跨机器恢复后重新检查。作者 heartbeat 的修复及运行验收说明在 fix 工具的 `MACOS-REPAIRS.md`。
 
 ## 十、迁移（备份与恢复）
 
@@ -402,7 +337,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 - 最后一位主导是旧电脑上的会话，新电脑上要重新任命。
 - mcp-hub 里其他服务器的命令和路径是旧电脑的，用不了就在 mcp-hub 面板里改。
 
-## 十一、已知坑（Boss 那台 Mac 上实测撞到的，脚本已处理）
+## 十一、已知坑（安装事项由 kit 处理，修复事项由独立 fix 处理）
 
 | # | 现象 | 原因 | 处理 |
 |---|---|---|---|
@@ -430,7 +365,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 | 22 | 门牌实测时压缩摘要没有「⛬ 压缩索引」开头，可是体检、配置都对 | 测试用的会话是装之前开的（例如在 DSH 里的 agent 自己跑安装的那个会话）。会话的 preset 在建会话时就定了，旧会话不会换成 Soul preset，压缩走的还是内置那套 | 不是故障。重开 DSH 后新建会话，看顶部 preset 是 Soul preset，再在新会话里测（阶段 D） |
 | 23 | 换了电脑、换了用户名或挪了 DSH 家目录以后，自我层「读不到」、mcp-hub / yantai / riji 找不到东西 | 早期版本把 `/Users/<用户名>/.dsh/…`、`C:/Users/<用户名>/.dsh/…` 这样的绝对路径写进了 `cordis.patch.yml` 和插件代码，profile 从别的电脑带过来、或者家目录变了，路径就静默失效；插件只认 DSH_HOME 环境变量，DSH 桌面版不传它 | 现在 memory 配置写相对 DSH 家目录的路径，路径类补丁在运行时自己找家目录（DSH_HOME → 插件所在位置 → `~/.dsh`）。旧电脑带过来的设置和写死路径的旧补丁，重跑安装或 `--update` 会认出来改成新写法；指向这台电脑上另一个确实存在的文件的，当作有意设置不动，只提醒 |
 | 24 | 卸载以后，以前的会话打不开 | 会话文件开头记着建会话时的 preset id（`soul`、`soul-ptc`、`yanqing`、`ptc-soul-flash` 等），卸载时选了 `keep`，这些 preset 已经删了 | 用卸载留下的备份包 `--restore` 装回来，再跑 `--uninstall --old-sessions rewrite`（改成官方 preset）或 `shell`（留空壳）。卸载时先看干跑报的「用 Soul preset 建的会话」有几个，再让用户选 |
-| 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者的 Soul preset（以前的砚青四套、现在的灵魂五套）在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 修复清单 `preset-summary-model`（2.17 起）：生成 preset 时去掉这两行，和官方预设一样跟会话模型走；本机默认模型本来就走 deepseek-official 时不去掉。有 API key、想照作者写死的，加 `--fix-skip preset-summary-model` |
+| 25 | 手动 `/compact` 一律报「Compaction could not produce a useful summary」，体检压缩一栏 start / end 有数、summary 为 0 | 会话日志里 `compaction/end` 的 error 是 `llm-deepseek: no API key for provider route "deepseek-official"`：作者的 Soul preset（以前的砚青四套、现在的灵魂五套）在压缩组里写死 `summarizationProvider: deepseek-official`（走 API key），Boss 的 DSH 是 `deepseek-account` 账号登录，没有 DeepSeek API key；88% 的自动压缩用同一份配置，一样压不成 | 独立 fix 的修复条目 `preset-summary-model`（源自 kit 2.17）：生成 preset 时去掉这两行，和官方预设一样跟会话模型走；本机默认模型本来就走 deepseek-official 时不去掉。有 API key、想照作者写死的，在独立 fix 中设置 `--fix-skip preset-summary-model` |
 | 26 | macOS 上 model-statusbar 一直报错、没有读数 | 它的探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe`，只能在 Windows 上用 | 5.3 可按报告核实并选择 `model-statusbar-darwin`；需本机 ComfyUI 目录和 Mac Python，真实启动/静息/停止另做验收 |
 | 27 | macOS 上回声面板的体检一项都不出 | 面板在 Electron 里要找 DSH 自带的 node，作者只列了 Windows 的布局（`resources/runtime/…/node.exe`）；Mac 上找不到，就拿 DSH 主程序去跑体检脚本 | 修复清单 `echo-node-darwin`（4.0）：补上 `Contents/Resources/runtime/<arch>/…/node` |
 | 28 | 一行装在 Apple 芯片的 Mac 上挑到了 x64 的 node | DSH 同时带 arm64 和 x64 两份运行时，x64 那份要走 Rosetta | `install.sh` 和 `install.mjs` 都先挑本机架构那份（4.0） |

@@ -1,5 +1,7 @@
 # 给 Agent 的手册：kit 自我迭代
 
+> 版本边界：kit 6.0；修复已迁入独立 dsh-agent-soul-fix 1.0。本文中的 fix 命令必须进入该工具目录执行。
+
 用户要求“迭代 kit”时，按本手册完成：检查并同步 kit 自身仓库 → 收集插件上游变化 → 分析安装、更新、备份、迁移四流程 → 修正 kit → 验证 → 登记完成基线。交付包括实际修正和验证结论，不能停在一份更新摘要。
 
 本流程维护当前工具包源码。`install.mjs --update` 维护的是已经安装到 DSH 的插件，两者分别执行。用户提出 kit 迭代已授权这条流程中的源码修改、报告和隔离验证，无须每个阶段重复请求确认；真实 DSH 安装、重启、覆盖用户数据以及 Git 提交/推送按用户另行给出的范围执行。
@@ -89,27 +91,11 @@ node install.mjs --kit-iterate --dry-run
 
 发现新插件时，先判断它是不是必需能力、有哪些配置和持久数据；不要自动加入所有方案。涉及新的用户偏好或扩大安装范围时再询问用户，其余已授权的 kit 修正继续完成。
 
-### 修复清单（`lib/fixes.mjs`，3.0 起）
+### 与独立修复工具的边界
 
-kit 对上游插件的每一处修改都是修复清单里的一条。报告只跟踪主仓 `cyanwell/dsh-agent-soul`（作者 2026-10-31 弃用了零件仓 `dsh-agent-organs`，换气、compact-region 都回了主仓 `plugins/`；旧报告和 `kit-iteration.json` 里的 `organs` 字段只作历史保留），然后对新上游逐条归类，写在 `report.md` 的「修复清单」一节：
+kit 6.0 不再维护修复清单、修复实现指纹或 fixChanges。修复清单及退役 ID 由 dsh-agent-soul-fix 的独立迭代流程维护；不要为了修复清单更新提升 kit 版本。历史 kit-iteration.json 中的 fixes 信息只作迁移来源保留。
 
-| 归类 | 意思 | 谁处理 |
-|---|---|---|
-| 仍需修 | 问题还在，kit 的锚点也对得上 | 不用动 |
-| 作者这次修好了 | 基线里问题在，目标里没了 | 从 `lib/fixes.mjs` 删掉这一条（连同 `CHECKS`、`fixFacts()` 里的条目和只给它用的常量），在 `result.json` 的 `fixChanges` 登记 `retire` 和证据；登记（`--kit-accept`）时 id 写进 `kit-iteration.json` 的 `fixes.retired`，不再复用。5.4 起安装、更新都同步成作者最新版，修复清单只对准最新版，不再为旧版留条目 |
-| 作者早就修好了 | 基线、目标里都没有这个问题 | 同上：删掉，登记 `retire` |
-| 原文对不上 | 问题还在但锚点对不上，或者那段代码认不出来 | 契约提示 `fix:<id>`（`fix-anchor`）：读目标源码，判断作者是修了还是改写了。改写了就改 `lib/fixes.mjs` 里这一条（`old` / `new` / `any` / `problem` / `scope`），在隔离目录里干跑确认；作者确实修了，就让判定认得出来（调 `problem` / `scope`），不要只换一个正则就宣称兼容 |
-| 不再适用 | 零件或文件没了 | 契约提示 `fix-gone`：核对零件是删了、改名还是挪了，相应改清单和安装器 |
-| 疑似新问题 | 清单还没管、但和清单同类的毛病：写死 Windows 绝对路径、加载名 ≠ 包名。只报目标里新出现的，基线就有的列在报告里备查 | 契约提示 `fix-candidate`：判断会不会让用户那边静默失效。会，就在 `lib/fixes.mjs` 加一条（新 id，永不复用；`basis` 写依据，`since` 写 kit 版本），在隔离目录里干跑确认「问题在 / 作者已修 / 判断不了」三种判定；不会，就标 `not-applicable` 说明理由 |
-
-改清单时守住这几条：
-
-- 每条修复都要能逐字节还原回作者原文（`unpatchText`），`--fix` 比对「本机改没改过」靠它。
-- 修复只对准作者最新版（kit 迭代登记的那一版），锚点改写时不用保留旧版原文；删掉的条目、id 都不复用。
-- 判定只看文件内容和本机环境，不看锚点在不在：`problem` 命中 = 问题在；没命中但 `scope` 命中（那段代码还在）= 作者已修；都没命中 = 判断不了。
-- 路径类修复不写死任何一台电脑的路径，用 `lib/home-paths.mjs` 的运行时定位。
-- 不是作者给的修复（Boss 本机实测的）`basis` 写 `boss`，注释里写明来源。
-- 新条目在 `CHECKS` 里写上 `impact`（不修会怎样）、`when`（什么情况下本机会撞上）、`verify`（agent 怎么在本机核对）；会让零件加载不了的标 `blocking`。脚本能自己查的本机事实，加进 `install.mjs` 的 `fixFacts()`。修复报告（`--fix --report`）和计划校验都靠这几项，缺了 agent 没法判断这台会不会撞上。
+四流程仍须核对安装完整性、独立修复状态备份/恢复、写锁和运行任务保护。上游缺文件或依赖问题由安装完整性检查报告，不调用修复实现判断是否有补丁可用。
 
 ## 3. 完成 kit 修正
 
@@ -117,7 +103,6 @@ kit 对上游插件的每一处修改都是修复清单里的一条。报告只�
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
-- 改修复清单（`lib/fixes.mjs`、`lib/huanqi-patches.mjs`、`lib/home-paths.mjs`、`lib/huanqi-panel-patch.mjs`）或零件目录（`lib/parts.mjs`：包名、必装、各系统的已知限制）后，在隔离目录里跑一遍 `install.mjs --fix --report <空目录>`：已经照计划修过的环境，报告里「要核对后选的」应该是 0 条；再拿一份填好的计划跑 `--fix --plan <计划> --dry-run`，确认校验和照做的计划对得上。
 - 包名或 preset id 变化时保留旧安装、旧会话和旧备份的兼容路径。
 - 备份范围或格式变化时同时维护写入和恢复，并说明旧包如何读取。
 - 本轮若修正了迭代工具自身，用临时目录重跑一遍迭代命令，继续使用本轮固定的上游快照完成分析。
@@ -131,7 +116,6 @@ node --check install.mjs
 node --check lib/kit-iterate.mjs
 node --check lib/kit-update.mjs
 node --check lib/package-contract.mjs
-node --check lib/fixes.mjs
 git diff --check
 ```
 
@@ -155,8 +139,7 @@ git diff --check
 - `targetSha`：保留报告中的完整目标提交号；`summary` 写本次修正或无需修改的理由。
 - `flows`：四个 id 固定为 `install`、`update`、`backup`、`restore`。`decision` 为 `changed` 或 `unchanged`；填写 `reason`、源码证据数组 `evidence`，并在 `checks` 中引用实际完成的检查 id。
 - `findings`：逐项填写 `fixed` 或 `not-applicable`，后者必须说明为什么无需修改；未解决的保留 `pending`。
-- `fixChanges`：本轮清单新增、改写、退役记录，逐项填写 `id`、`action`（`add` / `rewrite` / `retire`）和 `evidence` 数组；没有变更填空数组。旧 id 不删除、不复用。
-- `kitVersion`：与 `install.mjs` 一致；改写修复实现后必须提升版本。登记校验清单/补丁指纹，不能漏报改动。
+- `kitVersion`：与 `install.mjs` 一致，独立修复版本不参与 kit 验收。
 - `checks`：每项有唯一 `id`、`scope`、实际执行的 `command`、`status` 和实际输出摘要 `evidence`。通过才写 `passed`，失败写 `failed`。
 - `limitations`：未验证的环境或能力，例如“未做 Windows 桌面验收”。
 
