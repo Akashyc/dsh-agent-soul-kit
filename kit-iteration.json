@@ -2,8 +2,8 @@
   "format": 1,
   "repo": "cyanwell/dsh-agent-soul",
   "baseline": {
-    "sha": "0221d8913e1da9836d63f16c27c5149f503d3264",
-    "treeDigest": "4cf70f02e64865d27419020b4087083626a3025db59b0388d0056addd3051ac8"
+    "sha": "3d8a7c3777d859353f822e7b90f9b157dfc6ff71",
+    "treeDigest": "617908f85037b6ee9d2b403f23e107651cfcc8797196197b7663d69bb4a881c1"
   },
   "fixes": {
     "retired": {
@@ -58,6 +58,63 @@
       }
     },
     "catalog": [
+      {
+        "id": "compaction-memq-path",
+        "phase": "file",
+        "part": "compaction",
+        "since": "5.5",
+        "basis": "kit",
+        "title": "压缩摘要回取命令按本机路径定位",
+        "why": "3d8a7c3 把可配置的 MEMQ 改回作者 Windows 绝对路径",
+        "blocking": false,
+        "impact": "压缩摘要里的门牌回取命令指向作者电脑，无法直接执行",
+        "when": "上游摘要使用写死的 Windows memq 路径",
+        "verify": [
+          "核对摘要门牌命令是否指向本机中枢；可用 SOUL_MEMQ/MEMQ 覆盖"
+        ],
+        "type": "path",
+        "target": "compaction/index.js",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "3d8a7c3 把可配置的 MEMQ 改回作者 Windows 绝对路径"
+          }
+        ],
+        "applicability": "仅在 compaction 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
+      {
+        "id": "echo-mcp-sessions",
+        "phase": "file",
+        "part": "echo",
+        "since": "5.5",
+        "basis": "kit",
+        "title": "ECHO 会话目录复用统一配置",
+        "why": "3d8a7c3 删掉会话目录推断并写死作者 Windows 路径",
+        "blocking": false,
+        "impact": "ECHO 默认去作者电脑目录找会话，日志召回为空",
+        "when": "未设置 ECHO_SESSIONS 且使用 echo-mcp 日志召回",
+        "verify": [
+          "核对 echo-config 的 sessions 与本机日志目录一致",
+          "用一条已知日志内容检索，结果须指回原始会话"
+        ],
+        "type": "behavior",
+        "target": "memory/hub/echo-mcp.mjs",
+        "evidence": [
+          {
+            "source": "lib/fixes.mjs",
+            "detail": "3d8a7c3 删掉会话目录推断并写死作者 Windows 路径"
+          }
+        ],
+        "applicability": "仅在 echo 已安装或本次计划安装时适用",
+        "validation": [
+          "syntax-or-yaml",
+          "byte-roundtrip"
+        ]
+      },
       {
         "id": "pack-unshipped",
         "phase": "pack",
@@ -2298,6 +2355,364 @@
         "verify-macos 的 launchd/plutil 部分要在 macOS 上跑，Linux VM 只验证到面板加载和 heartbeat.mjs --force",
         "heartbeat 在非 macOS 上没有修复，0221d89 装上就加载失败（可选零件，默认不装）",
         "Windows 没验证；弹窗规范只在手册和 JSON 里，实际弹窗效果要在 Cowork 里看一次"
+      ]
+    },
+    {
+      "completedAt": "2026-11-04T08:09:45.516Z",
+      "reportCreatedAt": "2026-11-04T07:48:33.223Z",
+      "base": "0221d8913e1da9836d63f16c27c5149f503d3264",
+      "target": "3d8a7c3777d859353f822e7b90f9b157dfc6ff71",
+      "kitVersion": "5.5",
+      "kitUpdate": {
+        "repo": "Akashyc/dsh-agent-soul-kit",
+        "ref": "main",
+        "beforeSha": "f70eb78d4f6244a2b7e0c3a1ecc8a50ad8d6a23a",
+        "targetSha": "d2475982cd8965ea27b542147ece68ea03bcaded",
+        "changes": [
+          {
+            "file": ".gitignore",
+            "kind": "changed"
+          },
+          {
+            "file": "AGENT-INSTALL.md",
+            "kind": "changed"
+          },
+          {
+            "file": "AGENT-ITERATE.md",
+            "kind": "changed"
+          },
+          {
+            "file": "CHANGELOG.md",
+            "kind": "changed"
+          },
+          {
+            "file": "MACOS-REPAIRS.md",
+            "kind": "removed"
+          },
+          {
+            "file": "README.md",
+            "kind": "changed"
+          },
+          {
+            "file": "assets/presets/_shared/compaction.yml",
+            "kind": "changed"
+          },
+          {
+            "file": "assets/presets/preset-soul-all.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-cordis.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-distill.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul-ptc.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-soul.yml",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-cordis.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-distill.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing-ptc.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/preset-yanqing.yml",
+            "kind": "added"
+          },
+          {
+            "file": "assets/presets/skills/cordis-plugin-development/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/creation/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/distill/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/presets/skills/editing-cordis-compositions/SKILL.md",
+            "kind": "removed"
+          },
+          {
+            "file": "assets/templates/00-authority.md.tpl",
+            "kind": "changed"
+          },
+          {
+            "file": "install.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "kit-iteration.json",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/archive.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/fix-plan.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/fix-records.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/fix-transaction.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/fixes.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/flash-presets.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/huanqi-patches.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/kit-iterate.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/kit-update.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/macos-patches.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/macos/apps.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/macos/echo-socket.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/macos/heartbeat-support.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/macos/model.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/package-contract.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/parts.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/popups.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/preset-migration.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/preset-skills.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "lib/setup.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/soul-presets.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "lib/uninstall.mjs",
+            "kind": "changed"
+          },
+          {
+            "file": "scripts/verify-macos-install.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "scripts/verify-macos.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "scripts/verify-setup.mjs",
+            "kind": "removed"
+          },
+          {
+            "file": "setups/大肥鱼/00-authority.md",
+            "kind": "changed"
+          },
+          {
+            "file": "setups/大肥鱼/setup.json",
+            "kind": "changed"
+          }
+        ],
+        "status": "ahead",
+        "ready": true,
+        "directory": null,
+        "message": "本地 kit 已包含发布源 d2475982cd8965ea27b542147ece68ea03bcaded，且有额外提交；保留本地版本，继续检查插件上游。"
+      },
+      "summary": "kit发布源d2475982已被本地HEAD包含；保留本地未提交改动。审查0221d89→3d8a7c3，修复部署依赖预检、补拷预览、冻结归属和撤销安全；新增MEMQ与sessions路径修复。清除过时处方、死检测及无行为标记；没有证据退役任何现役ID。未部署本机。",
+      "flows": [
+        {
+          "id": "install",
+          "decision": "changed",
+          "reason": "先验证最终文件状态及语法，再写补丁；补拷参与预览。新上游两项路径回归以独立修复处理。",
+          "evidence": [
+            "install.mjs runFixes/pack-unshipped",
+            "lib/fixes.mjs compaction-memq-path/echo-mcp-sessions",
+            "scripts/verify-macos-install.mjs install/report/plan-dry/apply-plan/repeat"
+          ],
+          "checks": [
+            "lifecycle",
+            "runtime"
+          ]
+        },
+        {
+          "id": "update",
+          "decision": "changed",
+          "reason": "保留作者原文更新规则；新路径回归登记按需修复，冻结不认领本机手改，撤销不删作者文件。",
+          "evidence": [
+            "install.mjs syncHub/runFixes",
+            "scripts/verify-macos-install.mjs update/update-repeat/local-freeze-no-claim"
+          ],
+          "checks": [
+            "lifecycle"
+          ]
+        },
+        {
+          "id": "backup",
+          "decision": "unchanged",
+          "reason": "格式1递归保存书房/记忆中枢，已有可选向量数据在范围内，node_modules依赖排除；不扩张默认模型安装。",
+          "evidence": [
+            "install.mjs makeBackup addTree(soul)/addTree(mem)",
+            "scripts/verify-macos-install.mjs backup"
+          ],
+          "checks": [
+            "lifecycle"
+          ]
+        },
+        {
+          "id": "restore",
+          "decision": "unchanged",
+          "reason": "原字节恢复用户资料与空目录，重写本机配置路径，部署仍使用作者原文；新路径修复按修复流程选择，不改变备份格式。",
+          "evidence": [
+            "install.mjs RESTORE copyTree/REWRITE",
+            "scripts/verify-macos-install.mjs restore"
+          ],
+          "checks": [
+            "lifecycle"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "candidate:path:main/kit/echo/echo-mcp.mjs",
+          "decision": "fixed",
+          "reason": "新增echo-mcp-sessions，复用echo-config导出的SESSIONS及环境覆盖。"
+        },
+        {
+          "id": "candidate:path:main/kit/echo/models/bge-small-zh/embed.mjs",
+          "decision": "not-applicable",
+          "reason": "源码确有作者硬路径，但默认中枢同步仅顶层脚本，不部署models目录或依赖；可选向量层本轮未启用，不扩大安装范围。保留为明确限制。"
+        },
+        {
+          "id": "candidate:path:main/kit/echo/models/bge-small-zh/recall.mjs",
+          "decision": "not-applicable",
+          "reason": "源码确有作者硬路径，但默认中枢同步仅顶层脚本，不部署models目录或依赖；可选向量层本轮未启用，不扩大安装范围。保留为明确限制。"
+        },
+        {
+          "id": "candidate:path:main/kit/echo/models/bge-small-zh/vecsearch.mjs",
+          "decision": "not-applicable",
+          "reason": "源码确有作者硬路径，但默认中枢同步仅顶层脚本，不部署models目录或依赖；可选向量层本轮未启用，不扩大安装范围。保留为明确限制。"
+        }
+      ],
+      "organs": null,
+      "fixes": {
+        "retired": [],
+        "unretired": [],
+        "changes": [
+          {
+            "id": "compaction-memq-path",
+            "action": "add",
+            "evidence": [
+              "target/plugins/compaction/index.js:95 写死作者Windows路径；lib/fixes.mjs恢复环境覆盖和运行时家目录定位"
+            ]
+          },
+          {
+            "id": "echo-mcp-sessions",
+            "action": "add",
+            "evidence": [
+              "target/kit/echo/echo-mcp.mjs:159 写死sessions；统一配置已导出SESSIONS"
+            ]
+          },
+          {
+            "id": "heartbeat-darwin",
+            "action": "rewrite",
+            "evidence": [
+              "移除作者文件create和heartbeat-core纯注释标记；作者文件由发布契约补拷；撤销保留作者原文"
+            ]
+          },
+          {
+            "id": "pack-unshipped",
+            "action": "rewrite",
+            "evidence": [
+              "lib/package-contract.mjs 增加字面脚本引用及漏列依赖闭包；预览纳入待拷文件"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        {
+          "id": "static",
+          "scope": "static",
+          "command": "for f in install.mjs lib/*.mjs scripts/*.mjs; do node --check \"$f\" || exit 1; done; git diff --check; node scripts/verify-setup.mjs",
+          "status": "passed",
+          "evidence": "语法/空白检查退出0，问答自测通过"
+        },
+        {
+          "id": "runtime",
+          "scope": "simulated",
+          "command": "node scripts/verify-macos.mjs dsh-agent-soul-kit/logs/kit-iterations/2026-11-04T07-48-33-223Z-kbd7x7/target",
+          "status": "passed",
+          "evidence": "macOS 自检通过155项；新路径语法/判定/逐字节还原、面板加载、定时和socket等隔离验证，无真实调度注册"
+        },
+        {
+          "id": "lifecycle",
+          "scope": "simulated",
+          "command": "node scripts/verify-macos-install.mjs dsh-agent-soul-kit/logs/kit-iterations/2026-11-04T07-48-33-223Z-kbd7x7/target",
+          "status": "passed",
+          "evidence": "19条CLI全通过，含local-freeze-no-claim不认领本机修改、实际写helper后注入异常并整包/安装记录回滚、首次/重复/冻结/撤销/依赖拒绝、backup/update/update-repeat/restore；未注册真实任务"
+        }
+      ],
+      "limitations": [
+        "未做Windows及真实DSH桌面部署/压缩/调度验收；VERIFIED保持原值。",
+        "可选向量层未安装、未执行；上游模型CLI硬路径仍存在，不能宣称向量召回已可用。",
+        "上游compaction工具计数与向量全局重试语义仅作风险记录，未扩大为本轮功能重写。",
+        "同目录依赖字面扫描不是完整JavaScript解析器，复杂动态路径需人工核对。"
       ]
     }
   ]

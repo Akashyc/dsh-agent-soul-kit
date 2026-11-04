@@ -1,5 +1,5 @@
 {
-  "_说明": "现成方案：Boss 的大肥鱼。权威源册、自我层、人设都是手写的（同目录三个文件），安装时原样放进去；下面这些字段决定装哪些零件、生成哪些 Soul preset、心跳和 init.mjs 的回答。",
+  "_说明": "现成方案：Boss 的大肥鱼。权威源册、自我层、人设都是手写的（同目录三个文件），安装时原样放进去；下面这些字段决定装哪些零件、生成哪些 Soul preset 和 init.mjs 的回答。作者 heartbeat 是可选零件，按需验收后开启，不自动启用。",
   "format": 1,
   "kind": "handwritten",
   "name": "大肥鱼",
@@ -21,6 +21,5 @@
   "parts": ["mnemon-probe", "clock", "huanqi", "huanqi-panel", "mcp-hub"],
   "presets": ["soul", "soul-cordis", "soul-ptc", "soul-distill", "soul-all"],
   "defaultPreset": "soul",
-  "heartbeat": { "enabled": true, "time": "12:00" },
   "files": { "authority": "00-authority.md", "self": "SELF.src.md.tpl", "voice": "大肥鱼-声音.md" }
 }
