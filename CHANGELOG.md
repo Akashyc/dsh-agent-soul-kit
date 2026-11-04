@@ -1,8 +1,20 @@
 # 历史更新记录
 
-这里归档 5.2 及以前的更新，按版本从新到旧排列。记录反映当时的行为；当前功能与用法以 [README](README.md) 为准。
+这里归档 README 最新三条记录之外的更新，按版本从新到旧排列。记录反映当时的行为；当前功能与用法以 [README](README.md) 为准。
 
 最近三条更新见 [README 的版本记录](README.md#版本记录)。
+
+## 5.6（2026-11-04）
+
+退役 kit 自带每日心跳：删除 `assets/templates/heartbeat.mjs.tpl`、安装时的脚本生成和 launchd / 计划任务注册、问答题目与 `setup.json` 的 `heartbeat` / `heartbeatTime` 字段。`--heartbeat-time` 明确报错，`--no-heartbeat` 仅作旧命令兼容。只保留旧任务的识别、停用与迁移（`--retire-kit`）、作者 heartbeat 零件和 `heartbeat-darwin` 兼容修复；`--replace-kit` / `--restore-kit` 删除，不再切换或恢复旧每日心跳。不自动停用已装任务。 本轮也没有在本机部署或停用任何任务。
+
+## 5.5（2026-11-04）
+
+修复前校验最终文件依赖图；删除仍被引用的 helper 会拒绝整次操作，不再写空文件。补拷依赖参与干跑，未选 helper 保持原状；作者配套文件撤销后保留。新增 `compaction-memq-path`、`echo-mcp-sessions` 处理上游路径回归。删除仅加注释的 heartbeat-core 补丁、不可达旧检测和过时修复处方；不复用退役 id。隔离验证覆盖首次修复、重复、冻结、撤销和写入后失败回滚。
+
+## 5.4（2026-11-04）
+
+跟上游 0221d89。**安装、更新以作者为准**：本体、零件、中枢脚本（作者的 `install-kit --all`）、Soul preset 和 skills 一律同步成作者原文，kit 修复和本机手改都换掉，原样进快照，安装记录里的修复结论清空、只留核对证据；上游包本身有问题（入口文件不存在、导入包外文件、语法错误、注册 id 撞车）不再停下，写进「需要留意」、收尾点名。修复清单只对准作者最新版：退役的 7 条从清单删掉（id 保留不复用），新增 `huanqi-paths-import`（0221d89 换气从包外的 `lib/paths.mjs` 导入，一加载就报错），`heartbeat-darwin` 按新版改写；homedir 两条改看 `state/huanqi-boot.log` 判断 DSH 传不传 `DSH_HOME`；修复检查遇到旧版安装先提示更新。发布清单检查新增「导入了包外的文件」。自动备份统一到 kit 的 `archives/<主机>-<家目录指纹>/`（新增 `lib/archive.mjs`），旧的 `.bak-*`、`dsh-soul/_backup/` 自动搬进 `legacy/`，快照同时是回滚依据。可选零件分三组全量列出，兼容问题写成「具体问题和前置条件」，没装 dsh-mnemon 选 mnemon-probe 改成提醒。人设三问合成一个输入框（句子和文件路径混写）。`--questions` 和修复报告输出排好的弹窗 `popups`（新增 `lib/popups.mjs`），手册加「弹窗规范」。不再迁移 kit 4.0 以前的安装。新增 `scripts/verify-setup.mjs`。
 
 ## 5.3（2026-11-04）
 
