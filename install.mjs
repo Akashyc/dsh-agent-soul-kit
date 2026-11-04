@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // dsh-agent-soul 安装包：安装 / 更新 / 备份迁移 / 卸载
 //
-// 默认从 GitHub 拉 cyanwell/dsh-agent-soul 的最新版（main）。装成什么样的 agent 由「方案」决定：
+// 默认更新同级作者仓库，再从固定提交导出临时源码；不就地修改作者源码。装成什么样的 agent 由「方案」决定：
 // 用现成方案（setups/ 下的，例如 大肥鱼），或者全新安装（按引导填设定，填完存成新方案再装）。
 // 详细说明见同目录 AGENT-INSTALL.md。必须用 node 18+，推荐用 DSH 自带的 node。
 //
@@ -21,12 +21,12 @@
 //
 // 可选参数：
 //   --ref <分支|标签|提交>       装 / 更新到指定版本，默认 main（最新）
-//   --source <目录|.tar.gz>      用本地源码，不联网（网络不通时先手动下载）
-//   --proxy <地址|none>          下载用的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
+//   --source <目录|.tar.gz>      离线来源，只读并复制到临时区；Git 目录须干净
+//   --proxy <地址|none>          Git 获取源码的代理；默认依次读 HTTPS_PROXY 等环境变量、系统代理
 //   --default-preset <id|keep>   新会话默认 preset：Soul id、动态 soul-flash-* id 或 keep（更新默认）；安装默认按方案
 //   --flash <on|off>             dsh-flash-presets 全部预设装不装：安装默认按方案，更新默认按安装记录
 //   --flash-ref <标签|分支|提交>  Flash 的源取哪一版，默认作者 main；可指定发布标签
-//   --flash-source <目录|.tar.gz> Flash 用本地的 dsh-flash-presets 源码，不联网
+//   --flash-source <目录|.tar.gz> Flash 离线只读来源，不联网、不就地适配
 //   --app-asar <路径>            DSH 的 app.asar（找不到官方 PTC 时手动指定）
 //   --node <路径>                指定用哪个 node 跑（默认自动找：DSH_NODE > DSH 自带 > 当前进程 > PATH > 常见位置）
 //   --dsh-home <目录>            DSH 家目录，默认按 DSH_HOME → <用户目录>/.dsh → Windows 的 %APPDATA%\dsh 依次找
@@ -83,12 +83,14 @@ import { OLD_SESSION_MODES, SOUL_PRESET_IDS, isSoulPresetId, officialPresetFor, 
 import { PARTS, PART_NAMES, PRESET_ONLY, OPTIONAL_PARTS, MUST_HAVE, ADDED_PARTS, OPT_IN_PARTS, EXTERNAL_PARTS, PART_INFO, PLATFORM_LABEL, platformNote, platformText, verLess } from './lib/parts.mjs'
 import { SETUPS, render, parseBool, normalizeAnswers, buildSetupFiles, loadSetup, listSetups, initAnswers, describeSetup, questionSheet, askTerminal } from './lib/setup.mjs'
 import { IS_MAC, NODE_MIN_MAJOR, dshHomeCandidates, nodeVersionOf, nodesOnPath, detectNode, resolveProxy as systemProxy, quitDshMac } from './lib/platform.mjs'
+import { cachedSource, localSource } from './lib/source-cache.mjs'
+import { git as sourceGit } from './lib/kit-update.mjs'
 
 const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '6.1'
+const KIT_VERSION = '6.2'
 const PRESET_LABEL = { ...BASE_PRESET_LABEL }
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
@@ -127,6 +129,7 @@ const RENAME_OPT = opt('--rename')
 if (flag('--rename') && RENAME_OPT === undefined) { console.log('--rename 后面要跟「上游称呼=你的称呼」（例如 --rename 爀曦=Boss），或者 none'); process.exit(2) }
 const MODE = KIT_UPDATE ? 'kit-update' : KIT_ITERATE ? 'kit-iterate' : KIT_ACCEPT ? 'kit-accept' : BACKUP ? 'backup' : RESTORE ? 'restore' : UPDATE ? 'update' : UNINSTALL ? 'uninstall' : 'install'
 let REF = opt('--ref', 'main')
+const PINNED_REFS = []
 const SOURCE = opt('--source')
 const FLASH_OPT = opt('--flash'), FLASH_REF = opt('--flash-ref'), FLASH_SOURCE = opt('--flash-source')
 const PROXY_OPT = opt('--proxy')
@@ -200,11 +203,11 @@ if (flag('--old-sessions') && !Object.keys(OLD_SESSION_MODES).includes(OLD_SESSI
 if (RUNTIME_OPT && DATA_DIR_OPT) { console.log('--runtime（直接给热记忆目录）和 --data-dir（给数据根目录）只能用一个'); process.exit(2) }
 if (DEFAULT_PRESET !== null && DEFAULT_PRESET !== 'keep' && !isKnownPresetId(DEFAULT_PRESET)) { console.log(`--default-preset 只能是 ${PRESET_IDS.join(' / ')} / soul-flash-* / keep`); process.exit(2) }
 if (flag('--flash') && !['on', 'off'].includes(FLASH_OPT)) { console.log('--flash 只能是 on 或 off（灵魂 · PTC Flash 装不装）'); process.exit(2) }
-if ((flag('--flash') || flag('--flash-ref') || flag('--flash-source')) && !['install', 'update', 'restore'].includes(MODE)) { console.log('--flash、--flash-ref、--flash-source 只用于安装、更新、恢复（--fix 钉在安装记录里那一版）'); process.exit(2) }
+if ((flag('--flash') || flag('--flash-ref') || flag('--flash-source')) && !['install', 'update', 'restore'].includes(MODE)) { console.log('--flash、--flash-ref、--flash-source 只用于安装、更新、恢复'); process.exit(2) }
 // 旧修复参数明确退出，避免退化成安装命令。
 for (const key of ['--fix', '--fix-only', '--fix-skip', '--fix-revert', '--fix-reinstall', '--report', '--plan', '--summary-model']) {
   if (flag(key) || argv.some((value) => value.startsWith(key + '='))) {
-    console.error(`${key} 已迁移到独立 dsh-agent-soul-fix 1.0；请在该工具目录运行 node fix.mjs --help`)
+    console.error(`kit 不支持 ${key}，不会把它当成安装命令执行`)
     process.exit(2)
   }
 }
@@ -251,7 +254,7 @@ process.on('exit', (code) => {
 let TOUCHED = false // 过了备份那一步才算动过文件
 function die(m) {
   out('\n  ✗ ' + m)
-  out(TOUCHED ? '  已停止。到这一步为止改过的文件都有备份，见上面的输出。' : '  已停止。还没有改任何文件。')
+  out(TOUCHED ? '  已停止。到这一步为止改过的文件都有备份，见上面的输出。' : '  已停止。尚未修改 DSH。')
   process.exit(1)
 }
 
@@ -262,7 +265,12 @@ function printTerminalHint(extra = []) {
   // 命令先 cd 到安装包，所以带路径的参数要换成绝对路径；--proxy 里的账号密码不进日志
   const PATH_OPTS = ['--source', '--base-source', '--kit-source', '--app-asar', '--answers', '--restore', '--runtime', '--data-dir', '--dsh-home', '--node', '--out']
   let masked = false
-  const args = [...argv.filter((a) => a !== '--dry-run'), ...extra].map((a, i, all) => {
+  const reviewed = []
+  for (let i = 0; i < argv.length; i++) {
+    if (['--ref', '--flash-ref'].includes(argv[i]) && PINNED_REFS.includes(argv[i])) { i++; continue }
+    if (argv[i] !== '--dry-run') reviewed.push(argv[i])
+  }
+  const args = [...reviewed, ...PINNED_REFS, ...extra].map((a, i, all) => {
     const prev = all[i - 1]
     if (PATH_OPTS.includes(prev) && !a.startsWith('--')) return path.resolve(a)
     if (prev === '--proxy' && /\/\/[^/@\s]*@/.test(a)) { masked = true; return a.replace(/\/\/[^/@\s]*@/, '//***@') }
@@ -312,8 +320,7 @@ async function askLine(prompt) {
   try { return String(await rl.question(prompt)).trim() } catch (e) { return cancelled(e) } finally { rl.close() }
 }
 
-// 列出一个包「发布出去」会有的文件：按 package.json 的 files 清单（和 npm / pnpm 的规则一致），
-// 外加 package.json、README、LICENSE。没有 files 清单就是整个目录。返回相对路径（/ 分隔）。
+// 桌面端零件按作者 plugins/README.md 整目录复制；本体保留作者桌面安装器对应的发布目录。
 function walk(root, rel = '', acc = []) {
   for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
     const r = rel ? rel + '/' + e.name : e.name
@@ -326,6 +333,7 @@ function walk(root, rel = '', acc = []) {
 function packFiles(dir) {
   const all = walk(dir)
   const pj = readJson(path.join(dir, 'package.json'))
+  if (pj?.name !== 'dsh-agent-soul') return all.sort()
   if (!pj || !Array.isArray(pj.files) || !pj.files.length) return all.sort()
   const rules = pj.files.map((f) => String(f).replace(/^\.\//, '').replace(/\/+$/, ''))
   const globs = rules.filter((f) => f.includes('*')).map((g) => new RegExp('^' + g.split('**').map((s) => s.split('*').map((t) => t.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')).join('.*') + '(/.*)?$'))
@@ -334,7 +342,7 @@ function packFiles(dir) {
 }
 function hashFiles(root, files) { const m = new Map(); for (const f of files) m.set(f, sha1(fs.readFileSync(path.join(root, f)))); return m }
 function hashDir(root, ignore = []) { return exists(root) ? hashFiles(root, walk(root).filter((f) => !ignore.includes(f))) : new Map() }
-// 已装的包：只看它 files 清单内的文件（清单外的文档、测试本来就不归运行时管，pnpm 重装也会清掉）
+// 比对范围必须与安装时相同，零件不能再按 npm 的 files 缩减。
 function hashInstalled(root, ignore = []) { return exists(root) ? hashFiles(root, packFiles(root).filter((f) => !ignore.includes(f))) : new Map() }
 function diffMaps(oldM, newM) {
   const added = [], removed = [], changed = []
@@ -342,9 +350,9 @@ function diffMaps(oldM, newM) {
   for (const f of oldM.keys()) if (!newM.has(f)) removed.push(f)
   return { added, removed, changed, same: !added.length && !removed.length && !changed.length }
 }
-// 把源包按 files 清单装到 dst：先拷进旁边的暂存目录、核对过再换上，失败不留半截
+// 按桌面端安装范围暂存、核对后再换上，失败不留半截。
 function packHashes(src) { return hashFiles(src, packFiles(src)) }
-// 安装、更新只照作者发布清单拷；缺文件交由独立修复工具处理。
+// 零件整目录复制，不修改作者 package.json 的 files。
 function installPackage(src, dst, label, keep = []) {
   const files = packFiles(src)
   if (DRY) { info(`[干跑] 将安装 ${label}（${files.length} 个文件）→ ${dst}`); return }
@@ -363,33 +371,6 @@ function installPackage(src, dst, label, keep = []) {
 
 // ── 下载 ──────────────────────────────────────────────────────────────
 const resolveProxy = () => systemProxy(PROXY_OPT)
-// 打印代理地址时把账号密码遮掉（日志会存盘）
-const showProxy = (u) => String(u).replace(/\/\/[^/@]*@/, '//***@')
-let CURL = null
-function curlBin() {
-  if (CURL !== null) return CURL
-  for (const c of process.platform === 'win32' ? ['curl.exe', 'curl'] : ['curl']) { const r = spawnSync(c, ['--version'], { encoding: 'utf8', windowsHide: true }); if (r.status === 0) return (CURL = c) }
-  return (CURL = '')
-}
-async function download(url, file) {
-  const proxy = resolveProxy()
-  const errs = []
-  if (curlBin()) {
-    const a = ['-fsSL', '--retry', '2', '--connect-timeout', '20', '--max-time', '600', '-o', file]
-    if (proxy) a.push('-x', proxy)
-    a.push(url)
-    const r = spawnSync(curlBin(), a, { encoding: 'utf8', windowsHide: true })
-    if (r.status === 0 && exists(file) && fs.statSync(file).size > 0) return { ok: true, via: 'curl' + (proxy ? `，代理 ${showProxy(proxy)}` : '') }
-    errs.push(`curl${proxy ? `（代理 ${showProxy(proxy)}）` : ''}：${String(r.stderr || (r.error && r.error.message) || '退出码 ' + r.status).trim()}`)
-  }
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(600000) })
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
-    return { ok: true, via: 'node 直连' }
-  } catch (e) { errs.push('node 直连：' + (e.cause && e.cause.message ? e.cause.message : e.message)) }
-  return { ok: false, errs, proxy }
-}
 // 解 GitHub 的 .tar.gz（含 pax 头；全局头里的 comment 就是提交号）
 function extractTarGz(file, outDir) {
   const buf = zlib.gunzipSync(fs.readFileSync(file))
@@ -538,25 +519,26 @@ async function getSource({ ref = REF, source = SOURCE, soft = false, repo = REPO
         const subs = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && exists(path.join(dir, e.name, 'package.json')))
         if (subs.length === 1) dir = path.join(dir, subs[0].name)
       }
-      let sha = null
-      if (exists(path.join(dir, '.git'))) { const r = spawnSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }); if (r.status === 0) sha = r.stdout.trim() }
-      return { dir, sha, local: true, from: '本地目录 ' + posix(dir) }
+      const snapshot = localSource(dir, tmp, ref, SKIP_RE)
+      return snapshot.archive ? { ...snapshot, ...extractTarGz(snapshot.archive, tmp), sha: snapshot.sha } : snapshot
     }
-    if (/\.(tar\.gz|tgz)$/i.test(s)) { const r = extractTarGz(s, tmp); return { ...r, from: '本地压缩包 ' + posix(s) } }
+    if (/\.(tar\.gz|tgz)$/i.test(s)) {
+      const snapshot = extractTarGz(s, tmp)
+      if (/^[0-9a-f]{40}$/.test(ref) && snapshot.sha && snapshot.sha !== ref) die('离线归档提交与已确认版本不符；未修改 DSH')
+      return { ...snapshot, from: '本地压缩包 ' + posix(s) }
+    }
     die(`${flag} 只认文件夹或 .tar.gz。下载的是 .zip 的话，先解压，再把解压出的文件夹传给 ${flag}`)
   }
-  const url = `https://codeload.github.com/${repo}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`
-  const file = path.join(tmp, 'upstream.tar.gz')
-  info(`下载 ${url}`)
-  const d = await download(url, file)
-  if (!d.ok && soft) { info(`没下载到（${d.errs.join('；')}），这一份先不用`); return null }
-  if (!d.ok) {
-    const tip1 = d.proxy ? `① 代理 ${showProxy(d.proxy)} 这次没连上 GitHub：过一会儿重跑，或者换个代理地址加 --proxy <地址> 重跑` : '① 加 --proxy http://127.0.0.1:<端口> 走代理重跑'
-    die(`下载失败：\n      ${d.errs.join('\n      ')}\n    办法任选一个：\n      ${tip1}\n      ② 浏览器打开 https://github.com/${repo}/archive/${ref}.tar.gz 下载，再加 ${flag} <下载的文件> 重跑${flag === '--source' ? '（基线用 --base-source；也可以是 git clone 下来的文件夹）' : '（也可以是 git clone 下来的文件夹）'}`)
+  try {
+    const snapshot = cachedSource({ kit: KIT, repo, ref, temp: tmp, proxy: resolveProxy(), log: info })
+    return { ...snapshot, ...extractTarGz(snapshot.archive, tmp), sha: snapshot.sha }
+  } catch (error) {
+    if (soft) {
+      info(`未取得基线源码：${error.message}；本轮不做三方比对`)
+      return null
+    }
+    die(`源码准备失败：${error.message}。可用 ${flag} <干净的本地源码目录或 tar.gz> 离线运行；不会静默改用旧缓存`)
   }
-  let r
-  try { r = extractTarGz(file, tmp) } catch (e) { if (soft) { info(`解压失败（${e.message}），这一份先不用`); return null } die(`解压失败：${e.message}`) }
-  return { ...r, from: `GitHub ${repo}@${ref}（${d.via}）` }
 }
 // Flash 和 Soul 一样默认跟踪作者 main；显式版本和离线目录仍可复现旧安装。
 async function getFlashSource() {
@@ -697,7 +679,7 @@ function planCordis(text, { hub, defaultPreset, dshHome, memRelative }) {
     }
     notes.push(`新会话默认 preset：${current || '（未设）'} → ${want}`)
   }
-  // 换气配置的字符串布尔（'true'）3.0 起归修复清单 huanqi-config-bool，在「修复」一步里改，这里不再管
+  // 仅按作者配置接口写入，不重写已有的换气参数。
   return { text: y, notes, memoryNote, defaultPreset: want || current, changed: y !== text.replace(/\r\n/g, '\n') }
 }
 
@@ -944,7 +926,7 @@ if (QUESTIONS_MODE) {
   console.log(JSON.stringify(questionSheet({ kitVersion: KIT_VERSION, profile: home ? `<DSH 家目录>/profiles/${PROFILE}` : null, mnemon }), null, 2))
   process.exit(0)
 }
-out(`dsh-agent-soul 安装包 · ${{ install: '安装', update: '更新', backup: '备份', restore: '迁移恢复', uninstall: '卸载' }[MODE]}（${KIT_VERSION}）${DRY ? '（干跑：只报计划，不改任何文件）' : ''}`)
+out(`dsh-agent-soul 安装包 · ${{ install: '安装', update: '更新', backup: '备份', restore: '迁移恢复', uninstall: '卸载' }[MODE]}（${KIT_VERSION}）${DRY ? '（干跑：不修改 DSH；会更新作者仓库并写日志）' : ''}`)
 out(`参数：${argv.length ? argv.join(' ').replace(/\/\/[^/@\s]*@/g, '//***@') : '（无）'}`)
 step('预检')
 // 当前 node 不够版本：找一个够的，用它把自己重新跑一遍（同一套参数，不丢任何状态）
@@ -1162,7 +1144,7 @@ if (BACKUP) {
 ${'─'.repeat(60)}
 备份完成。迁移到新电脑：
   1. 把整个安装包文件夹（含 backups/）拷过去；新电脑上装好 DSH、打开过一次
-  2. 退出 DSH，在安装包文件夹里跑：node install.mjs --restore --dry-run，看过计划再去掉 --dry-run
+  2. 退出 DSH，在安装包文件夹里跑：node install.mjs --restore --dry-run，看过计划再执行输出中的固定提交命令
   3. 详见 AGENT-INSTALL.md「迁移」一节`)
   process.exit(0)
 }
@@ -1722,6 +1704,8 @@ function withNames(s) {
 if (MODE === 'install' && installed && state0 && !sameNameMap(state0.nameMap, NAME_MAP)) die(`这台电脑已经装过，${NAME_FROM === '--rename' ? '--rename 指定' : NAME_FROM + '里'}的称呼替换（${nameMapLabel(NAME_MAP) || '不换'}）和安装记录里的（${nameMapLabel(state0.nameMap) || '不换'}）不一样。重跑安装只补缺的步骤、不重装已有的零件，换不全；要改称呼替换请用 --update --rename ${hasNames(NAME_MAP) ? Object.entries(NAME_MAP).map(([a, b]) => `${a}=${b}`).join(',') : 'none'}。`)
 
 const SRC0 = await getSource()
+if (SRC0.sha) PINNED_REFS.push('--ref', SRC0.sha)
+else warn('离线 Soul 来源没有可验证提交号；正式执行前须核对与干跑相同的源码内容，不能声称已固定版本')
 ok(`上游源码：${SRC0.from}`)
 const SRC = withNames(SRC0)
 if (SRC !== SRC0) { const shipped = new Set(packFiles(SRC.dir)); ok(`称呼替换（按${NAME_FROM === '--rename' ? ' --rename' : NAME_FROM}）：上游代码里的${nameMapLabel(NAME_MAP)}，会装进 DSH 的有 ${SRC.renamed.filter((f) => shipped.has(f)).length} 个文件；后面比对、安装、中枢同步都按替换后的来`) }
@@ -1736,11 +1720,11 @@ const AP = PARTS.filter((p) => src.names[p] && !SKIP_PARTS.includes(p))
 const PKGS = AP.map((p) => src.names[p])
 const INST = AP.map((p) => PART_NAMES[p].find((n) => exists(path.join(NM, n, 'package.json'))) || null)
 const RENAMES = AP.map((p, i) => (INST[i] && INST[i] !== PKGS[i] ? { part: p, from: INST[i], to: PKGS[i] } : null)).filter(Boolean)
-// 包名迁移（例如 4.x 装的 dsh-agent-compaction → 上游 v3.0.0 的 dsh-yanqing-compaction）要重装零件，那是 --update 的事；--fix 不动包名
+// 包名迁移（例如 4.x 装的 dsh-agent-compaction → 上游 v3.0.0 的 dsh-yanqing-compaction）由 --update 负责重装与迁移。
 const RENAME_MAP = Object.fromEntries(RENAMES.map((r) => [r.from, r.to]))
 const stateKit = state0 && state0.kitVersion ? state0.kitVersion : '2.0'
 // 更新时本机没有也必须补上的：必装零件、Soul preset 要调用的零件（压缩三件套，缺一个 preset 就加载失败、DSH 起不来）
-// --fix 不补装零件（那是更新的事）
+// 新增零件由安装与更新选择决定。
 // 默认不装的新零件（OPT_IN_PARTS）更新时不自动补：终端里答了要装、或者给了 --add-part 才装
 const TO_ADD = new Set(AP.filter((p, i) => !INST[i] && (!UPDATE || MUST_HAVE(p) || ADD_PARTS.includes(p) || (ADDED_PARTS[p] && verLess(stateKit, ADDED_PARTS[p]) && !OPT_IN_PARTS.includes(p)))))
 // package.json 里只写这次之后真的在 node_modules 里的零件：写了不存在的 file: 依赖，插件市场一跑 pnpm 就报 ENOENT
@@ -1749,16 +1733,14 @@ const PKGS_LIVE = PKGS.filter((n, i) => !UPDATE || INST[i] || TO_ADD.has(AP[i]))
 for (const [i, p] of AP.entries()) { const t = platformText(p); if (t && PKGS_LIVE.includes(PKGS[i]) && (MODE !== 'install' || ADD_PARTS.includes(p))) warn(`${p}：${t}`) }
 // 照上游原样装、有已知问题的零件（PART_INFO 的 caveat）：这次新装上的说一遍
 for (const [i, p] of AP.entries()) if (PART_INFO[p]?.caveat && PKGS_LIVE.includes(PKGS[i]) && !INST[i]) warn(`${p}：${PART_INFO[p].caveat}`)
-// 发布清单自洽（lib/package-contract.mjs）：本体和这次要装的零件，入口 import 到的文件都得在 files 里，
-// 否则按清单拷完就缺文件、零件加载失败 → 在动手前停下。用到的 @deepseek-ai/* 没在 peerDependencies 里声明的只提示：
-// 宿主拦不拦随 DSH 版本，上游 v2.0.0 的 compaction、huanqi 都漏过，桌面实测仍能加载。
-// 只查这次真的会装上的（更新时本机没装、也不补装的零件，打包有问题也不该挡住更新）
+// 按实际桌面安装文件检查入口、包内依赖和语法；包外依赖只报告，不补源码。
+// 宿主 peer 依赖只提示，是否实际阻断加载需要运行验收。
 const PKG_ISSUES = [['本体 dsh-agent-soul', SRC.dir, null], ...AP.map((p, i) => [PKGS[i], partSrc(p), p]).filter(([name]) => PKGS_LIVE.includes(name))]
   .flatMap(([label, dir, part]) => inspectPackage(dir, packFiles(dir)).map((issue) => ({ label, part, issue })))
-// 上游包本身的问题（入口导入的文件不存在、语法错误……）：照样装作者的版本，问题归修复管；收尾再点名一次
+// 上游包本身的问题（入口导入的文件不存在、语法错误……）：保留作者版本；收尾报告阻断项，不自动进入其它工具
 const PKG_BROKEN = PKG_ISSUES.filter((x) => x.issue.kind !== 'peer')
-for (const x of PKG_BROKEN) warn(`${describeIssue(x.label, x.issue)}；照作者原样装上，交给修复检查处理，修好之前先别启动 DSH`)
-const BLOCKERS = [] // 装完的校验发现的、会让 DSH 起不来的问题；收尾和上游包问题、必须先修的修复一起点名
+for (const x of PKG_BROKEN) warn(`${describeIssue(x.label, x.issue)}；保留作者原文，问题未解决前先别启动 DSH；kit 只报告，不修改零件源码`)
+const BLOCKERS = [] // 装完的校验发现的、会让 DSH 起不来的问题；收尾和上游包问题一起点名
 for (const x of PKG_ISSUES.filter((x) => x.issue.kind === 'peer')) info(`${describeIssue(x.label, x.issue)}；装完在新会话里确认它确实加载了，没加载再报给上游`)
 if (!UPDATE && RENAMES.length) die(`这台电脑装的是旧包名（${RENAMES.map((r) => r.from).join('、')}），请用 --update 迁移。`)
 const bodyKeep = ['kit/echo.config.json']
@@ -1777,7 +1759,7 @@ if (UPDATE && installed) {
   else if (opt('--base-source')) BASE = withNames(await getSource({ ref: oldSha || REF, source: opt('--base-source') }))
   else if (oldSha && /^[0-9a-f]{40}$/.test(oldSha) && !SOURCE) BASE = withNames(await getSource({ ref: oldSha, source: null, soft: true }))
   if (BASE) ok(`已装那一版的上游：${short(oldSha)}（${BASE === SRC ? '和要装的是同一版' : BASE.from}），用来分清哪些是本机改过的`)
-  else info(`取不到已装那一版的上游源码（${!oldSha ? '安装记录里没有提交号' : SOURCE ? '离线更新没给 --base-source' : '下载失败'}）：报告里分不清哪些变化是本机改的；不影响更新，照样全部换成作者原文`)
+  else info(`取不到已装那一版的上游源码（${!oldSha ? '安装记录里没有提交号' : SOURCE ? '离线更新没给 --base-source' : '本地仓库未取得该提交'}）：报告里分不清哪些变化是本机改的；不影响更新，照样全部换成作者原文`)
 }
 // 「和新版不一样」拆成上游改的、本机改过的：有已装那一版的上游才拆得开
 const baseMap = (...rel) => { if (!BASE) return null; const d = path.join(BASE.dir, ...rel); return exists(path.join(d, 'package.json')) ? hashFiles(d, packFiles(d)) : new Map() }
@@ -1794,6 +1776,8 @@ function splitDiff(d, base) {
 }
 
 const FLASH_SRC = PRESET_CHOICE.some(isFlashPresetId) ? await getFlashSource() : null
+if (FLASH_SRC?.sha) PINNED_REFS.push('--flash-ref', FLASH_SRC.sha)
+else if (FLASH_SRC) warn('离线 Flash 来源没有可验证提交号；正式执行须沿用已审阅的源码内容')
 const FLASH_ALIASES = {}
 if (FLASH_SRC) {
   FLASH_SRC.partNames = src.names
@@ -1877,7 +1861,7 @@ if (MIGRATE_PRESETS && (retiredBlocks || /^#.*PTC.*Flash/m.test(LEGACY_PRESET_RA
   BUNDLE.text = migratePresetBundle(installedPresetText, BUNDLE.text, [AUTHOR_BUNDLE.text,
     presetSectionOf(OLD_PRESET_RECORD?.upstream), presetSectionOf(OLD_PRESET_RECORD?.applied)].filter(Boolean))
 }
-// Soul preset 自带的 skills（lib/preset-skills.mjs）：灵魂 · 创造 / 全能挂 <profile>/skills/；--fix 不动
+// Soul preset 自带的 skills（lib/preset-skills.mjs）：灵魂 · 创造 / 全能挂 <profile>/skills/
 const SKILLS_DIR = path.join(PROF, 'skills')
 const SKILLS_SRC = [path.join(SRC.dir, 'presets', 'skills'), path.join(ASSETS, 'presets', 'skills')].find((d) => exists(d)) || null
 const SKILLS_PLAN = planPresetSkills({ src: SKILLS_SRC, dst: SKILLS_DIR, want: needsSkills(BUNDLE.text), record: (RESTORE ? RB.state : state0)?.presetSkills || {} })
@@ -1903,10 +1887,10 @@ const snapIds = PRESET_CHOICE.filter((id) => SRC_PRESETS[presetSourceKey(id)].sn
 if (snapIds.length) warn('没找到 DSH 的 app.asar，这些 preset 按安装包里的快照生成，可能和本机 DSH 版本对不上：' + snapIds.map((id) => PRESET_LABEL[id]).join('、') + '；可以用 --app-asar 指定')
 for (const n of BUNDLE.notes) warn('Soul preset 简介：' + n)
 
-// 零件和作者最新版比：安装、更新只认作者原文，kit 修复、本机手改都算不一样，一律换成作者原文（原样在快照里），之后交给修复检查重新判定
+// 按完整安装范围与作者版本比对，本机改动换回前先进入快照。
 function partDiff(i) {
   const dst = path.join(NM, INST[i])
-  const inst = hashInstalled(dst), next = packHashes(partSrc(AP[i]), null) // 补拷的漏列文件也算 kit 修复，一样清掉
+  const inst = hashInstalled(dst), next = packHashes(partSrc(AP[i]), null)
   return { ...diffMaps(inst, next), inst, next }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
@@ -1960,16 +1944,9 @@ if (UPDATE) {
   step('上游改了什么')
   const oldSha = state0 && state0.upstream ? state0.upstream.sha : null
   if (oldSha && SRC.sha && oldSha !== SRC.sha) {
-    const tmpJson = path.join(os.tmpdir(), `dsh-soul-compare-${TS}.json`)
-    TMP_DIRS.push(tmpJson)
-    const d = await download(`https://api.github.com/repos/${REPO}/compare/${oldSha}...${SRC.sha}`, tmpJson)
-    const cmp = d.ok ? readJson(tmpJson) : null
-    const gl = !cmp && exists(path.join(SRC0.dir, '.git')) ? spawnSync('git', ['-C', SRC0.dir, 'log', '--reverse', '--format=%h %s', `${oldSha}..${SRC.sha}`], { encoding: 'utf8', windowsHide: true }) : null
-    if (cmp && Array.isArray(cmp.commits)) {
-      out(`  ${short(oldSha)} → ${short(SRC.sha)}，共 ${cmp.commits.length} 个提交：`)
-      for (const c of cmp.commits.slice(-40)) info(`${c.sha.slice(0, 7)} ${String(c.commit.message).split('\n')[0]}`)
-    } else if (gl && gl.status === 0 && gl.stdout.trim()) {
-      const ls = gl.stdout.trim().split('\n')
+    const gl = SRC0.repository ? sourceGit(SRC0.repository, ['log', '--reverse', '--format=%h %s', `${oldSha}..${SRC.sha}`], { allowFailure: true }) : null
+    if (gl?.status === 0 && gl.text) {
+      const ls = gl.text.split('\n')
       out(`  ${short(oldSha)} → ${short(SRC.sha)}，共 ${ls.length} 个提交：`)
       for (const l of ls.slice(-40)) info(l)
     } else info('（取不到提交列表，下面按文件比对）')
@@ -1997,7 +1974,7 @@ if (UPDATE) {
     out(`  ${label}：${n ? `上游 ${sp.up.changed.length} 改 / ${sp.up.added.length} 增 / ${sp.up.removed.length} 删` : '上游没有变化'}${sp.localCount ? `；和作者原文不同的 ${sp.localCount} 处换回作者原文` : ''}`)
     for (const l of list(sp.up).slice(0, max)) info(l)
     if (n > max) info(`……另有 ${n - max} 项`)
-    for (const f of sp.local.slice(0, max)) info(`本机与作者不同 → 换回作者原文（修复检查重新判定）：${f}`)
+    for (const f of sp.local.slice(0, max)) info(`本机与作者不同 → 换回作者原文：${f}`)
     if (sp.local.length > max) info(`……另有 ${sp.local.length - max} 个`)
     for (const f of sp.both) info(`上游改了、本机也改过 → 用上游新版：${f}`)
     for (const f of sp.extra) info(`本机多出来的文件 → 删掉：${f}`)
@@ -2012,7 +1989,7 @@ if (UPDATE) {
     showDiff(`零件 ${PKGS[i]}${rn ? `（改名，本机是 ${rn.from}）` : ''}`, d, PART_SPLIT[i], 15, INST[i])
   }
   const localTotal = [BODY_SPLIT, ...PART_SPLIT].reduce((n, x) => n + (x ? x.localCount : 0), 0)
-  if (localTotal) warn(`本体和零件里有 ${localTotal} 处和作者原文不同（kit 修复或本机手改），这次一律换成作者原文，原样在快照里；修复检查会重新判定要修哪些${NAME_GUESS ? '；改称呼的那部分可以用 --rename 保留' : ''}`)
+  if (localTotal) warn(`本体和零件里有 ${localTotal} 处和作者原文不同，这次一律换成作者原文，改前内容保存在快照里${NAME_GUESS ? '；改称呼的那部分可以用 --rename 保留' : ''}`)
   for (const r of RENAMES) out(`  零件改名 ${r.from} → ${r.to}：会迁移（装新目录、删旧目录、bundles / dependencies / 锁文件同步换名）`)
   if (HUB_DRIFT.length) info(`中枢脚本 ${HUB_DRIFT.length} 个和作者原文不同（kit 修复、本机改动或上游新版），会换成作者原文：${HUB_DRIFT.join('、')}`)
   if (presetChanged) {
@@ -2053,7 +2030,7 @@ if (UPDATE) {
   if (echoEnvStale) out('  mcp-hub 清单里的 echo：会补上 DSH_HOME（新版 echo-mcp 靠它找会话日志）')
   if (state0 && bodyDiff.same && PART_DIFF.every((d) => !d || d.same) && !RENAMES.length && !TO_ADD.size && !HUB_DRIFT.length && !presetChanged && !presetMigrationPending && !SKILLS_PLAN?.changed && !cfgPlan.changed && !pkgPlan.changed && !echoEnvStale) {
     out('\n已经是最新，什么都不用改。')
-    out('  修复不在更新里做：要检查就跑 node fix.mjs --report（在独立 dsh-agent-soul-fix 目录）')
+    if (DRY) printTerminalHint()
     const newDecl = OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p) && !DECLINED0.includes(p))
     const shaMoved = state0.upstream && SRC.sha && state0.upstream.sha !== SRC.sha
     const nextFlash = FLASH_SRC ? flashState() : null
@@ -2455,15 +2432,16 @@ FILE_TRANSACTION?.commit()
 // ═══ 完成 ════════════════════════════════════════════════════════════════
 const presetName = () => PRESET_LABEL[finalDefault] || finalDefault
 out('\n' + '─'.repeat(60))
-out(DRY ? '干跑结束：以上是计划，没有改任何文件。确认无误后去掉 --dry-run 再跑。' : `${{ install: '文件层面的安装', update: '更新', restore: '迁移恢复' }[MODE]}完成。`)
-if (DRY && running === true && MODE !== 'backup') {
+out(DRY ? '干跑结束：没有修改 DSH。确认无误后执行下方命令；有提交号的来源已固定版本，离线无提交来源须另外核对内容。' : `${{ install: '文件层面的安装', update: '更新', restore: '迁移恢复' }[MODE]}完成。`)
+if (DRY) {
   printTerminalHint()
   if (MODE === 'install' || MODE === 'restore') out(`装完重开 DSH 后新建一个会话，顶部 preset 应该是「${presetName() || '方案默认的 Soul preset'}」（不是就手动选它），验收和后面几步都在这个新会话里做；真跑结束时会给出要贴进去的话。`)
 }
 if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
-out('\n修复已独立迁移到 dsh-agent-soul-fix 1.0。请在该工具目录运行 node fix.mjs --report；kit 不下载或执行修复。')
 if (!DRY && (PKG_BROKEN.length || BLOCKERS.length)) {
   out('★ 启动 DSH 前先处理安装完整性问题：' + [...PKG_BROKEN.map((item) => describeIssue(item.label, item.issue)), ...BLOCKERS].join('；'))
+  out('安装流程到此停止，暂不启动 DSH，也不转入其它工具。请向用户报告上述证据，由用户决定后续处理。')
+  process.exit(0)
 }
 if (!DRY && UPDATE) {
   out(`

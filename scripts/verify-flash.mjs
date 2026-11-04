@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +12,7 @@ import { FLASH_PRESET_ID, FLASH_ADAPTATION, readFlashPresets, adaptFlash, isFlas
 import { presetSources, buildPresetBundle, buildShellBundle, findPresetSection } from '../lib/soul-presets.mjs'
 import { officialPresetFor, isSoulPresetId } from '../lib/uninstall.mjs'
 import { PART_NAMES } from '../lib/parts.mjs'
+import { applyNameMap } from '../lib/name-map.mjs'
 
 assert.ok(process.argv[2] && process.argv[3], '传入 Soul 和 Flash 作者源码目录')
 const kit = fileURLToPath(new URL('../', import.meta.url))
@@ -27,6 +29,26 @@ fs.mkdirSync(evidence, { recursive: true })
 const json = (file) => JSON.parse(fs.readFileSync(file, 'utf8'))
 const names = Object.fromEntries(['compaction', 'pruner', 'compact-region'].map((part) => [part, json(path.join(soul, 'plugins', part, 'package.json')).name]))
 const commands = []
+
+/** 对作者工作区生成内容指纹，忽略 Git 元数据与本机依赖，不跟随链接。 */
+function sourceDigest(directory) {
+  const hash = createHash('sha256')
+  const visit = (relative = '') => {
+    for (const entry of fs.readdirSync(path.join(directory, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (['.git', 'node_modules', '.DS_Store'].includes(entry.name)) continue
+      const file = path.join(relative, entry.name)
+      if (entry.isDirectory()) visit(file)
+      else {
+        hash.update(file)
+        hash.update(entry.isSymbolicLink() ? fs.readlinkSync(path.join(directory, file)) : fs.readFileSync(path.join(directory, file)))
+      }
+    }
+  }
+  visit()
+  return hash.digest('hex')
+}
+
+const sourceBefore = [sourceDigest(soul), sourceDigest(flash)]
 
 /** 写入隔离样本，不触及真实用户目录。 */
 function write(file, text) {
@@ -58,6 +80,7 @@ function run(label, target, args, code = 0) {
   const log = path.join(evidence, `${String(commands.length + 1).padStart(2, '0')}-${label}.log`)
   fs.writeFileSync(log, `${result.stdout || ''}\n${result.stderr || ''}`)
   assert.equal(result.status, code, `${label}: ${result.error || ''}; see ${log}`)
+  assert.doesNotMatch(result.stdout, /node fix\.mjs|dsh-agent-soul-fix|修复检查/, `${label} 不应引导装后修复`)
   commands.push({ label, status: result.status, log })
   console.log(`${label}: exit ${result.status}`)
   return result.stdout
@@ -136,14 +159,33 @@ try {
   console.log(`Flash 源码适配通过：${catalog.length} 个上游 preset；覆盖改名、新增、折行简介、重复和结构错误`)
 
   const target = home('中文 空格')
+  const soulSha = spawnSync('git', ['-C', soul, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()
+  const flashSha = spawnSync('git', ['-C', flash, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()
+  const preview = run('pinned-dry-run', target, ['--setup', '大肥鱼', '--flash', 'on', '--source', soul, '--flash-source', flash, '--dry-run'])
+  assert.ok(preview.includes(`--ref ${soulSha}`) && preview.includes(`--flash-ref ${flashSha}`), '干跑命令同时固定 Soul 与 Flash 提交')
+  assert.equal(fs.existsSync(path.join(target, 'dsh-soul/.install-state.json')), false)
+  const pinnedArchive = path.join(root, 'soul.tar.gz')
+  const archived = spawnSync('git', ['-C', soul, 'archive', '--format=tar.gz', '--prefix=source/', `--output=${pinnedArchive}`, soulSha], { encoding: 'utf8' })
+  assert.equal(archived.status, 0, archived.stderr)
+  const rejectedArchive = run('archive-version-reject', target, ['--setup', '大肥鱼', '--source', pinnedArchive, '--ref', '0'.repeat(40), '--dry-run'], 1)
+  assert.match(rejectedArchive, /离线归档提交与已确认版本不符/)
   const sourceArgs = ['--source', soul, '--flash-source', fixture]
   const defaults = ['--default-preset', first.id]
-  run('install', target, ['--setup', '大肥鱼', '--flash', 'on', ...defaults, ...sourceArgs])
+  const fullParts = ['--add-part', 'yantai,heartbeat,riji,model-statusbar,mobile-adapt,perf,chat,clawbot']
+  const output = run('install', target, ['--setup', '大肥鱼', '--flash', 'on', ...fullParts, ...defaults, ...sourceArgs])
   let result = installed(target)
+  assert.match(output, /安装流程到此停止/)
+  assert.doesNotMatch(output, /接下来（详见|上游发布清单漏列|按发布清单装上/)
+  for (const [part, file] of [['yantai', 'env-config.mjs'], ['heartbeat', 'heartbeat.mjs'], ['heartbeat', 'heartbeat-core.mjs'], ['heartbeat', 'activity.mjs']]) {
+    const name = json(path.join(soul, 'plugins', part, 'package.json')).name
+    const original = fs.readFileSync(path.join(soul, 'plugins', part, file), 'utf8')
+    assert.equal(fs.readFileSync(path.join(target, 'profiles/desktop/node_modules', name, file), 'utf8'), applyNameMap(original, result.state.nameMap))
+    assert.deepEqual(json(path.join(target, 'profiles/desktop/node_modules', name, 'package.json')).files, json(path.join(soul, 'plugins', part, 'package.json')).files, '复制不能改作者 files')
+  }
   assert.equal(result.state.flash.presets.length, catalog.length)
   assert.equal(result.state.presetIds.filter(isFlashPresetId).length, catalog.length)
   assert.ok(result.presets.some((preset) => preset.config.name === '灵魂 · 作者新名称'))
-  run('install-repeat', target, ['--setup', '大肥鱼', '--flash', 'on', ...defaults, ...sourceArgs])
+  run('install-repeat', target, ['--setup', '大肥鱼', '--flash', 'on', ...fullParts, ...defaults, ...sourceArgs])
   fs.writeFileSync(extraFile, extra)
   fs.writeFileSync(renamed, changed.replace('作者新名称', '作者又改了名称'))
   const diary = path.join(target, 'dsh-soul/soul/50-日记/验证.md')
@@ -221,6 +263,7 @@ try {
   if (zlib.zstdDecompressSync) assert.equal(JSON.parse(zlib.zstdDecompressSync(fs.readFileSync(path.join(restored, 'sessions/compressed/session.v1.jsonl.zstd'))).toString('utf8').split('\n')[0]).agentPreset, 'ptc')
   assert.equal(fs.readFileSync(restoredSession, 'utf8').split('\n').slice(1).join('\n'), sessionText.split('\n').slice(1).join('\n'))
   assert.equal(fs.existsSync(path.join(root, 'user/Library/LaunchAgents')), false)
+  assert.deepEqual([sourceDigest(soul), sourceDigest(flash)], sourceBefore, '全部生命周期操作后作者源码逐文件内容不变')
   const revisions = Object.fromEntries([['soul', soul], ['flash', flash]].map(([name, directory]) => [name, spawnSync('git', ['-C', directory, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim() || null]))
   fs.writeFileSync(path.join(evidence, 'summary.json'), JSON.stringify({ soul, flash, revisions, catalog: catalog.map(({ text, ...item }) => item), commands, scope: '隔离 profile；未改真实 DSH、未启动模型、未注册任务' }, null, 2))
   console.log(`Flash 生命周期通过：${commands.length} 次命令；未修改真实 DSH 或注册任务`)
