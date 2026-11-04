@@ -1,6 +1,6 @@
 # 给 Agent 的手册：dsh-agent-soul 安装、更新、迁移与卸载
 
-> 版本边界：kit 6.0；修复已迁入独立 dsh-agent-soul-fix 1.0。本文中的 fix 命令必须进入该工具目录执行。
+> 版本边界：kit 6.1；修复已迁入独立 dsh-agent-soul-fix 1.0。本文中的 fix 命令必须进入该工具目录执行。
 
 > **你的任务**：在这台电脑上，给 DeepSeek Harness（下称 DSH）装上 dsh-agent-soul 灵魂架构；已经装过的，按第九节更新到最新版；要把一台电脑上的 agent 搬到另一台，按第十节备份和恢复；要卸掉，按第十二节（先备份再卸）。
 > 装成什么样的 agent 由**方案**决定：用现成方案（安装包 `setups/` 里的，例如 Boss 的「大肥鱼」），或者**全新安装**——在对话里引导用户填设定，填完存成新方案再装。
@@ -33,7 +33,7 @@
 | 本体 | `dsh-agent-soul`，GitHub main 的最新提交（装到哪一版记在安装记录里）。DSH 里会多出 8 个 `agent_soul_` 开头的工具 |
 | 必装零件 | compaction（压缩摘要带门牌）、pruner（裁剪带门牌）、memory（每轮注入时钟、自我层和上下文水位）、echo（体检面板）、huanqi（换气：思考退化的打断和清创）、huanqi-panel（换气面板）、mcp-hub（MCP 服务总入口，接上 echo 的常驻检索）；Soul preset 调用的 compact-region 跟着装。按作者 2026-10-31 定的「全局必装」，不能跳过 |
 | 可选零件 | 11 个，分三组：常用 mnemon-probe（热记忆容量，要先装 dsh-mnemon）、clock（侧边栏时钟）、perf（渲染性能护栏）；面板件 model-statusbar（本地模型服务状态，要有 ComfyUI 一类服务）、mobile-adapt（手机竖屏适配）、riji（日记入口）、splash（启动一屏）、yantai（工作台）；上游新零件 heartbeat（作者的心跳面板）、chat（手机聊天页）、clawbot（微信通路）。**全部列给用户**，有兼容问题的照列，说明里写着「原版有兼容问题，有修复（修复 id）」或「没有修复」，只是默认不勾。大肥鱼方案装 mnemon-probe、clock |
-| Soul preset | 灵魂 / 灵魂 · 创造 / 灵魂 · PTC / 灵魂 · 预判 / 灵魂 · 全能，使用上游 `presets/` 原文；按作者算法展开 include；全能只取 preset 那一块（上游文件后面是作者整份 profile 的导出，不装）。创造和全能用的 4 个技能拷进 profile 的 `skills/`。生成哪些、默认用哪个按方案；大肥鱼默认装五套、默认灵魂；可选第六个「灵魂 · PTC Flash」（见第九节「灵魂 · PTC Flash」，默认不选）。v3.0.0 以前叫砚青四套（`yanqing*`），旧 id 自动换成新的，砚青建的会话留别名照常打开 |
+| Soul preset | 灵魂 / 灵魂 · 创造 / 灵魂 · PTC / 灵魂 · 预判 / 灵魂 · 全能，使用上游 `presets/` 原文；按作者算法展开 include；全能只取 preset 那一块（上游文件后面是作者整份 profile 的导出，不装）。创造和全能用的 4 个技能拷进 profile 的 `skills/`。生成哪些、默认用哪个按方案；大肥鱼默认装五套、默认灵魂；可选「灵魂 · Flash（上游全部预设）」（见第九节，默认不选），数量、名称和简介跟随上游目录。v3.0.0 以前叫砚青四套（`yanqing*`），旧 id 自动换成新的，砚青建的会话留别名照常打开 |
 | 默认不装的面板件 | model-statusbar、yantai、mobile-adapt、splash、riji、perf —— 已进可选列表，默认不勾；它们装完没有数据源就是空面板，所以不默认装。上游以后新增的零件，脚本只列出来、提示更新安装包，不会自动装 |
 | 默认不装的新零件 | heartbeat、chat、clawbot —— 用户要装之前，**先把已知问题原样告诉他**：heartbeat 在 0221d89 里面板从包外的 `lib/paths.mjs` 导入、还用了没定义的 `AI_ROOT`，一加载就报错，心跳脚本也不在发布清单里，计划任务依赖 Windows，每次工具调用还会试着往 `D:\_yq_guard_probe.txt` 写一行诊断；macOS 可选 heartbeat-darwin 修好并在验收后迁移每日自检；chat 在 fe3c456 起使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；仍写死作者的会话 id（别的电脑连不到会话），服务绑 `0.0.0.0`、绕开 DSH 的登录鉴权；clawbot 要微信扫码绑定，凭据在 `~/.dsh/clawbot/`、备份不带，自动通知默认全开，本机自己装过的 `dsh-clawbot` 安装包不碰。已有的安装 `--update` 不自动补装，要装加 `--add-part <名字>` |
 | 书房 / 中枢 | `<DSH 家目录>/dsh-soul/soul` 和 `<DSH 家目录>/dsh-soul/memory` |
@@ -56,7 +56,7 @@ install.sh / install.ps1     一行装的引导（macOS / Windows）：找 node�
 install.mjs                  安装 / 更新 / 备份 / 恢复 / 卸载脚本（跨平台，可重复跑，先 --dry-run）
 lib/                         install.mjs 用的模块：零件目录与系统限制（parts）、方案与问答（setup）、弹窗（popups）、系统差异（platform）、
                              Soul preset 生成与迁移、配置路径、人设规矩、发布清单核对、文件事务、安装写锁、快照（archive）、卸载规划、kit 迭代
-scripts/                     自测：verify-setup.mjs（问答和弹窗）、verify-macos-install.mjs（隔离安装、更新、备份和恢复）
+scripts/                     自测：verify-setup.mjs（问答和弹窗）、verify-macos-install.mjs（隔离安装、更新、备份和恢复）、verify-flash.mjs（动态 Flash 及旧记录生命周期）
 setups/                      方案：每个子文件夹一套
   大肥鱼/
     setup.json               名字、称呼、硬线、人设类型、零件、preset
@@ -150,7 +150,7 @@ archives/                    安装、更新、恢复、卸载前自动留的本
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
-- 其他可选参数：`--flash on`（加装灵魂 · PTC Flash，方案里没选也行）、`--add-part <零件>`（方案之外多装一个可选零件）、`--ref <提交>`（装指定版本）、`--default-preset soul`（覆盖方案里的默认 preset）、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
+- 其他可选参数：`--flash on`（加装 Flash 上游全部预设，方案里没选也行）、`--add-part <零件>`（方案之外多装一个可选零件）、`--ref <提交>`（装指定版本）、`--default-preset soul`（覆盖方案里的默认 preset）、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
 - **称呼替换**：默认不换（作者已把 preset 人设和文档里的人名改掉；内置方案的 `nameMap` 都是空的）。上游代码里还剩几处作者的称呼「爀曦」，其中一处是换气熔断时注入给 agent 的指令「告诉爀曦『需要手动压缩』」；用户要换，就加 `--rename 爀曦=<称呼>`，只换装进 DSH 的插件代码和文档，书房和账本不动，记进安装记录，以后更新、备份、恢复都照做。
 
 **B5. 脚本做的事**（动手前把要改的原样存进快照；重复跑安全）：
@@ -163,7 +163,7 @@ archives/                    安装、更新、恢复、卸载前自动留的本
 | 3 | 快照：要改的原样存进安装包的 `archives/<主机>-<家目录指纹>/<时间>-install-…/`（附「还原方法.txt」）；以前留在 DSH 家目录里的 `.bak-*`、`dsh-soul/_backup/` 一起搬进 `legacy/` | 出问题自动回滚，事后也能照着拷回 |
 | 4 | 本体、必装零件、方案里选了的可选零件，按各自的发布清单拷进 `profile/node_modules/`（不带演示视频）；已有的和作者原文不一样就整包换掉 | 桌面版只能这样装 |
 | 5 | 不打修复：零件照作者原样装，作者原文里的问题（写死的路径、发布清单漏列的文件、未导入的函数等）原样留着，「需要留意」和收尾会点名会让零件加载不了的几处。修复装完单独检查：agent 照报告核对本机、用户确认了才修（B7） | 安装始终以作者上游为准；kit 的修复是第三方补丁，和安装分开（第九节「修复」） |
-| 6 | 写 Soul preset：按方案生成上游灵魂五套（选了灵魂 · PTC Flash 的再加它，源在线取 dsh-flash-presets），写进 profile 的 `cordis.patch.yml` 顶层一项 `- insert:`（作者的装法，作者 doctor 认的位置）；创造、全能用的技能拷进 profile 的 `skills/`（和上游不一样的换成上游原文）；4.3 以前装在独立包 `dsh-soul-preset` 里的，搬过来、把包和锁文件里的条目摘掉；移除旧 Flash，旧会话与默认入口迁到灵魂 · PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
+| 6 | 写 Soul preset：按方案生成上游灵魂五套（选了 Flash 的再动态加入上游全部 preset，源在线取 dsh-flash-presets），写进 profile 的 `cordis.patch.yml` 顶层一项 `- insert:`（作者的装法，作者 doctor 认的位置）；创造、全能用的技能拷进 profile 的 `skills/`（和上游不一样的换成上游原文）；4.3 以前装在独立包 `dsh-soul-preset` 里的，搬过来、把包和锁文件里的条目摘掉；移除旧 Flash，旧会话与默认入口迁到灵魂 · PTC（正文保留，迁移前备份，失败回滚） | 会话用的是 preset 里那份压缩，只有在 preset 里换才生效（第十一节 8） |
 | 7 | `package.json`：本体、零件（compaction、pruner **不进**）进 bundles；全部写进 dependencies（`file:node_modules/<包名>`）。`cordis.patch.yml`：memory 配 `selfPath: dsh-soul/memory/hub/SELF.md`、`statePath: dsh-soul/memory/hub/state.json`（相对 DSH 家目录，Mac、Windows 同一份）、`maxBytes: 12288`；已有的这一节会核对，指向别的电脑或旧写法的路径改成这台的；默认 preset 按方案 | 写进 dependencies 才不会被 pnpm 清掉；自我层上限要和装配预算对齐；配置里不带用户名，换电脑、挪家目录都不用改 |
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`，`env` 带上 `DSH_HOME`）；已有就不动，只给本安装包登记的那台补上缺的 `DSH_HOME` | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → 作者的 `install-kit --all` 把全套脚本装进 hub（同义词表 `synonyms.json` 是数据，只在没有时补）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
@@ -255,7 +255,7 @@ kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备�
 - **旧会话用的 preset 别名**：会话开头记着建会话时的 preset id。Soul preset 换了 id（例如 2.11 起 standard-soul、cordis-soul 换成砚青四套；5.0 起砚青四套 `yanqing*` 换成灵魂 `soul*`），还有会话在用的旧 id 会留一个别名，内容和对应的新 preset 一样，名字标着「旧会话用」，新会话别选。干跑里「Soul preset」那段会列出别名和在用的会话数；要去掉的 preset 还有会话在用时，脚本会写进「需要留意」，先停下；
 - 中枢脚本：用作者的 `install-kit --all` 把上游 `kit/echo/` 的脚本全部换成作者原文（本机改过的也换，原样在快照里）；同义词表 `synonyms.json` 这类数据文件不动，只在没有时补；检索脚本换了就顺手 `memindex build` 重建索引；
 - kit 里的配置副本（照主配置重写）；`package.json` / `cordis.patch.yml` 里不对的地方（例如旧版安装包写的根层禁用会被去掉）。
-- **灵魂 · PTC Flash**（装了的）：每次更新都重新取作者最新发布的版本，见本节「灵魂 · PTC Flash」。
+- **灵魂 · Flash**（装了的）：每次更新重新取作者 main，动态加入全部上游 preset；旧单预设记录自动升级，删除仍被旧会话或默认入口使用的 id 时停止，见本节「灵魂 · Flash」。
 - **新加的东西**：kit 5.0 新加的「灵魂 · 全能」更新时自动补上；heartbeat、chat、clawbot 不自动补装（终端里会问，默认不装），用户要装再 `--add-part <名字>`，装前先把上面「默认不装的新零件」那一行的已知问题告诉他。
 - **Soul preset 的 skills**（`<profile>/skills/`）：和上游不一样的换成上游原文；不再选创造、全能时，安装包装过的删掉；你自己放进去的文件不碰。
 - **称呼替换照安装记录做**：上游源码一拿到就先换好称呼，再拿去比对和安装，所以换过的称呼不算变化、也不会被冲掉。要改就加 `--rename 爀曦=<称呼>`，关掉加 `--rename none`。
@@ -279,14 +279,16 @@ kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备�
 **干跑提示「本机代码看起来手工把上游作者的称呼换成了 …」时**：说明以前手工改过名、安装记录里没记。照提示加 `--rename 爀曦=<称呼>` 重新干跑，确认「本机改过」里不再有改称呼的文件，再真跑。
 **要报给用户但不用停的情况**：某个包用到 `@deepseek-ai/*` 却没在 `peerDependencies` 里声明（宿主是否因此不加载随 DSH 版本而定，验收时确认那个零件的工具或面板出现了，没出现再报给上游）；Soul preset 源文件缺失或 include 未展开的提醒。
 
-### 灵魂 · PTC Flash（可选）
+### 灵魂 · Flash（可选，上游全部预设）
 
-第六个 Soul preset，和灵魂五套一起选（安装问答里默认不选）。5.0 以前叫「砚青 PTC Flash」（`yanqing-ptc-flash`），更新时换成新 id，旧会话留别名。它来自 [LarryE135/dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 v3（`presets/flash-lean-ptc-v3.patch.yml`）：精简行事规则（控轮数、按需折叠、验收通过就交付），上下文用到 25% 就压缩、只留最近约 2 万 token 原文。
+安装问答中的「灵魂 · Flash（上游全部预设）」代表整组，默认不选。作者 `presets/` 下实际声明几个 agent preset，kit 就迁移几个；不按旧文件名、某个显示名或固定数量筛选。只迁移 preset，不把仓库根 patch 的全局运行时覆盖或其他组件带进 profile。
 
-- **源**：每次安装、更新都在线取作者**最新发布的版本**（GitHub releases/latest），作者发了新版，下一次 `--update` 就跟上，干跑报告里写从哪一版到哪一版、这个 preset 变没变。`--flash-ref <标签|main|提交>` 指定版本，`--flash-source <目录|.tar.gz>` 离线用本地源码。独立 fix 的修复钉在安装记录中的版本。取不到就停下，不会悄悄去掉已装的那份。
-- **适配**（`lib/flash-presets.mjs`，其余逐字照作者）：id 换成 `soul-ptc-flash`、名字「灵魂 · PTC Flash」（更早的 `ptc-soul-flash`、`flash-lean-ptc-v3-soul` 已退役，不能再用）；压缩、裁剪换成带门牌的 `dsh-yanqing-compaction`、`dsh-yanqing-pruner`；在手动压缩后面补上范围压缩 `dsh-yanqing-compact-region`（换气要用）。`workflow-ptc`、`tool-workflow` 照作者关着；压缩摘要本来就跟会话模型走，`preset-summary-model` 管不到它。作者改了结构（找不到 v3 那一块、压缩组里认不出那几个零件）就停下报出来，不猜。
-- **开关**：已装的电脑用 `install.mjs --update --flash on` 加上、`--flash off` 去掉，记进安装记录，以后更新照做。还有会话在用它时去掉，干跑会提醒先停下。
-- **验收**：装上后新建一个「灵魂 · PTC Flash」会话，按阶段 D 做一次门牌实测；Flash 的规则（例如只在用户要求时才用子代理、笔记不超过 60 行）和记账、门牌的流程有没有冲突，以这次实测为准。
+- **源**：默认跟踪 [LarryE135/dsh-flash-presets](https://github.com/LarryE135/dsh-flash-presets) 的 main。`--flash-ref <标签|分支|提交>` 固定版本，`--flash-source <目录|.tar.gz>` 使用离线源码。每次安装、更新、恢复都重新发现目录；取源或解析失败就停，不静默丢掉已装项。
+- **名称与简介**：生成 id 为上游 id 加 `soul-` 前缀（上游 id 没有 `flash-` 前缀时先补上）；显示名是「灵魂 · 上游名称」，与 Soul preset 的风格一致。简介保留上游原文，再追加门牌压缩、裁剪和范围压缩的改造说明。干跑逐项列出名称、id 和简介，不在 kit 里维护作者文案副本。
+- **适配**（`lib/flash-presets.mjs`）：压缩、裁剪、范围压缩使用这次下载的 Soul 源码 `plugins/*/package.json` 实际包名。当前作者 v3.0.0 使用 `dsh-yanqing-compaction`、`dsh-yanqing-pruner`、`dsh-yanqing-compact-region`（2026-11-03 的 0839f1e 从 `dsh-agent-*` 改名）。其余提示词、工具、开关、预算、阈值保留上游原文；结构对不上、id 重复、简介不是文本时明确停止。
+- **开关与记录**：`--update --flash on` 安装整组，`--flash off` 去掉整组。安装记录保存实际生成的全部 id、上游 id、源文件、名称与简介，备份恢复一并携带。动态默认 preset 可用 `--default-preset <本次列出的 id>`。
+- **旧记录**：已有方案里的 `soul-ptc-flash` 仍认，作为整组选择值。旧单预设的 `soul-ptc-flash`、`yanqing-ptc-flash` 有对应上游身份时保留旧会话别名。作者改显示名或文件名不改身份时，生成 id 不变；作者移除仍被会话或默认入口引用的 id、或会话无法读取时，先停止并要求明确迁移，不能猜替代项。
+- **验收**：对实际安装的各个 Flash preset 新建会话，按阶段 D 验证加载和门牌回取；源码自测和隔离 profile 通过不代表真实模型、压缩与工具执行已验收。
 
 ### 独立修复（6.0 起）
 
@@ -379,7 +381,7 @@ kit 更新会将文件换回作者原文；更新后重新检查，不能复用�
 2. **旧会话问用户**（有用 Soul preset 建的会话时才问）。会话文件开头记着建会话时的 preset id，preset 删了，这些会话多半打不开。三个选项原样给用户选，不要替用户定：
    - `shell` 留空壳 preset：profile 里的 Soul preset 留着，id 不变，名字后面标「（已卸载）」；压缩和裁剪换回官方原版，不依赖本架构的任何包。旧会话照常打开。
    - 旧安装含退役 Flash 时，`shell` 自动改为 `rewrite`，全部 Soul 会话迁到对应官方 preset，不留下 Flash 空壳；无法读取的会话需先处理。
-   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（soul / yanqing → standard、soul-cordis / yanqing-cordis → cordis、soul-ptc / yanqing-ptc → ptc、soul-distill / yanqing-distill → minimal、soul-all → ptc、PTC Flash 和退役 Flash 的旧 id 统一回到 ptc）。只改这一个值，会话原样在备份包里。
+   - `rewrite` 改写旧会话：把会话文件开头的 agentPreset 改成对应的官方 preset（soul / yanqing → standard、soul-cordis / yanqing-cordis → cordis、soul-ptc / yanqing-ptc → ptc、soul-distill / yanqing-distill → minimal、soul-all → ptc、动态 Flash preset、PTC Flash 和退役 Flash 的旧 id 统一回到 ptc）。只改这一个值，会话原样在备份包里。
    - `keep` 不管：preset 全删，旧会话可能打不开；要看时用备份包装回来。
 3. **书房和记忆中枢**默认一起删（备份包里有）。用户想留着，就加 `--keep-data`；以后用 `--setup <方案>` 重装，会接着用原来的书房和账本。
 4. **真跑**：用户确认后，请用户**完全退出 DSH**，在终端里跑 `"$NODE" install.mjs --uninstall --old-sessions <用户选的>`（要保留书房的照加 `--keep-data`）。你本身是 DSH 里的 agent 时自己跑不了：干跑最后会打印现成的终端命令，交给用户。用户在终端里直接跑 `--uninstall` 的，脚本会一步步问，最后确认才动手。
