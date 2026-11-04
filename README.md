@@ -1,6 +1,6 @@
 # dsh-agent-soul 安装包
 
-**版本 5.4**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
+**版本 5.6**（2026-11-04）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
 > **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
 > 工具包包含操作手册和安装脚本，可交给 agent 使用，也可以在终端运行。
@@ -41,7 +41,7 @@
 
   可选零件分三组（常用、面板件、上游新零件）**全部列给你选**，有兼容问题的也列，只是默认不勾。面板件装完没有数据源就是空面板，想用再选。最后三个是上游 v3.0.0 新加的，**照上游原样装、默认不勾**，选之前先看清已知问题：
 
-  - heartbeat 在上游 0221d89 里面板从包外的 `lib/paths.mjs` 导入、还用了没定义的 `AI_ROOT`，一加载就报错；心跳脚本不在零件发布清单里，调度依赖作者的 Windows 布局。Mac 可选择 `heartbeat-darwin` 修好并补齐运行链；默认不启用，完整验收后再替代 kit 每日自检，见 [迁移说明](MACOS-REPAIRS.md)。
+  - heartbeat 在上游 0221d89 里面板从包外的 `lib/paths.mjs` 导入、还用了没定义的 `AI_ROOT`，一加载就报错；心跳脚本不在零件发布清单里，调度依赖作者的 Windows 布局。Mac 可选择 `heartbeat-darwin` 修好并补齐运行链；默认不启用，先显式退役旧 kit 任务，完整验收后手动启用作者零件，见 [迁移说明](MACOS-REPAIRS.md)。
   - chat 从 fe3c456 起使用未导入的 `join` / `dirname` / `homedir`，入口无法加载；目标会话 id 仍写死，书房按作者目录布局推算。服务设计为绑定 `0.0.0.0`、绕开 DSH 的登录鉴权，同一网络里谁都能访问。
   - clawbot 是第三方插件（腾讯 ilink 网关），要手机微信扫码绑定；凭据存在 `~/.dsh/clawbot/`，备份不带它，换电脑要重新扫码；三个自动通知默认全开（每次回复都推一条微信）。本机自己从插件市场装过 `dsh-clawbot` 的，安装包不覆盖、也不卸载它。
 
@@ -172,7 +172,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 - **从砚青换到灵魂**：上游 v3.0.0 把砚青四套去个人化，改名为灵魂四套（id `yanqing*` → `soul*`，persona 不再写具体人名）。`--update` 换上新的，以前用砚青建的会话照常能打开（留一个和对应灵魂 preset 一样的别名，列表里标「旧会话用」），新会话默认的 `yanqing` 换成 `soul`；砚青 PTC Flash 同样改名为灵魂 · PTC Flash（`soul-ptc-flash`）。全能是这次新加的，已有的安装更新时补上。
 - **书房和记忆中枢**：在 DSH 家目录下的 `dsh-soul/`，里面有权威源册、骨架、账本、索引。
 - **自我层**：身份、硬线、说话方式，每轮注入。
-- **心跳**：按方案每天定时重建索引、刷新自我层、跑体检。
+- **心跳**：统一使用作者可选 heartbeat 零件；kit 不再生成或注册每日任务，运行与调度须单独验收、确认启用。
 - **验收标准**：体检 0 错，`/compact` 的摘要第一块带门牌。门牌要在**装完后新建的会话**里测：装之前开的会话不会换成 Soul preset。
 
 ## 文件夹里有什么
@@ -208,7 +208,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 | `lib/kit-update.mjs` | kit 自身仓库检查、安全快进更新和需人工合入时的新版快照 |
 | `kit-iteration.json` | 首次完成迭代后生成，保存审查基线和四流程结论；不代替端到端验收记录 |
 | `setups/` | 方案。`大肥鱼/` 是 Boss 的；全新安装存下的也在这里 |
-| `assets/` | 全新安装用的模板（权威源册、自我层、心跳脚本）、找不到官方预设时用的 preset 快照、离线用的灵魂五套和 skills（跟上游 c370a69） |
+| `assets/` | 全新安装用的模板（权威源册、自我层）、找不到官方预设时用的 preset 快照、离线用的灵魂五套和 skills（跟上游 c370a69） |
 | `logs/` | 每次运行的输出，脚本自动生成，可以删 |
 | `backups/` | `--backup`、`--uninstall` 打出的备份包；到新电脑还原时连同整个文件夹一起拷走 |
 
@@ -278,7 +278,7 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 
 `--restore [备份包]` 在新电脑（或卸载后的这台电脑）上装好 dsh-agent-soul，再放回备份里的数据；不写包名就用 `backups/` 里最新的一份。
 
-- 不用再选方案，零件、Soul preset、心跳时间、称呼替换都照备份时的装，按备份时的上游版本装（想升到最新，装好后再跑 `--update`）。
+- 不用再选方案，零件、Soul preset、称呼替换照备份安装；旧心跳时间仅作历史保留，不重新注册任务，按备份时的上游版本装（想升到最新，装好后再跑 `--update`）。
 - 书房、记忆中枢、会话原文、换气账本连修改时间一起放回；配置里的绝对路径自动换成新电脑的，Mac 和 Windows 互相还原也换。
 - 插件设置合并进新电脑的 `cordis.patch.yml`，新电脑已有的条目不动；mcp-hub 清单里的 echo 按新电脑路径重写。
 - 新电脑上已经有灵魂数据（账本里有主导记录或自我层填过）时会停下，确认要覆盖再加 `--force`，原有的书房和记忆中枢先存进这次的快照。
@@ -289,13 +289,13 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 ## 想改内容
 
 - **改大肥鱼**：改 `setups/大肥鱼/` 里的文件：
-  - `setup.json`：管零件、preset、心跳、称呼替换（`nameMap`）；
+  - `setup.json`：管零件、preset、称呼替换（`nameMap`）；
   - `00-authority.md`：权威源册；
   - `SELF.src.md.tpl`：自我层；
   - `大肥鱼-声音.md`：完整人设。
 
   人设改了完整版，要把每轮带着的那几条同步进自我层的「说话与样子」。
-- **换心跳时间**：跑脚本时加 `--heartbeat-time 09:30`。不要心跳就加 `--no-heartbeat`。
+- **心跳配置**：在作者 heartbeat 零件中配置。`--heartbeat-time` 已退役并明确报错；`--no-heartbeat` 仅为旧命令兼容、无动作。旧任务不会被升级自动停用，先核对归属再按迁移说明退役。
 - **装指定版本**：加 `--ref <提交号>`。网络不通时先下载源码，再加 `--source <文件或文件夹>`。
 
 ## 注意
@@ -303,20 +303,20 @@ node install.mjs --kit-iterate     # 先同步 kit，再收集上游的变化，
 - **验证范围**：4.0 逐个零件读上游 4606555 源码核对过修复清单。4.1 在 macOS（Apple 芯片，DSH NEXT 2.0.21-next）上用 `install.sh` 真装验收过：全新安装的终端问答、13 个零件和 21 条修复、砚青四套 preset、mcp-hub 接入 echo、心跳；新会话里体检 0 错、`/compact` 摘要带门牌、`memq open` 按门牌取回原文。更新到上游 8ba1385 时撞上作者的语法错误、按备份回滚，装前语法检查就是因此加的。4.2 的两处改动只在本机干跑核对过（更新计划里列出给 echo 补 `DSH_HOME`）。5.0 跟上游 c370a69（v3.0.0）只在隔离目录里验证过全新安装、4.5 → 5.0 更新、修复检查、备份 / 恢复 / 卸载，还没在桌面上实装，Soul preset 的 skills 挂没挂上要看灵魂 · 创造里能不能列出 creation 等技能；heartbeat、chat、clawbot 没实测。5.2 对 fe3c456 的安装、更新、备份、恢复、卸载与修复计划完成隔离验证；没有启动真实 DSH。`install.ps1` 还没在 Windows 上跑过。 5.4 在隔离目录里验证过：fe3c456 安装并打修复、手改、留旧备份后更新到 0221d89（零件逐个等于作者原文、旧备份搬进 legacy、收尾点名必须先修的项）、修复报告和计划（修后换气在 node_modules 里能加载）、备份 / 换目录恢复 / 卸载，以及问答自测；macOS 修复只在 Linux 上借垫片跑到面板加载和 heartbeat.mjs --force，没在桌面上实装。
 - **作者仓库里的同名文件**：2026-10-28 起作者仓库根目录也有 `install.mjs`、`AGENT-INSTALL.md`，还有 `tools/soul-doctor.mjs`、`tools/soul-preset.mjs`、`presets/`。包名现在和本安装包一致了；4.3 起 Soul preset 也照作者的装法写进 profile 的 `cordis.patch.yml`，作者 `soul-doctor` 的 L2 能看到。但别用作者的 `tools/soul-preset.mjs build --write` 装：profile 里还没有 preset 时它会把块插到文件最顶上、不带 `- insert:`，配置会坏；不设 `DSH_HOME` 环境变量跑还会报 ReferenceError（第 40 行先用了第 51 行才定义的 `argOf`）。说「跑 install.mjs」时，指的都是本文件夹里的这一份。
 - **插件市场里的「已停用」**：压缩与裁剪零件由 Soul preset 调用，显示「已停用」不代表功能失效，不必在全局启用或卸载。
-- **回声面板、换气面板的加载名**：上游 v2.0.0 及以前这两个包叫 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字却是 `dsh-yanqing-*`，原样装会加载失败。作者在 v3.0.0 修好了，修复 `echo-load-name`、`panel-load-name` 已退役；还装着旧版的电脑，修复检查照样会修，收尾时也会检查每个包要加载的插件都找得到。
-- **路径不带用户名**：安装包里没有写死任何一台电脑的路径。memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录；权威源册、自我层、要贴进新会话的话里的路径写成 `$HOME/…`（zsh、bash、PowerShell 都认）；心跳脚本按相对自己的位置找记忆中枢。只有交给操作系统和别的程序执行的几处必须是绝对路径，安装时在这台电脑上现算：launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`；还原时会换成新电脑的。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
+- **回声面板、换气面板的加载名**：上游 v2.0.0 及以前这两个包叫 `dsh-agent-*`，`cordis.patch.yml` 里要加载的名字却是 `dsh-yanqing-*`，原样装会加载失败。作者在 v3.0.0 修好了，修复 `echo-load-name`、`panel-load-name` 已退役；旧版电脑先用 `--update` 同步作者原文，再检查现行修复；不再提供已退役补丁。收尾仍检查每个包要加载的插件是否存在。
+- **路径不带用户名**：安装包里没有写死任何一台电脑的路径。memory 的配置写的是相对 DSH 家目录的路径（`dsh-soul/memory/hub/SELF.md`），几个要找书房、记忆中枢的插件也是运行时自己找家目录；权威源册、自我层、要贴进新会话的话里的路径写成 `$HOME/…`（zsh、bash、PowerShell 都认）；作者 heartbeat 的兼容修复按 DSH 家目录定位记忆中枢。只有交给操作系统和别的程序执行的几处必须是绝对路径，安装时在这台电脑上现算：launchd / 计划任务、mcp-hub 的 echo 服务器、`echo.config.json`；还原时会换成新电脑的。以前写死了某台电脑路径的配置和补丁，重跑安装或 `--update` 会自动改过来。
 - **在 DSH 里让 agent 装**：agent 可以替你干跑；真跑要先退出 DSH，按干跑最后给出的命令在终端里跑。重开 DSH 后新建一个会话，把安装脚本最后打印的那段话贴进去，主导、记账、门牌实测都在那个新会话里做。
 - **新电脑上的代数**：直接安装时，新电脑上的书房和账本是全新的，agent 从「第 1 代」开始。想带上旧电脑的账本和对话，在旧电脑上 `--backup`、新电脑上 `--restore`，还原后再任命下一代主导。
 
 ## 版本记录
 
-5.4 把安装、更新改成先同步作者最新版、问题全部归修复；自动备份统一放进 `archives/`；可选零件全量列出；人设一个输入框；问答和修复计划按脚本排好的弹窗问。跟上游 0221d89。
+5.6 退役 kit 自带的每日心跳：删掉心跳脚本模板、安装时的脚本生成与 launchd / 计划任务注册，问答和 setup.json 里的心跳字段一并拿掉；`--heartbeat-time` 改为明确报错，`--no-heartbeat` 只作旧命令兼容、无动作。保留旧任务（`com.dsh-soul.heartbeat` / `dsh-soul-heartbeat` / `heartbeat.sh`）的识别与停用、作者 heartbeat 可选零件、`heartbeat-darwin` 兼容修复；`kit-macos.mjs` 的 `--replace-kit` / `--restore-kit` 换成只退役旧任务的 `--retire-kit`。已装的旧任务不会被自动停用，本轮也没有在本机部署或停用任何任务。
 
 
-这里只保留最近三条更新；5.1 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
+这里只保留最近三条更新；5.2 及以前的记录见 [历史更新](CHANGELOG.md)。版本号与 `install.mjs` 中的 `KIT_VERSION` 一致。
 
 | 版本 | 日期 | 更新摘要 |
 |---|---|---|
+| 5.6 | 2026-11-04 | 退役 kit 自带每日心跳：删除 `assets/templates/heartbeat.mjs.tpl`、安装时的脚本生成和 launchd / 计划任务注册、问答题目与 `setup.json` 的 `heartbeat` / `heartbeatTime` 字段。`--heartbeat-time` 明确报错，`--no-heartbeat` 仅作旧命令兼容。只保留旧任务的识别、停用与迁移（`--retire-kit`）、作者 heartbeat 零件和 `heartbeat-darwin` 兼容修复；`--replace-kit` / `--restore-kit` 删除，不再切换或恢复旧每日心跳。不自动停用已装任务。 |
+| 5.5 | 2026-11-04 | 修复前校验最终文件依赖图；删除仍被引用的 helper 会拒绝整次操作，不再写空文件。补拷依赖参与干跑，未选 helper 保持原状；作者配套文件撤销后保留。新增 `compaction-memq-path`、`echo-mcp-sessions` 处理上游路径回归。删除仅加注释的 heartbeat-core 补丁、不可达旧检测和过时修复处方；不复用退役 id。隔离验证覆盖首次修复、重复、冻结、撤销和写入后失败回滚。 |
 | 5.4 | 2026-11-04 | 跟上游 0221d89。**安装、更新以作者为准**：本体、零件、中枢脚本（作者的 `install-kit --all`）、Soul preset 和 skills 一律同步成作者原文，kit 修复和本机手改都换掉，原样进快照，安装记录里的修复结论清空、只留核对证据；上游包本身有问题（入口文件不存在、导入包外文件、语法错误、注册 id 撞车）不再停下，写进「需要留意」、收尾点名。修复清单只对准作者最新版：退役的 7 条从清单删掉（id 保留不复用），新增 `huanqi-paths-import`（0221d89 换气从包外的 `lib/paths.mjs` 导入，一加载就报错），`heartbeat-darwin` 按新版改写；homedir 两条改看 `state/huanqi-boot.log` 判断 DSH 传不传 `DSH_HOME`；修复检查遇到旧版安装先提示更新。发布清单检查新增「导入了包外的文件」。自动备份统一到 kit 的 `archives/<主机>-<家目录指纹>/`（新增 `lib/archive.mjs`），旧的 `.bak-*`、`dsh-soul/_backup/` 自动搬进 `legacy/`，快照同时是回滚依据。可选零件分三组全量列出，兼容问题写成「有修复 / 没有修复」，没装 dsh-mnemon 选 mnemon-probe 改成提醒。人设三问合成一个输入框（句子和文件路径混写）。`--questions` 和修复报告输出排好的弹窗 `popups`（新增 `lib/popups.mjs`），手册加「弹窗规范」。不再迁移 kit 4.0 以前的安装。新增 `scripts/verify-setup.mjs`。 |
-| 5.3 | 2026-11-04 | 新增模型状态栏、速达、heartbeat 和 echo-svc 四条 macOS 可选修复；多文件成组保护，脚本新增/撤回纳入事务和计划指纹。heartbeat 默认关闭，四步验收与代码/配置指纹通过后才允许切换旧每日自检，可恢复原任务；使用说明见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。 |
-| 5.2 | 2026-11-04 | 跟上游 fe3c456（含 6531d30 的路径调整）。新增 mcp-hub-homedir、huanqi-homedir、echo-diag-join、huanqi-hub-home 四条修复，处理缺失导入和换气记忆中枢定位；原 mcp-hub-home、echo-hub-path、huanqi-hub-path 退役但保留旧版识别。安装收尾点名会阻止加载的修复，仍需单独核对计划后应用。认不出的上游代码保持人工核对；计划绑定本机、安装记录及源码内容，离线源变化也拒绝旧计划；备份恢复保留修复核对结论和证据。同步 heartbeat / chat 当前限制。隔离验证覆盖安装、升级、修复计划、备份恢复和卸载，未做桌面验收。 |

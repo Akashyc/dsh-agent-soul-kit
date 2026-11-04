@@ -49,8 +49,8 @@
 //   --add-part <目录名,…>        装上某个可选零件（例如 clawbot）：更新时补装以前拒掉的、或默认不装的；安装时在方案之外多装
 //   --rename <上游称呼=称呼|none>  称呼替换：把上游代码里作者的称呼（爀曦）换成这台的用户称呼，例如 --rename 爀曦=Boss；
 //                                记进安装记录和备份，以后更新、恢复自动照做；none 关掉。不给就安装按方案、更新按安装记录
-//   --no-heartbeat               不注册每日心跳（仅安装；默认按方案）
-//   --heartbeat-time HH:MM       心跳时间（仅安装；默认按方案）
+//   --no-heartbeat               兼容旧命令，无动作（kit 每日心跳已退役）
+//   --heartbeat-time             已退役；请在作者 heartbeat 零件中配置
 //   --out <目录>                 备份或 kit 报告父目录，默认 backups/、logs/kit-updates/ 或 logs/kit-iterations/
 //   --base-ref <提交>             kit 迭代的对比基线，默认上次完成迭代的提交或 VERIFIED
 //   --base-source <目录|.tar.gz>   kit 迭代的本地基线，和 --source 配合可离线检查；离线更新时给「已装那一版」的上游源码
@@ -92,7 +92,7 @@ import { beginFixTransaction } from './lib/fix-transaction.mjs'
 import { REPORT_KIND, needsDecision, canRevisit, choicesFor, fingerprint, planTemplate, loadPlan, DECISIONS, HITS } from './lib/fix-plan.mjs'
 import { needsSkills, planPresetSkills, pruneEmptyDirs } from './lib/preset-skills.mjs'
 import { planManagedText, changedLines, revertConfigLines, hasMissingApiKey } from './lib/fix-records.mjs'
-import { FIXES, FIX_IDS, fixInfo, fileFixes, planFile, detectConfigBool, detectSummaryRoute, defaultProvider, unpatchText, scanCandidates, STATUS_TEXT, ACTION_TEXT, BASIS_TEXT } from './lib/fixes.mjs'
+import { FIXES, FIX_IDS, fixInfo, fileFixes, planFile, detectConfigBool, detectSummaryRoute, defaultProvider, unpatchText, scanCandidates, danglingImports, STATUS_TEXT, ACTION_TEXT, BASIS_TEXT } from './lib/fixes.mjs'
 import { OLD_SESSION_MODES, SOUL_PRESET_IDS, officialPresetFor, planPackageJsonRemoval, removeLockEntries, removeModulesEntries, removePackageMapEntries, planCordisRemoval, planServersRemoval, rewriteSessionHeader, sessionPreset, isSoulHeartbeatPlist } from './lib/uninstall.mjs'
 import { PARTS, PART_NAMES, PRESET_ONLY, OPTIONAL_PARTS, MUST_HAVE, ADDED_PARTS, OPT_IN_PARTS, EXTERNAL_PARTS, PART_INFO, PLATFORM_LABEL, platformNote, platformText, verLess } from './lib/parts.mjs'
 import { SETUPS, render, parseBool, normalizeAnswers, buildSetupFiles, loadSetup, listSetups, initAnswers, describeSetup, questionSheet, askTerminal } from './lib/setup.mjs'
@@ -102,7 +102,7 @@ const KIT = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(KIT, 'assets')
 const TPL = path.join(ASSETS, 'templates')
 const REPO = 'cyanwell/dsh-agent-soul'
-const KIT_VERSION = '5.4'
+const KIT_VERSION = '5.6'
 // 这份安装包对照过的上游提交（4.0：逐个零件读源码核对过，桌面端真装验收另记在 CHANGELOG）
 const VERIFIED = { sha: '460655554609cb3c6f6dbbeca46206a311b42bd9', date: '2026-10-31' }
 const partSrc = (p) => path.join(SRC.dir, 'plugins', p)
@@ -150,8 +150,8 @@ const PROXY_OPT = opt('--proxy')
 const PROFILE = opt('--profile', 'desktop')
 const RUNTIME_OPT = opt('--runtime')
 const DATA_DIR_OPT = opt('--data-dir')
-let HB_TIME = opt('--heartbeat-time')
-let NO_HB = flag('--no-heartbeat')
+// --no-heartbeat 兼容旧命令，无动作；旧时间选项必须明确拒绝。
+if (flag('--heartbeat-time')) { console.log('kit 每日心跳已退役；请配置作者 heartbeat 零件的调度时间'); process.exit(2) }
 let DEFAULT_PRESET = opt('--default-preset', UPDATE ? 'keep' : null)
 const FRESH = flag('--fresh') || Boolean(opt('--answers'))
 const ANSWERS_FILE = opt('--answers')
@@ -242,7 +242,6 @@ if (ADD_PARTS.some((p) => !OPTIONAL_PARTS.includes(p))) { console.log(`--add-par
 if (ADD_PARTS.some((p) => SKIP_PARTS.includes(p))) { console.log('同一个零件不能既 --add-part 又 --skip-part'); process.exit(2) }
 if ((FRESH || SETUP_OPT) && MODE !== 'install') { console.log('--setup、--fresh、--answers 只用于安装；更新、备份、恢复、卸载不需要选方案'); process.exit(2) }
 if (FRESH && SETUP_OPT) { console.log('--setup（用现成方案）和 --fresh（全新安装）只能选一个'); process.exit(2) }
-if (opt('--heartbeat-time') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(opt('--heartbeat-time'))) { console.log(`--heartbeat-time 格式不对：${opt('--heartbeat-time')}，要 HH:MM`); process.exit(2) }
 
 // ── 输出（同时记进 logs/）──────────────────────────────────────────────
 const TS = (() => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` })()
@@ -1045,7 +1044,7 @@ if (dshNode) {
 } else if (!UNINSTALL) {
   warn('没找到 DSH 自带的 node，写进配置用当前进程的 node（DSH 升级后可能要重跑一次安装）')
 }
-for (const f of ['templates/00-authority.md.tpl', 'templates/SELF.src.md.tpl', 'templates/heartbeat.mjs.tpl', 'presets/ptc.patch.yml']) if (!exists(path.join(ASSETS, f))) die(`安装包不完整：assets/${f} 不存在`)
+for (const f of ['templates/00-authority.md.tpl', 'templates/SELF.src.md.tpl', 'presets/ptc.patch.yml']) if (!exists(path.join(ASSETS, f))) die(`安装包不完整：assets/${f} 不存在`)
 ok('安装包素材齐全')
 
 // 显式给了 --dsh-home：那里没有 profile 就停下，不管别处有没有（以前要等别处找到了才报，这台电脑上没有 ~/.dsh 时报的是另一句）
@@ -1690,7 +1689,7 @@ const USERN = (SETUP && SETUP.user) || (SETUP_INFO && SETUP_INFO.user) || '用�
 // 方案里的文件：刚生成、还没存盘的从内存取
 const setupText = (key) => (SETUP_NEW ? SETUP_NEW.files[SETUP.files[key]] : readText(path.join(SETUP_DIR, SETUP.files[key])))
 
-// 要生成的 Soul preset、默认 preset、心跳
+// 要生成的 Soul preset、默认 preset
 const presetsOnDisk = (() => { try { return [...new Set(Object.keys(presetSummary(installedPresetSection())).map((id) => RETIRED_PRESETS[id] || OLD_PRESET_IDS[id] || id).filter((id) => PRESET_IDS.includes(id)))] } catch { return [] } })()
 // 更新/恢复读的是旧安装记录，里面的 id 可能已经改名（ptc-soul、yanqing-ptc → soul-ptc 之类）：先映射再过滤，认不出的丢掉
 const mapOldPresetIds = (list) => {
@@ -1733,12 +1732,7 @@ if (MIGRATE_PRESETS && RETIRED_PRESETS[DEFAULT_PRESET]) {
 }
 if (DEFAULT_PRESET === null) DEFAULT_PRESET = MODE === 'install' ? SETUP.defaultPreset : PRESET_CHOICE.includes('soul') ? 'soul' : PRESET_CHOICE[0]
 if (PRESET_IDS.includes(DEFAULT_PRESET) && !PRESET_CHOICE.includes(DEFAULT_PRESET)) die(`默认 preset ${DEFAULT_PRESET} 不在要生成的 Soul preset 里（${PRESET_CHOICE.join('、')}）`)
-if (MODE === 'install' || MODE === 'restore') {
-  const hb = MODE === 'install' ? SETUP.heartbeat : RB.state.heartbeat
-  if (hb && hb.enabled === false && !opt('--heartbeat-time')) NO_HB = true
-  HB_TIME = HB_TIME || (hb && hb.time) || '12:00'
-}
-HB_TIME = HB_TIME || '12:00'
+
 
 // 要装的零件：必装的不许跳；可选的按方案；更新时以前拒掉的不再补
 if (MODE === 'install') {
@@ -2076,11 +2070,12 @@ function runFixes({ fresh, apply, record = apply }) {
     const srcFile = fixSourceFile(g), instFile = fixInstalledFile(g)
     if (!g.provided && !exists(srcFile)) { for (const f of g.fixes) rows.push({ id: f.id, status: 'manual', action: 'manual', note: `上游这一版没有 ${g.file}` }); continue }
     const upstream = g.provided ? '' : readText(srcFile)
-    if (!g.create && !fresh(g.pkg) && exists(path.join(NM, g.pkg)) && !exists(instFile)) {
+    const willCopy = FIX_MODE && PACK_FIX && fixSelected('pack-unshipped') && !exists(instFile) && (PACK_EXTRA[g.pkg] || []).includes(g.file)
+    if (!g.create && !willCopy && !fresh(g.pkg) && exists(path.join(NM, g.pkg)) && !exists(instFile)) {
       for (const fix of g.fixes) rows.push({ id: fix.id, status: 'manual', action: 'local', note: `${g.pkg}/${g.file} 在本机缺失，未擅自补回` })
       continue
     }
-    const installedText = fresh(g.pkg) ? upstream : exists(instFile) ? readText(instFile) : null
+    const installedText = fresh(g.pkg) || willCopy ? upstream : exists(instFile) ? readText(instFile) : null
     const freeze = FIX_ONLY.length ? g.fixes.filter((f) => !FIX_ONLY.includes(f.id)).map((f) => f.id) : []
     const key = fixRecordKey(g)
     const plan = planFile({ upstream, installed: installedText, fixes: g.fixes, skip: FIX_SKIP, freeze, record: FIX_RECORDS.files[key] })
@@ -2089,32 +2084,62 @@ function runFixes({ fresh, apply, record = apply }) {
     prepared.push({ g, plan, upstream, instFile, key, created: FIX_RECORDS.files[key]?.created || (g.create && !exists(instFile)) })
   }
   if (rows.some((r) => r.id === 'heartbeat-darwin' && ['apply', 'refresh', 'revert'].includes(r.action)) && macHeartbeatInUse()) {
-    for (const row of rows.filter((r) => r.id === 'heartbeat-darwin')) { row.status = 'manual'; row.action = 'manual'; row.note = '请先用包内 kit-macos.mjs --restore-kit（有迁移记录时）及 --disable，再更新或撤回补丁' }
+    for (const row of rows.filter((r) => r.id === 'heartbeat-darwin')) { row.status = 'manual'; row.action = 'manual'; row.note = '请先用包内 kit-macos.mjs --retire-kit（有旧任务或迁移记录时）及 --disable，再更新或撤回补丁' }
   }
   // 一条修复跨多个文件时，任一文件不认识或本机改过，整条都不动。
   const blocked = new Set(rows.filter((r) => r.status === 'manual' || r.action === 'local').map((r) => r.id))
-  for (const item of prepared) {
-    const { g, plan, upstream, instFile, key, created } = item
-    if (g.fixes.some((f) => blocked.has(f.id))) {
-      for (const r of rows.filter((r) => g.fixes.some((f) => f.id === r.id))) { r.status = 'manual'; r.action = 'local'; r.note ||= '同一修复的配套文件需人工核对，整组未修改' }
-      continue
+  // 先验证完整最终计划，再写任何补丁；撤销也在同一张依赖图里检查。
+  const active = prepared.filter(({ g }) => !g.fixes.some((f) => blocked.has(f.id)))
+  for (const { g } of prepared.filter((item) => !active.includes(item))) {
+    for (const r of rows.filter((r) => g.fixes.some((f) => f.id === r.id))) { r.status = 'manual'; r.action = 'local'; r.note ||= '同一修复的配套文件需人工核对，整组未修改' }
+  }
+  const finalFiles = active.map(({ g, plan, upstream, instFile, created }) => ({
+    file: instFile, dir: path.dirname(instFile), label: `${g.pkg}/${g.file}`,
+    text: plan.target, upstream, checkExisting: plan.state !== 'same',
+    remove: Boolean((plan.state === 'missing' && !plan.rows.some((r) => r.action === 'apply')) || (g.provided && created && plan.target === upstream && g.fixes.every((f) => FIX_SKIP.includes(f.id))))
+  }))
+  if (FIX_MODE && PACK_FIX && fixSelected('pack-unshipped')) {
+    for (const [pkg, files] of Object.entries(PACK_EXTRA)) for (const name of files) {
+      const file = path.join(packDst(pkg), name)
+      if (!exists(file) && !finalFiles.some((f) => f.file === file)) {
+        const src = pkg === 'dsh-agent-soul' ? SRC.dir : partSrc(AP[PKGS.indexOf(pkg)])
+        const text = readText(path.join(src, name))
+        finalFiles.push({ file, dir: path.dirname(file), label: pkg + '/' + name, text, upstream: text, remove: false })
+      }
     }
-    const remove = created && plan.target === upstream && g.fixes.every((f) => FIX_SKIP.includes(f.id))
-    if (record && plan.state !== 'local') FIX_RECORDS.files[key] = { upstream, applied: plan.target, ...(created ? { created: true } : {}) }
+  }
+  // 校验非补丁文件对待删 helper 的引用，不能只看补丁入口。
+  const removals = finalFiles.filter((f) => f.remove)
+  for (const dir of new Set(removals.map((f) => f.dir))) {
+    for (const name of (exists(dir) ? fs.readdirSync(dir) : []).filter((f) => /\.(?:m?js|cjs)$/.test(f))) {
+      const file = path.join(dir, name)
+      if (!finalFiles.some((f) => f.file === file)) {
+        const text = readText(file)
+        finalFiles.push({ file, dir, label: file, text, upstream: text, remove: false })
+      }
+    }
+  }
+  const dangling = FIX_MODE ? danglingImports(finalFiles) : []
+  if (dangling.length) die('修复计划有依赖缺失（未写入补丁）：' + dangling.join('、'))
+  for (const { g, plan } of active) {
+    if (plan.state !== 'rewrite' && !(plan.state === 'missing' && plan.rows.some((r) => r.action === 'apply'))) continue
+    if (/\.(?:m?js|cjs)$/.test(g.file)) {
+      const checked = spawnSync(process.execPath, ['--check', '--input-type=' + (g.file.endsWith('.cjs') ? 'commonjs' : 'module')], { input: plan.target, encoding: 'utf8' })
+      if (checked.status !== 0) die(`${g.pkg}/${g.file} 修后语法检查失败`)
+    } else if (/\.ya?ml$/.test(g.file) && parseYaml) {
+      try { parseYaml(plan.target) } catch { die(`${g.pkg}/${g.file} 修后 YAML 校验失败`) }
+    }
+  }
+  for (const item of active) {
+    const { g, plan, upstream, instFile, key, created } = item
+    const remove = finalFiles.find((f) => f.file === instFile).remove
     if (remove) {
-      if (apply && exists(instFile)) fs.unlinkSync(instFile)
+      if (apply && !DRY && exists(instFile)) fs.unlinkSync(instFile)
       if (record) delete FIX_RECORDS.files[key]
       continue
     }
-    if (apply && (plan.state === 'rewrite' || (plan.state === 'missing' && plan.rows.some((r) => r.action === 'apply')))) {
-      if (/\.(?:m?js|cjs)$/.test(g.file)) {
-        const checked = spawnSync(process.execPath, ['--check', '--input-type=' + (g.file.endsWith('.cjs') ? 'commonjs' : 'module')], { input: plan.target, encoding: 'utf8' })
-        if (checked.status !== 0) die(`${g.pkg}/${g.file} 修后语法检查失败`)
-      } else if (/\.ya?ml$/.test(g.file) && parseYaml) {
-        try { parseYaml(plan.target) } catch { die(`${g.pkg}/${g.file} 修后 YAML 校验失败`) }
-      }
-      write(instFile, plan.target, `${g.pkg}/${g.file}（修复）`)
-    }
+    if (record && plan.state !== 'local' && !plan.rows.every((r) => r.status === 'frozen')) FIX_RECORDS.files[key] = { upstream, applied: plan.target, ...(created ? { created: true } : {}) }
+    if (apply && (plan.state === 'rewrite' || (plan.state === 'missing' && plan.rows.some((r) => r.action === 'apply')))) write(instFile, plan.target, `${g.pkg}/${g.file}（修复）`)
   }
   // mnemon-runtime：解析不出热记忆目录时清单里没有这一条，probe 保持上游默认
   for (const f of FIXES.filter((x) => x.phase === 'file' && !rows.some((r) => r.id === x.id))) {
@@ -2195,9 +2220,11 @@ function fixFacts() {
   const homeFacts = [`DSH 家目录：${homePath(DSH_HOME)}`, boot ? `换气最近一次加载成功：${boot.slice(1, 25)}（对照安装记录看那时 huanqi-homedir 打没打：没打还能加载，说明 DSH 传了 DSH_HOME，不会撞上）` : '没有换气加载成功的记录（state/huanqi-boot.log 里没有 apply() done）']
   const pathsLib = path.join(PROF, 'lib', 'paths.mjs')
   return {
+    'compaction-memq-path': [`本机回取工具：${exists(path.join(HUB, 'memq.mjs')) ? '存在' : '缺失'}`, 'SOUL_MEMQ/MEMQ 环境覆盖由实际 Host 环境核对'],
+    'echo-mcp-sessions': [`本机会话目录：${exists(SESSIONS) ? '存在' : '缺失'}`, `统一配置模块：${exists(path.join(HUB, 'echo-config.mjs')) ? '存在' : '缺失'}`],
     'model-statusbar-darwin': [`系统：${process.platform}`, `ComfyUI 安装目录：${process.env.COMFYUI_DIR ? (exists(path.join(process.env.COMFYUI_DIR, 'main.py')) ? '已配置且 main.py 存在' : '已配置但 main.py 不存在') : '本进程未配置；须核实 DSH Host 的实际环境'}`, 'Python、服务归属和真实 GPU 读数需运行时核实'],
     'yantai-apps-darwin': [`系统：${process.platform}`, `应用目录：/Applications ${exists('/Applications') ? '存在' : '不存在'}`, '安装补丁不会扫描或打开应用；扫描在速达首次请求时进行'],
-    'heartbeat-darwin': [`系统：${process.platform}`, `kit 每日自检安装记录：${state0?.heartbeat?.enabled ? '启用' : '关闭或未知'}（以 launchctl 为准）`, `本机 heartbeat 配置：${exists(path.join(HUB, 'heartbeat/runtime/heartbeat.config.json')) ? '存在' : '尚未初始化'}`, `旧任务文件：${exists(path.join(os.homedir(), 'Library/LaunchAgents/com.dsh-soul.heartbeat.plist')) ? '存在，需核对是否属于本机安装' : '不存在'}`, '先四步实测及桌面验收，再用包内 kit-macos.mjs --replace-kit 切换；不会因安装补丁就停旧任务'],
+    'heartbeat-darwin': [`系统：${process.platform}`, `kit 每日自检安装记录：${state0?.heartbeat?.enabled ? '启用' : '关闭或未知'}（以 launchctl 为准）`, `本机 heartbeat 配置：${exists(path.join(HUB, 'heartbeat/runtime/heartbeat.config.json')) ? '存在' : '尚未初始化'}`, `旧任务文件：${exists(path.join(os.homedir(), 'Library/LaunchAgents/com.dsh-soul.heartbeat.plist')) ? '存在，需核对是否属于本机安装' : '不存在'}`, '旧任务用 --retire-kit 单独退役；作者零件四步实测后手动 --enable，不自动切换或恢复旧任务'],
     'echo-svc-darwin': [`系统：${process.platform}`, `中枢服务端：${exists(path.join(HUB, 'echo-svc.mjs')) ? '存在' : '缺失'}`, `中枢客户端：${exists(path.join(HUB, 'echo-svc-client.mjs')) ? '存在' : '缺失'}`, '按需手动启动服务；不自动注册常驻任务'],
     'pack-unshipped': PACK_STATE.length ? PACK_STATE.map((x) => `${x.pkg}：上游发布清单漏列 ${x.file}，已装的包里${x.there ? '已经有了' : '没有'}`) : ['上游发布清单没有漏列的文件'],
     'mnemon-runtime': [`dsh-mnemon ${MNEMON_INSTALLED ? '装了' : '没装'}`, `热记忆目录解析到 ${RX || '（解析不出）'}（${MNE.source}）`, `mnemon-probe 上游默认找 ${posix(path.join(os.homedir(), '.mnemon', 'runtime'))}`],
@@ -2303,7 +2330,7 @@ function partDiff(i) {
   return { ...diffMaps(inst, next), inst, next }
 }
 const PART_DIFF = AP.map((p, i) => (INST[i] ? partDiff(i) : null))
-if (UPDATE && PART_DIFF[AP.indexOf('heartbeat')] && !PART_DIFF[AP.indexOf('heartbeat')].same && macHeartbeatInUse()) die('heartbeat 有运行任务或迁移记录，请先用包内 kit-macos.mjs --restore-kit（有迁移记录时）及 --disable，再更新脚本')
+if (UPDATE && PART_DIFF[AP.indexOf('heartbeat')] && !PART_DIFF[AP.indexOf('heartbeat')].same && macHeartbeatInUse()) die('heartbeat 有运行任务或迁移记录，请先用包内 kit-macos.mjs --retire-kit（有旧任务或迁移记录时）及 --disable，再更新脚本')
 const kitFile = (pkg, f) => FILE_FIXES.some((x) => x.pkg === pkg && x.file === f)
 
 // 中枢脚本：上游 kit/echo 里的 .mjs 全部跟作者走（作者的 install-kit --all），同义词表这类数据文件只在没有时补
@@ -2530,7 +2557,6 @@ if (FIX_MODE) {
 const BK = OP_DIR
 const LOCKS = [path.join(PROF, 'pnpm-lock.yaml'), path.join(NM, '.pnpm', 'lock.yaml'), path.join(NM, '.modules.yaml'), path.join(NM, '.package-map.json')]
 step('快照')
-if (!exists(cfgPath)) { write(cfgPath, '', 'cordis.patch.yml（原本没有，新建空文件）'); ok('cordis.patch.yml 原本不存在，已新建') }
 if (DRY) info(`[干跑] 将把要改的原样存进 ${posix(BK)}：profile 配置、锁文件、本体、零件、中枢脚本、mcp-hub 清单、安装记录${SKILLS_PLAN?.changed ? '、Soul preset 的 skills' : ''}`)
 else {
   TOUCHED = true
@@ -2548,6 +2574,8 @@ else {
   ].join('\n'), 'utf8')
   ok(`要改的原样 → ${posix(BK)}（附还原方法.txt）`)
 }
+
+if (!exists(cfgPath)) { write(cfgPath, '', 'cordis.patch.yml（原本没有，新建空文件）'); ok('cordis.patch.yml 原本不存在，已新建') }
 
 // ═══ 本体 + 零件 ═════════════════════════════════════════════════════════
 step(FIX_MODE ? '零件（--fix 不重装零件，只补拷发布清单漏列的文件）' : UPDATE ? '换上新版本体和零件' : '本体和零件拷进 node_modules')
@@ -2799,9 +2827,9 @@ if (PKGS.includes('dsh-mcp-hub') && !FIX_MODE) {
 // ═══ 安装：书房 + 中枢 + 自我层 + 心跳 ═══════════════════════════════════
 // 方案文件里留到安装时才填的：路径（换电脑会变）、心跳时间、这台电脑有没有 dsh-mnemon
 //   路径写成 $HOME/…：不带用户名，换电脑、换用户名不用改；zsh、bash 和 Windows 上 DSH 用的 PowerShell 都认。不在用户目录下的只能写原样
-const IVARS = { HUB: homePath(HUB), SOUL: homePath(SOUL), MEM: homePath(MEM), SESSIONS: homePath(SESSIONS), DSH_HOME: homePath(DSH_HOME), PROFILE_DIR: homePath(PROF), RUNTIME: RUNTIME && homePath(RUNTIME), HB_TIME }
-const ICONDS = { MNEMON, HEARTBEAT: !NO_HB }
-let HB_STATUS = UPDATE ? '更新不动心跳' : '未注册'
+const IVARS = { HUB: homePath(HUB), SOUL: homePath(SOUL), MEM: homePath(MEM), SESSIONS: homePath(SESSIONS), DSH_HOME: homePath(DSH_HOME), PROFILE_DIR: homePath(PROF), RUNTIME: RUNTIME && homePath(RUNTIME) }
+const ICONDS = { MNEMON, HEARTBEAT: false }
+
 if (!UPDATE) {
   step('第 0 步权威源 + 记忆中枢')
   mkdir(SOUL); mkdir(MEM)
@@ -2857,78 +2885,7 @@ if (!UPDATE) {
     }
   }
 
-  step('心跳（每日定时：重建索引 → 装配 SELF.md → 体检）')
-  const HB = path.join(SOUL, '60-工具', 'heartbeat.mjs')
-  // 记忆中枢按相对心跳脚本自己的位置找（书房、中枢一起挪也不用改）
-  write(HB, render(readText(path.join(TPL, 'heartbeat.mjs.tpl')), { NAME: AGENT }).replace('{{HUB_REL_JSON}}', JSON.stringify(posix(path.relative(path.dirname(HB), HUB)))), '60-工具/heartbeat.mjs')
-  if (!DRY) ok('心跳脚本：soul/60-工具/heartbeat.mjs')
-  if (NO_HB) { HB_STATUS = flag('--no-heartbeat') ? '按 --no-heartbeat 跳过' : '方案里没开心跳，没注册'; ok(`心跳：${HB_STATUS}（脚本留着，想自检时可以手动跑 node "${posix(HB)}"）`) }
-  else {
-    const [hh, mm] = HB_TIME.split(':').map((x) => Number(x))
-    if (!(hh >= 0 && hh < 24 && mm >= 0 && mm < 60)) die(`心跳时间格式不对：${HB_TIME}`)
-    if (process.platform === 'darwin') {
-      const label = 'com.dsh-soul.heartbeat'
-      const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`)
-      const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${label}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${esc(NODE_FOR_CONFIG)}</string>
-    <string>${esc(HB)}</string>
-  </array>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>${hh}</integer>
-    <key>Minute</key>
-    <integer>${mm}</integer>
-  </dict>
-  <key>StandardOutPath</key>
-  <string>${esc(path.join(HUB, 'heartbeat-launchd.log'))}</string>
-  <key>StandardErrorPath</key>
-  <string>${esc(path.join(HUB, 'heartbeat-launchd.log'))}</string>
-</dict>
-</plist>
-`
-      if (exists(plistPath) && !readText(plistPath).includes(esc(HB))) HB_STATUS = `已有别的心跳（${plistPath}），没覆盖`
-      else {
-        write(plistPath, plist, `~/Library/LaunchAgents/${label}.plist`)
-        if (!DRY) {
-          const uid = os.userInfo().uid
-          spawnSync('launchctl', ['bootout', `gui/${uid}/${label}`], { encoding: 'utf8' })
-          const r1 = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, plistPath], { encoding: 'utf8' })
-          if (r1.status !== 0) warn(`launchctl bootstrap 失败：${(r1.error ? r1.error.message : String(r1.stderr || '')).trim()}；可以手动跑：launchctl bootstrap gui/$(id -u) "${plistPath}"`)
-          else { spawnSync('launchctl', ['kickstart', `gui/${uid}/${label}`], { encoding: 'utf8' }); HB_STATUS = `launchd 已注册（每天 ${HB_TIME}），并已手动触发一次` }
-        } else HB_STATUS = '将注册 launchd'
-      }
-      ok(`心跳：${HB_STATUS}`)
-    } else if (process.platform === 'win32') {
-      const q = (s) => "'" + s.replace(/'/g, "''") + "'"
-      const ps1 = path.join(SOUL, '60-工具', 'register-heartbeat.ps1')
-      const body = [
-        "$ErrorActionPreference = 'Stop'",
-        `$action = New-ScheduledTaskAction -Execute ${q(NODE_FOR_CONFIG)} -Argument ${q('"' + HB + '"')}`,
-        `$trigger = New-ScheduledTaskTrigger -Daily -At ${q(HB_TIME)}`,
-        '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)',
-        "Register-ScheduledTask -TaskName 'dsh-soul-heartbeat' -Action $action -Trigger $trigger -Settings $settings -Description 'dsh-agent-soul heartbeat' -Force | Out-Null",
-        "Start-ScheduledTask -TaskName 'dsh-soul-heartbeat'",
-        "Write-Output 'heartbeat-registered'",
-      ].join('\r\n')
-      // PowerShell 5.1 读没有 BOM 的脚本会按本地代码页解码，路径里有中文就坏 —— 必须带 BOM
-      write(ps1, '\uFEFF' + body + '\r\n', '60-工具/register-heartbeat.ps1')
-      if (!DRY) {
-        const r = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1], { encoding: 'utf8', windowsHide: true })
-        if (String(r.stdout).includes('heartbeat-registered')) HB_STATUS = `计划任务 dsh-soul-heartbeat 已注册（每天 ${HB_TIME}，用电池也照跑，错过会补跑），并已手动触发一次`
-        else warn(`计划任务注册失败：${(r.error ? r.error.message : String(r.stderr || r.stdout || '')).trim().slice(0, 300)}；可以手动右键 ${ps1} →「使用 PowerShell 运行」`)
-      } else HB_STATUS = '将注册 Windows 计划任务'
-      if (HB_STATUS !== '未注册') ok(`心跳：${HB_STATUS}`)
-    } else warn('这个系统不是 macOS / Windows，没注册定时任务；请用 cron 每天跑一次：node ' + HB)
-  }
+  info('kit 自带每日心跳已退役；需要定时巡视时选择作者 heartbeat 零件，验收后手动启用。')
 }
 
 // ═══ 恢复收尾 ═══════════════════════════════════════════════════════════
@@ -2986,7 +2943,7 @@ if (!DRY) {
     defaultPreset: finalDefault,
     parts: partsDone,
     declined: [...new Set([...DECLINED0, ...OPTIONAL_PARTS.filter((p) => SKIP_PARTS.includes(p) && !isInstalledPart(p))])].filter((p) => !isInstalledPart(p)),
-    heartbeat: UPDATE ? (state0 && state0.heartbeat) || null : { enabled: !NO_HB, time: HB_TIME, status: HB_STATUS },
+    heartbeat: (RESTORE ? RB.state : state0)?.heartbeat || null, // 只保留旧任务历史；不注册任务
     // 热记忆目录是怎么找到的：出问题时不用再猜，直接看这一行
     runtime: { dir: RX, source: MNE.source, scope: MNE.scope, dataDir: MNE.dataDir, probe: MNE.probe.level },
     // 写进持久配置的那个 node（DSH 自带优先）；DSH 升级换了 app 路径时，这里会跟着变

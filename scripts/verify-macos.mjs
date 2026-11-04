@@ -8,7 +8,8 @@ import { EventEmitter } from 'node:events'
 import { macosPatches } from '../lib/macos-patches.mjs'
 import { macModel } from '../lib/macos/model.mjs'
 import { macApps } from '../lib/macos/apps.mjs'
-import { detectFix, planFile, unpatchText } from '../lib/fixes.mjs'
+import { detectFix, planFile, fileFixes, unpatchText, danglingImports } from '../lib/fixes.mjs'
+import { inspectPackage } from '../lib/package-contract.mjs'
 import { PART_NAMES } from '../lib/parts.mjs'
 
 const source = path.resolve(process.argv[2] || '')
@@ -27,7 +28,24 @@ const run = (file, args = [], expected = 0) => {
   return result
 }
 let checks = 0
+const plannedFiles = [] // 每条补丁装完后落盘的文件，最后用来做组级校验
 try {
+  for (const fix of fileFixes({ names, runtime: null, dshHome: home }).filter((f) => ['compaction-memq-path', 'echo-mcp-sessions'].includes(f.id))) {
+    const upstream = fs.readFileSync(path.join(source, fix.location === 'hub' ? 'kit/echo' : 'plugins/' + fix.part, fix.file), 'utf8')
+    assert.equal(detectFix(fix, upstream), 'present')
+    const patched = planFile({ upstream, installed: upstream, fixes: [fix] }).target
+    assert.equal(unpatchText(patched, [fix]), upstream)
+    assert.equal(detectFix(fix, patched), 'absent')
+    assert.equal(detectFix(fix, 'export const other = 1'), 'unknown')
+    assert.equal(spawnSync(process.execPath, ['--check', '--input-type=module'], { input: patched }).status, 0)
+    checks += 5
+  }
+  const frozen = { id: 'probe', provided: true, old: '', new: 'export const x=1', any: /export const x=1/ }
+  assert.equal(planFile({ upstream: '', installed: null, fixes: [frozen], freeze: ['probe'] }).rows[0].action, 'none')
+  const ref = { file: path.join(root, 'entry.mjs'), label: 'entry', dir: root, text: "import './helper.mjs'" }
+  assert.deepEqual(danglingImports([ref, { file: path.join(root, 'helper.mjs'), text: 'export {}' }]), [])
+  assert.deepEqual(danglingImports([ref, { file: path.join(root, 'helper.mjs'), remove: true }]), ['entry → ./helper.mjs'])
+  checks += 3
   for (const f of macosPatches(names)) {
     f.id = f.key
     const part = Object.keys(names).find((part) => names[part] === f.pkg)
@@ -45,9 +63,52 @@ try {
     if (!f.provided) assert.equal(detectFix(f, 'export const changed = true'), 'unknown')
     const dest = path.join(f.location === 'hub' ? hub : path.join(nm, f.pkg), f.file)
     write(dest, plan.target)
+    plannedFiles.push({ pkg: f.pkg, dest, text: plan.target, srcDir: path.join(source, f.location === 'hub' ? 'kit/echo' : `plugins/${part}`) })
     const syntax = spawnSync(process.execPath, ['--check', '--input-type=module'], { input: plan.target, encoding: 'utf8' })
     assert.equal(syntax.status, 0, syntax.stderr)
     checks += 10
+  }
+  // ★ 组级不变量：每条 patch 单独看都对，合起来仍可能少文件（说明见 lib/fixes.mjs 的 danglingImports）。
+  //   2026-11-04 就是这样漏掉的：index.js 改成 import './kit-macos.mjs' 而没人写出这个文件，
+  //   单条全过，DSH 一启动 ERR_MODULE_NOT_FOUND。
+  assert.deepEqual(danglingImports([{ label: 'probe', dir: root, text: "import x from './definitely-missing.mjs'" }]), ['probe → ./definitely-missing.mjs'])
+  // 上游配套文件也必须真实装进 fixture；不能拿源码存在充当部署完整。
+  for (const [from, to] of [
+    [path.join(source, 'plugins/yantai/env-config.mjs'), path.join(nm, names.yantai, 'env-config.mjs')],
+    [path.join(source, 'kit/echo/echo-config.mjs'), path.join(hub, 'echo-config.mjs')],
+    [path.join(source, 'plugins/heartbeat/heartbeat-core.mjs'), path.join(nm, names.heartbeat, 'heartbeat-core.mjs')]
+  ]) write(to, fs.readFileSync(from, 'utf8'))
+  const dangling = danglingImports(plannedFiles.map(({ pkg, dest, text }) => ({
+    file: dest, label: `${pkg}/${path.basename(dest)}`, dir: path.dirname(dest), text
+  })))
+  assert.deepEqual(dangling, [], '补丁往包里加的 import 没有对应文件（组内必须自带或上游提供）：' + dangling.join('、'))
+  checks += 3
+  // ★ 装包整链（2026-11-04 事故的完整路径）：作者的 files 只列 4 个文件，
+  //   照清单装完包里就没有 heartbeat.mjs / heartbeat-core.mjs / activity.mjs。
+  //   要求：契约报得出来 → 补拷之后不再报 → 补拷后补丁能落盘 → 包能加载。
+  //   少任何一环，这台机器上装出来的心跳面板就是「加载失败」。
+  {
+    const pkg = names.heartbeat
+    const src = path.join(source, 'plugins/heartbeat')
+    const dst = path.join(root, 'chain', 'profiles', 'desktop', 'node_modules', pkg)
+    const pj = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'))
+    for (const f of pj.files) write(path.join(dst, f), fs.readFileSync(path.join(src, f), 'utf8'))
+    // 契约是对「源码目录 + 作者 files 清单」跑的：作者有、清单没列 → unshipped
+    const leaked = inspectPackage(src, pj.files).filter((i) => i.kind === 'unshipped').map((i) => i.target).sort()
+    assert.deepEqual(leaked, ['activity.mjs', 'heartbeat-core.mjs', 'heartbeat.mjs'], '契约必须报出这三件漏列文件，否则装完就缺')
+    // pack-unshipped 干的事：把这几个文件照作者原文补进已装的包
+    for (const f of leaked) write(path.join(dst, f), fs.readFileSync(path.join(src, f), 'utf8'))
+    for (const f of [...pj.files, ...leaked]) assert.ok(fs.existsSync(path.join(dst, f)), `补拷后包里该有 ${f}`)
+    const chainFiles = []
+    for (const f of macosPatches(names).filter((x) => x.pkg === pkg)) {
+      const up = f.provided ? '' : fs.readFileSync(path.join(dst, f.file), 'utf8')
+      const plan = planFile({ upstream: up, installed: up, fixes: [f] })
+      write(path.join(dst, f.file), plan.target)
+      chainFiles.push({ label: `${pkg}/${f.file}`, dir: dst, text: plan.target, sourceDirs: [src] })
+    }
+    assert.deepEqual(danglingImports(chainFiles), [], '补拷出来的心跳包里还有 import 没人兜住')
+    run('--input-type=module', ['-e', `await import(${JSON.stringify(pathToFileURL(path.join(dst, 'index.js')).href)})`])
+    checks += 4
   }
   for (const pkg of Object.values(names)) write(path.join(nm, pkg, 'package.json'), '{"type":"module"}')
   // 主模块实际加载：覆盖插入位置、依赖名、带中文和空格的目录。
@@ -83,7 +144,7 @@ for (const close of dispose) if (typeof close === 'function') close();
   const history = fs.readFileSync(path.join(hub, 'heartbeat/runtime/heartbeat.log.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
   assert.equal(history.at(-1).executed.ok, false)
   assert.equal(fs.existsSync(path.join(hub, 'heartbeat/runtime/mac-acceptance.json')), false)
-  run(path.join(hb, 'kit-macos.mjs'), ['--replace-kit'], 1)
+  run(path.join(hb, 'kit-macos.mjs'), ['--enable'], 1)
   config.options.toolsAllowlist = []
   write(cfg, JSON.stringify(config))
   run(path.join(hb, 'heartbeat.mjs'), ['--force'], 1)
@@ -167,16 +228,21 @@ const oldFile = path.join(process.env.HOME, 'Library/LaunchAgents/com.dsh-soul.h
 fs.mkdirSync(path.dirname(oldFile), { recursive: true });
 const old = '<plist version="1.0"><dict><key>Label</key><string>com.dsh-soul.heartbeat</string><key>ProgramArguments</key><array><string>node</string><string>' + path.join(mod.soul, '60-工具/heartbeat.mjs') + '</string></array></dict></plist>';
 fs.writeFileSync(oldFile, old);
-assert.throws(() => mod.replaceKit(), /尚未启用/);
+assert.throws(() => mod.enable(), /retire-kit/);
+const retired = mod.retireKit();
+assert.equal(retired.kitDaily, false);
+assert.equal(retired.loaded, false);
+assert.equal(fs.existsSync(oldFile), false);
 const status = mod.enable();
 assert.equal(status.loaded, true);
 real('/usr/bin/plutil', ['-lint', path.join(path.dirname(oldFile), status.label + '.plist')]);
-assert.equal(mod.replaceKit().migrated, true);
+assert.equal(loaded.has('com.dsh-soul.heartbeat'), false);
+mod.disable();
 assert.equal(fs.existsSync(oldFile), false);
 assert.equal(loaded.has('com.dsh-soul.heartbeat'), false);
-assert.equal(mod.restoreKit().migrated, false);
-assert.equal(fs.readFileSync(oldFile, 'utf8'), old);
-assert.equal(loaded.has('com.dsh-soul.heartbeat'), true);
+assert.equal(mod.replaceKit, undefined);
+assert.equal(mod.restoreKit, undefined);
+mod.retireKit(); // 重复退役不重新注册旧任务
 assert.equal(mod.scheduleStatus().loaded, false);
 assert.deepEqual(mod.outsidePaths({path: path.join(mod.hub, 'new.txt')}, [mod.hub]), []);
 assert.equal(mod.outsidePaths({path: mod.hub + '-outside/file'}, [mod.hub]).length, 1);

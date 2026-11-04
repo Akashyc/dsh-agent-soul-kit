@@ -7,7 +7,7 @@
 
 > 用户要求更新或迭代 **kit 自身** 时，转到 [AGENT-ITERATE.md](AGENT-ITERATE.md)。`--kit-update` 单独检查并同步 kit 的 GitHub 仓库；`--kit-iterate` 先处理 kit 自身更新，再准备插件上游证据，由 Agent 完成四流程分析、代码修改和验证，再用 `--kit-accept` 登记；不属于本手册的本机插件更新流程。
 
-> macOS 兼容修复（kit 5.3）：先走修复报告和计划。`model-statusbar-darwin`、`yantai-apps-darwin`、`heartbeat-darwin`、`echo-svc-darwin` 的核对与验收见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。heartbeat 完整验收后才替换 kit 每日自检，不随安装补丁自动停用旧任务。
+> macOS 兼容修复（kit 5.3）：先走修复报告和计划。`model-statusbar-darwin`、`yantai-apps-darwin`、`heartbeat-darwin`、`echo-svc-darwin` 的核对与验收见 [MACOS-REPAIRS.md](MACOS-REPAIRS.md)。kit 自带每日心跳已退役；旧任务须单独核对、显式停用，作者 heartbeat 独立验收后手动启用。
 
 ## 一、规矩（动手前先读）
 
@@ -38,9 +38,9 @@
 | 第 0 步 | `soul/00-authority.md` 权威源册（按方案填好；「检索能否指回原文」一项要在这台电脑上实测后再填） |
 | 自我层 | `memory/hub/SELF.src.md`：agent 的身份、硬线、说话方式、门 |
 | 人设完整版 | 方案带完整人设时放在 `soul/65-声音/<名字>-声音.md`（大肥鱼方案是 `大肥鱼-声音.md`） |
-| 心跳 | 按方案：每天定时重建索引、装配 SELF.md、跑体检（大肥鱼方案 12:00） |
+| 心跳 | 只提供作者可选 heartbeat 零件，不生成 kit 每日脚本、不自动注册或启用任务 |
 | 记忆检索 | `memq` 命令（任何时候都能用）；装了 mcp-hub 的，会话里还有常驻内存的 `mcp__echo__echo_search` 等工具，快一个数量级 |
-| 安装记录 | `<DSH 家目录>/dsh-soul/.install-state.json`：装的是哪个提交、用的哪个方案、装了哪些零件、哪些是用户拒掉的、生成了哪些 preset、心跳设置。更新靠它 |
+| 安装记录 | `<DSH 家目录>/dsh-soul/.install-state.json`：装的是哪个提交、用的哪个方案、装了哪些零件、哪些是用户拒掉的、生成了哪些 preset（旧版安装记录里的心跳字段只作历史）。更新靠它 |
 | 最终体检 | **0 错**；警告只剩「门牌回取」「压缩机制」两条：要等第一次压缩发生才会变绿，不是故障。没开心跳、没装换气的，对应那项也会是提醒 |
 
 `<DSH 家目录>`：macOS 是 `~/.dsh`；Windows 通常是 `C:\Users\<用户名>\.dsh`。设置过环境变量 `DSH_HOME` 的，以它为准。
@@ -57,13 +57,13 @@ lib/                         install.mjs 用的模块：零件目录与系统限
 scripts/                     自测：verify-setup.mjs（问答和弹窗）、verify-macos*.mjs（macOS 修复，要在 Mac 上跑）
 setups/                      方案：每个子文件夹一套
   大肥鱼/
-    setup.json               名字、称呼、硬线、人设类型、零件、preset、心跳
+    setup.json               名字、称呼、硬线、人设类型、零件、preset
     00-authority.md          权威源册（手写）
     SELF.src.md.tpl          自我层模板（手写；{{HUB}} 由脚本换成本机路径，写成 $HOME/… 不带用户名）
     大肥鱼-声音.md            人设完整版
   <全新安装存下的方案>/        结构一样，文件由模板生成，可以直接改
 assets/
-  templates/                 全新安装用的通用模板：权威源册、自我层、心跳脚本
+  templates/                 全新安装用的通用模板：权威源册、自我层
   presets/ptc.patch.yml      官方 PTC 的快照（找不到本机 DSH 的 app.asar 时才用）
   presets/standard.patch.yml 官方「标准」预设的快照（同上）
   presets/minimal.patch.yml  官方「极简」预设的快照（同上）
@@ -74,7 +74,7 @@ backups/                     --backup、--uninstall 打出的备份包（迁移�
 archives/                    安装、更新、修复、恢复、卸载前自动留的本机快照，一套 DSH 一个子文件夹（只给本机回滚用）
 ```
 
-模板里的记号：`{{名字}}` 换成值；行首 `{{?条件}}` / `{{!条件}}` 表示条件成立 / 不成立时才保留这一行。名字、称呼、硬线、人设在生成方案时填好；路径、心跳时间、这台电脑有没有 dsh-mnemon 留到安装时按电脑填。
+模板里的记号：`{{名字}}` 换成值；行首 `{{?条件}}` / `{{!条件}}` 表示条件成立 / 不成立时才保留这一行。名字、称呼、硬线、人设在生成方案时填好；路径、这台电脑有没有 dsh-mnemon 留到安装时按电脑填。
 
 ## 四、阶段 A：准备（只读，不改任何东西）
 
@@ -148,7 +148,7 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 - **你本身就是 DSH 里的 agent 时**（例如在大肥鱼的会话里装）：干跑可以在会话里跑；真跑要 DSH 完全退出，你自己跑不了。干跑结束时脚本会打印现成的终端命令，交给用户在终端里跑（不要改成别的写法）。用户重开 DSH 以后，你所在的这个会话还是装之前的 preset，**阶段 C 的验收和阶段 D 都要在新建的会话里做**：告诉用户新建会话、看顶部 preset，再把脚本最后打印的那段话贴进新会话。
 - 全新安装真跑时，设定先存成 `setups/<方案名>/`；中途出错的话改用 `--setup <方案名>` 重跑，不用再问一遍。
 - 脚本说「无法自动判断 DSH 是否已退出」时，先向用户确认 DSH 已完全退出，再加 `--confirm-quit` 重跑。
-- 其他可选参数：`--flash on`（加装灵魂 · PTC Flash，方案里没选也行）、`--add-part <零件>`（方案之外多装一个可选零件）、`--ref <提交>`（装指定版本）、`--default-preset soul`（覆盖方案里的默认 preset）、`--heartbeat-time HH:MM`、`--no-heartbeat`、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
+- 其他可选参数：`--flash on`（加装灵魂 · PTC Flash，方案里没选也行）、`--add-part <零件>`（方案之外多装一个可选零件）、`--ref <提交>`（装指定版本）、`--default-preset soul`（覆盖方案里的默认 preset）、`--skip-part <零件>`（只能跳可选零件）、`--rename <上游称呼=称呼|none>`（覆盖方案里的称呼替换）、`--dsh-home <目录>`（必须是已经含 `profiles/<profile>/package.json` 的 DSH 家目录；给相对路径会先解析成绝对路径，指错时直接停下，不会改用别的家目录）。
 - **称呼替换**：默认不换（作者已把 preset 人设和文档里的人名改掉；内置方案的 `nameMap` 都是空的）。上游代码里还剩几处作者的称呼「爀曦」，其中一处是换气熔断时注入给 agent 的指令「告诉爀曦『需要手动压缩』」；用户要换，就加 `--rename 爀曦=<称呼>`，只换装进 DSH 的插件代码和文档，书房和账本不动，记进安装记录，以后更新、备份、恢复都照做。
 
 **B5. 脚本做的事**（动手前把要改的原样存进快照；重复跑安全）：
@@ -166,10 +166,10 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 | 8 | 装了 mcp-hub 的：清单 `<DSH 家目录>/mcp-hub/servers.json` 里加一台 echo（stdio，命令是本机 node + 中枢里的 `echo-mcp.mjs`，`env` 带上 `DSH_HOME`）；已有就不动，只给本安装包登记的那台补上缺的 `DSH_HOME` | 记忆检索走常驻服务 |
 | 9 | 放权威源册（方案里的，填上本机路径）→ `init.mjs` 按方案的回答生成其余骨架 → 作者的 `install-kit --all` 把全套脚本装进 hub（同义词表 `synonyms.json` 是数据，只在没有时补）→ 挪走 `test-self-check.mjs` → 写配置（一主、一副本、一指针） | 第 0 步 + 记忆中枢 |
 | 10 | 写入 `SELF.src.md`（方案里的模板，填上本机路径）→ `scaffold --apply` 搭骨架 → 方案带完整人设的放进 `65-声音/` | plan 的第 2、3 步 |
-| 11 | 心跳：写 `soul/60-工具/heartbeat.mjs`；方案开了心跳的，macOS 注册 launchd，Windows 注册计划任务（用电池也照跑，错过会补跑），并立刻触发一次 | 每天自动刷新索引和自我层 |
+| 11 | 旧 kit 心跳已退役，不生成脚本或注册任务；需要巡视时选择作者 heartbeat 零件 | 按需验收、手动启用 |
 | 12 | 校验：package.json 合法、各个包到位、注册 id 不撞车且面板 id 等于包名、**每个包要加载的插件都在 node_modules 里找得到**（上游造成的不对写进「需要留意」、收尾点名，不回滚）；写安装记录（含方案、拒掉的零件；修复结论清空，只留上次的核对证据） | 任何一条不对都会让 DSH 一启动就崩或面板加载失败 |
 
-**B6. 成功的样子**：最后是「文件层面的安装完成」；开了心跳的，心跳那一步显示「已注册……并已手动触发一次」。「需要留意」里出现的提醒，逐条报给用户。最后一段「接下来」里有一整段要贴进新会话的话（主导、第一条账、重建索引、装配自我层、体检、门牌实测），原样交给用户。
+**B6. 成功的样子**：最后是「文件层面的安装完成」；不应出现 kit 每日任务注册或立即触发。「需要留意」里出现的提醒，逐条报给用户。最后一段「接下来」里有一整段要贴进新会话的话（主导、第一条账、重建索引、装配自我层、体检、门牌实测），原样交给用户。
 
 **B7. 修复检查（装完以后）**：安装不打修复，装完单独检查，不在终端里逐条问。按第九节「修复」的步骤：`install.mjs --fix --report` 出报告，照每条的核对方法查本机，填计划给用户确认，DSH 完全退出后 `--fix --plan <计划>` 照做。安装收尾「★ 修好之前别启动 DSH」那一行列出的（上游包本身的问题、报告里标「启动 DSH 前要处理」的修复，例如 0221d89 的 `huanqi-paths-import`）会让零件加载不了，先修完再启动 DSH；其余的可以先启动 DSH、在会话和面板里核对。
 
@@ -228,22 +228,17 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 
 - 自我层里有「开工」这类硬线的，agent 动手前可能会先问；用户回「直接做」即可。
 - 它的终端里没有 `node` 的话，那段话最后一行写了要换成的完整路径。
-- **正确结果**：`agent_soul_check` **0 错**；警告只剩「门牌回取」「压缩机制」（还没发生过压缩）。方案开了心跳、却还有「心跳」警告的，说明定时任务没注册上，看阶段 E。
+- **正确结果**：`agent_soul_check` **0 错**；警告只剩「门牌回取」「压缩机制」（还没发生过压缩）。心跳能力不默认启用；仅在选择并启用作者 heartbeat 后按阶段 E 单独验收。
 
 **D2. 门牌实测（Soul preset 真的接管了没有）**：**在 D1 的这个新会话里**再聊两三句，让它读一个文件，然后用户输入 `/compact`。看到「Compacted … history items」后，让 agent 把压缩摘要第一块原样贴出来：应以「⛬ 压缩索引（非原文） · log:session-…#seq=…」开头。再让它跑 `node memq.mjs open log:<那个会话>#seq=<那个数>`，能翻出原话，就把 `soul/00-authority.md` 第七节「检索能否指回原文」那一项填成「能」，并写上这次的实测。
 - 摘要开头不是「⛬ 压缩索引」：先看这个会话顶部的 preset 是不是 Soul preset（第十一节 22），再看第十一节 8、21。
 - 工具输出裁剪只在自动压缩时才会发生，手动 `/compact` 不触发；等第一次自动压缩后，看被裁掉的工具输出里有没有「原文在 append-only 会话日志 seq N」。
 
-## 八、阶段 E：心跳验收（方案开了心跳才做）
+## 八、阶段 E：作者 heartbeat 验收（选装且需要启用时）
 
-- 看 `<HUB>/heartbeat/` 下有没有当天的 `.log`，里面三段的「退出码」都是 0，体检那段「心跳（自律神经）」是 ✓。
-- 确认定时任务在：
-  - macOS：`launchctl print gui/$(id -u)/com.dsh-soul.heartbeat | grep -E "state|runs|last exit"`
-  - Windows：`Get-ScheduledTask -TaskName dsh-soul-heartbeat`
-- 脚本没注册成功时手动补：
-  - macOS：`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dsh-soul.heartbeat.plist && launchctl kickstart gui/$(id -u)/com.dsh-soul.heartbeat`
-  - Windows：右键 `soul\60-工具\register-heartbeat.ps1` →「使用 PowerShell 运行」，或执行 `powershell -NoProfile -ExecutionPolicy Bypass -File "<路径>\register-heartbeat.ps1"`
-- 过了定时的时间却没有当天的日志：多半是那时电脑关机了（macOS 睡眠中错过的会在唤醒时补跑，关机错过的不补），或者定时任务没加载。
+kit 不再创建每日脚本、launchd 或 Windows 计划任务。旧记录/备份字段不会重新启用任务。
+
+按 [MACOS-REPAIRS.md](MACOS-REPAIRS.md) 核实运行链、权限和四步结果；旧 kit 任务先确认归属再显式退役，不把面板加载视为定时巡视已验收。Windows 原版兼容问题仍须单独解决。
 
 ## 九、更新
 
@@ -266,7 +261,7 @@ archives/                    安装、更新、修复、恢复、卸载前自动
 - **作者的 `soul-version.json`**：作者 2026-10-31 把它删了，安装包 4.0 不再核对 Soul preset 的哈希和契约版本；更新时以上游 README 的更新记录和干跑报告为准。
 - **报告怎么分来源**：脚本会额外下载「已装那一版」的上游源码当基准（离线更新用 `--base-source <那一版的源码>` 给），把变化分成「上游改的」和「和作者原文不同的」（标明是 kit 修复还是本机改过）两类列出来；两类都会换成作者原文。取不到基准时只是分不清来源，不影响更新。
 
-**更新不动的**（这些是你的数据和设定，不是作者的代码）：方案（不用选，也不会重新生成书房和自我层）、书房（含账本 `02-墨.jsonl`、权威源册、人设）、`SELF.src.md`、主配置 `memory/hub/echo.config.json`、中枢里的索引和数据文件、mcp-hub 清单里已有的 echo、心跳、默认 preset（除非加 `--default-preset`）、用户拒掉的零件、修复清单的跳过设置、profile 配置里修过的换气布尔值。
+**更新不动的**（这些是你的数据和设定，不是作者的代码）：方案（不用选，也不会重新生成书房和自我层）、书房（含账本 `02-墨.jsonl`、权威源册、人设）、`SELF.src.md`、主配置 `memory/hub/echo.config.json`、中枢里的索引和数据文件、mcp-hub 清单里已有的 echo、默认 preset（除非加 `--default-preset`）、用户拒掉的零件、修复清单的跳过设置、profile 配置里修过的换气布尔值。
 
 **步骤**：
 
@@ -376,7 +371,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 | 记忆中枢（`SELF.src.md`、同义词表、中枢脚本、心跳日志；索引不带，恢复时重建） | 其他插件、skills（Soul preset 自带的恢复时从上游重装，你自己的不带）、微信通路（clawbot）的凭据、表情包、附件 |
 | 会话原文（门牌 `log:<会话>#seq=` 指向它们，不带就回取不了） | DSH 本身的设置（模型、界面、权限等） |
 | 换气账本（`state/dsh-huanqi.json`、`huanqi-turns.jsonl`） | profile 里的插件文件（恢复时从 GitHub 重新装） |
-| 本架构插件在 `cordis.patch.yml` 里的设置（memory、huanqi 等）、默认 preset、mcp-hub 的服务器清单、安装记录（含方案、零件、preset、心跳） | |
+| 本架构插件在 `cordis.patch.yml` 里的设置（memory、huanqi 等）、默认 preset、mcp-hub 的服务器清单、安装记录（含方案、零件、preset，旧版还带心跳字段） | |
 
 备份包是一个 `.tar.gz`，里面的 `manifest.json` 记着来源电脑、各项路径、版本和每个文件的校验值与修改时间；打完会解开逐个核对一遍。
 
@@ -393,7 +388,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 3. 先干跑：`install.mjs --restore --dry-run`（不写包名就用 `backups/` 里最新的一份；也可以 `--restore <备份包路径>`）。恢复**不用选方案**，按备份里记的来。把计划报给用户。
 4. 去掉 `--dry-run` 真跑。脚本会：
    - **按备份时的上游版本装**（保证中枢脚本和本体对得上；装好后想升到最新，再跑 `--update`）；
-   - 零件、Soul preset、心跳时间、称呼替换都照备份时的装；不打修复（跳过清单照备份带过来，修复检查时照做）。干跑提示「备份里的中枢脚本把上游作者的称呼换成了 …，备份的安装记录里却没记」时（kit 2.9 以前手工改名打的备份就是这样），加上提示里的 `--rename 爀曦=<称呼>` 再干跑，本体和零件才会和中枢一致；
+   - 零件、Soul preset、称呼替换都照备份时的装（备份里的心跳时间只作历史，不重新注册任务）；不打修复（跳过清单照备份带过来，修复检查时照做）。干跑提示「备份里的中枢脚本把上游作者的称呼换成了 …，备份的安装记录里却没记」时（kit 2.9 以前手工改名打的备份就是这样），加上提示里的 `--rename 爀曦=<称呼>` 再干跑，本体和零件才会和中枢一致；
    - 放回书房、记忆中枢、会话原文、换气账本（连修改时间一起）；记忆中枢配置里的绝对路径换成新电脑的（Mac 和 Windows 互迁也换）；
    - 本架构插件的设置合并进新电脑的 `cordis.patch.yml`（新电脑已有的条目不动）；默认 preset 用备份里的；mcp-hub 清单带回 echo 以外的服务器，echo 按新电脑路径重写；
    - 收尾：中枢来源记录换成本机、重建索引、装配自我层；校验同安装。
@@ -439,7 +434,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 | 26 | macOS 上 model-statusbar 一直报错、没有读数 | 它的探测、拉起、停止全靠 `powershell.exe`、`taskkill` 和 Windows 版 `python.exe`，只能在 Windows 上用 | 5.3 可按报告核实并选择 `model-statusbar-darwin`；需本机 ComfyUI 目录和 Mac Python，真实启动/静息/停止另做验收 |
 | 27 | macOS 上回声面板的体检一项都不出 | 面板在 Electron 里要找 DSH 自带的 node，作者只列了 Windows 的布局（`resources/runtime/…/node.exe`）；Mac 上找不到，就拿 DSH 主程序去跑体检脚本 | 修复清单 `echo-node-darwin`（4.0）：补上 `Contents/Resources/runtime/<arch>/…/node` |
 | 28 | 一行装在 Apple 芯片的 Mac 上挑到了 x64 的 node | DSH 同时带 arm64 和 x64 两份运行时，x64 那份要走 Rosetta | `install.sh` 和 `install.mjs` 都先挑本机架构那份（4.0） |
-| 29 | 回声面板里改常驻天数 / 内存预算存不上（报「写入失败」），实时状态一栏是空的 | 上游 11-01 新加的设置接口在没有 `ECHO_HUB` 环境变量时兜底写死作者电脑的 `D:/AI/memory/hub`；别的电脑上没有这个目录，而 `echo-mcp` 读写的是它自己所在的中枢 | 修复清单 `echo-settings-path`：改用面板自己 `resolveHub()` 找到的中枢，和 `echo-mcp` 读写同一处；装完重启 DSH 生效 |
+| 29 | 回声面板里改常驻天数 / 内存预算存不上（报「写入失败」），实时状态一栏是空的 | 上游 11-01 新加的设置接口在没有 `ECHO_HUB` 环境变量时兜底写死作者电脑的 `D:/AI/memory/hub`；别的电脑上没有这个目录，而 `echo-mcp` 读写的是它自己所在的中枢 | 作者已改用面板解析出的 `HUB`，`echo-settings-path` 已退役；旧版先用 `--update` 同步作者原文，不再推荐已删除的修复项 |
 
 ## 十二、卸载与回滚
 
@@ -490,7 +485,7 @@ kit 对上游插件的修改全部登记在 `lib/fixes.mjs`（21 条，每条有
 
 - **换主导**：每个新会话默认只是「执行者」（能记事实，不能许承诺）。用户想让某个会话接班，就让它写一条新的 `lead`（`--ref` 写清是用户哪天指定的），再跑 `node memindex.mjs build && node self.mjs` 让自我层跟上。
 - **改人设**：有完整人设的，先改 `soul/65-声音/<名字>-声音.md`，再把需要每轮带着的几条同步进 `memory/hub/SELF.src.md` 的「说话与样子」；没有的直接改那一节。然后让 agent 跑 `node self.mjs`。
-- **改方案**：想让以后装出来的不一样，改 `setups/<方案名>/` 里的文件（`setup.json` 管零件、preset、心跳；另外两个是权威源册和自我层模板）。已经装好的电脑不受影响，要改就改书房和中枢里的那份。
+- **改方案**：想让以后装出来的不一样，改 `setups/<方案名>/` 里的文件（`setup.json` 管零件、preset；另外两个是权威源册和自我层模板）。已经装好的电脑不受影响，要改就改书房和中枢里的那份。
 - **换电脑、换用户名、挪 DSH 家目录**：memory 的配置和路径类补丁不带用户名，跟着家目录走；但中枢主配置 `echo.config.json`、心跳、mcp-hub 里 echo 的命令是按这台电脑写的绝对路径，搬到别处要用第十节的备份恢复，或者在新位置重跑一次安装。
 - **改配置**：只改主配置 `memory/hub/echo.config.json`，再复制到 `profile/node_modules/dsh-agent-soul/kit/echo.config.json`（`--update` 也会照主配置重写副本）。
 - **换默认 preset**：在 DSH 里直接选，或 `install.mjs --update --default-preset soul`（只能选这台电脑生成了的 preset）。
