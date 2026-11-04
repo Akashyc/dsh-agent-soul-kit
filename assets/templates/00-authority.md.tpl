@@ -71,7 +71,7 @@
 | 自我层 | `SELF.src.md` | 单一 md（手写不变量 + `## 活体`） | `{{HUB}}/SELF.src.md` | 只有 {{USER}} | 全部 | 这一行本身；`SELF.md` 是装配出的衍生品 |
 {{?MNEMON}}| 可复用结论 | dsh-mnemon 记忆空间 | mnemon space | `{{DSH_HOME}}/.mnemon/` | 主导会话 / 自动捕获 | 全部 | 结论以它为准；「发生没发生过」以账本为准 |
 | 检索索引 | memindex | 必须可丢弃重建 | `{{HUB}}/index/` | 重建者（`memindex.mjs build`） | 全部 | 账本与会话原文 |
-| 插件装配 | profile 配置 | `package.json` + `cordis.patch.yml` | `{{PROFILE_DIR}}/` | {{USER}}（或 {{USER}} 确认后的安装操作） | 全部 | 这一行本身；`{{DSH_HOME}}/recovery/` 快照与 `*.bak-*` 是沿革 |
+| 插件装配 | profile 配置 | `package.json` + `cordis.patch.yml` | `{{PROFILE_DIR}}/` | {{USER}}（或 {{USER}} 确认后的安装操作） | 全部 | 这一行本身；`{{DSH_HOME}}/recovery/` 快照与安装包 `archives/` 里的快照 是沿革 |
 | `<再加一行你自己的资源，比如工作文件、项目目录>` | | | | | | |
 
 {{?MNEMON}}★ **结论只登记一处**：结论正文写进 mnemon；账本的 `gain` 只记「哪天弄清了什么」，用 `--ref` 指向 mnemon 条目，不复写结论正文。
@@ -105,7 +105,7 @@
 | 主题 | 权威 | 衍生 / 沿革 |
 |---|---|---|
 | 自我层 | `memory/hub/SELF.src.md` | `memory/hub/SELF.md`（衍生，由 `self.mjs` 装配） |
-| 插件装配 | `{{PROFILE_DIR}}/` 的 `package.json` 与 `cordis.patch.yml` | `{{DSH_HOME}}/recovery/` 快照、`*.bak-*`（沿革） |
+| 插件装配 | `{{PROFILE_DIR}}/` 的 `package.json` 与 `cordis.patch.yml` | `{{DSH_HOME}}/recovery/` 快照、安装包 `archives/` 里的快照（沿革） |
 | echo / agent_soul 配置 | `memory/hub/echo.config.json` | `{{PROFILE_DIR}}/node_modules/dsh-agent-soul/kit/echo.config.json`（副本，改主后复制过去）、`{{DSH_HOME}}/hub/echo.config.json`（软链接；建不了软链接的系统上是只含 memory 一项的指针文件） |
 {{?VOICE}}| {{NAME}}的声音（人设） | `soul/65-声音/{{VOICE_FILE}}` | `memory/hub/SELF.src.md` 里「说话与样子」一节（浓缩版，改人设先改主文件再同步） |
 
@@ -154,7 +154,7 @@
 
 ## 七、唯一性自检（怎么证明你没违反前提 ①）
 
-- [x] **列出所有会落盘的地方**（除了权威源）：`SELF.md`、memindex 索引、DSH 压缩摘要（checkpoint）、`{{DSH_HOME}}/recovery/` 快照与 `*.bak-*`
+- [x] **列出所有会落盘的地方**（除了权威源）：`SELF.md`、memindex 索引、DSH 压缩摘要（checkpoint）、`{{DSH_HOME}}/recovery/` 快照与安装包 `archives/` 里的快照
 - [x] 对每一个，回答：**它能不能被删掉并从权威源重建？**
       - 能 → 它是衍生品，安全
       - 不能 → **它是第二个真源**，要么合并，要么明确它不是权威的
