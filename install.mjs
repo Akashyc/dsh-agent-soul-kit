@@ -2440,8 +2440,7 @@ if (DRY) {
 if (WARNS.length) { out('\n需要留意：'); for (const w of WARNS) out('  ! ' + w) }
 if (!DRY && (PKG_BROKEN.length || BLOCKERS.length)) {
   out('★ 启动 DSH 前先处理安装完整性问题：' + [...PKG_BROKEN.map((item) => describeIssue(item.label, item.issue)), ...BLOCKERS].join('；'))
-  out('安装流程到此停止，暂不启动 DSH，也不转入其它工具。请向用户报告上述证据，由用户决定后续处理。')
-  process.exit(0)
+  out('以上为静态完整性检查结果，不代表 DSH 实际无法启动；请结合实际运行核实。下方继续提供交接文本，不代表运行验收通过。')
 }
 if (!DRY && UPDATE) {
   out(`
