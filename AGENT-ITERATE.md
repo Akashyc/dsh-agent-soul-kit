@@ -185,8 +185,9 @@ git diff --check
 | 入口 | 覆盖与限制 |
 |---|---|
 | `node scripts/verify-source.mjs` | 临时 Git 远端的拉新、固定版本、来源保护和关键文档边界；不访问真实作者远端，不验证真实 DSH |
-| `node scripts/verify-v1.mjs
-node scripts/verify-setup.mjs` | 问答、默认值、前置条件与方案生成 |
+| `node scripts/verify-v1.mjs` | profile/实例归档、诊断状态、迁移保护及 kit 更新隔离验证 |
+| `node scripts/verify-diagnose.mjs` | 诊断格式、日志覆盖状态、正则与导出链路，不读取真实 DSH |
+| `node scripts/verify-setup.mjs` | 问答、默认值、前置条件与方案生成 |
 | `node scripts/verify-flash.mjs <Soul固定源码> <Flash固定源码> [js-yaml目录]` | 动态 Flash 与隔离安装、更新、备份、恢复、卸载；核对作者源码内容未改。未指定 YAML 目录时会读取默认真实 profile 中的依赖位置，先核实；不会因此获得修改真实 profile 的授权 |
 
 脚本参数中的源码必须对应本轮固定提交。Git 来源保持干净；需要模拟作者改名、缺文件或未来版本时，在临时样本中改，不能修改真实作者仓库使测试通过。已有脚本未覆盖的行为再补最小针对性检查。其它历史脚本先核实是否仍适用于当前 kit，不把脚本存在当成可直接执行。
