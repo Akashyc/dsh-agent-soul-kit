@@ -1,8 +1,8 @@
-# dsh-agent-soul 安装包
+# dsh-agent-soul-kit 工具包
 
 **版本 1.0.0**（2026-11-05）· 适用于 macOS / Windows · [安装手册](AGENT-INSTALL.md) · [迭代手册](AGENT-ITERATE.md) · [历史更新](CHANGELOG.md)
 
-> **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件市场。**
+> **这是管理 dsh-agent-soul 的工具包，不要把它安装到插件里去。**
 > 主要交给 Agent 阅读手册并执行操作；终端命令是辅助入口。
 
 将仓库 clone 或下载到固定目录，交给 Agent 作为工作区使用。下面提供七种常见操作的完整提示词，可直接复制。
