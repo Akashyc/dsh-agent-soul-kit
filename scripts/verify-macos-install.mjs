@@ -1,3 +1,4 @@
+import { operationDir } from '../lib/core/data-paths.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -6,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const kit = fileURLToPath(new URL('../', import.meta.url))
-const evidence = path.join(kit, 'logs', 'verify-macos-install')
+const evidence = operationDir(path.join(kit, 'data/_kit/logs'), 'verify-macos-install')
 fs.mkdirSync(evidence, { recursive: true })
 assert.ok(process.argv[2], '传入已验证的上游源码目录')
 const src = path.resolve(process.argv[2])
@@ -25,7 +26,7 @@ const pj = (h) => path.join(h, 'profiles/desktop')
 const summaries = []
 let seq = 0
 const run = (label, home, args, { code = 0, script = path.join(kit, 'install.mjs'), preload = null } = {}) => {
-  const cmd = [...(preload ? ['--import', preload] : []), script, '--dsh-home', home, '--confirm-quit', '--no-input', ...args]
+  const cmd = [...(preload ? ['--import', preload] : []), script, '--dsh-home', home, '--confirm-quit', '--no-input', '--allow-preset-snapshot', ...args]
   const r = spawnSync(process.execPath, cmd, { cwd: kit, env, encoding: 'utf8', timeout: 120000, maxBuffer: 20 * 1024 * 1024 })
   const log = path.join(evidence, `${String(++seq).padStart(2, '0')}-${label}.log`)
   fs.writeFileSync(log, `${r.stdout || ''}\n${r.stderr || ''}`)

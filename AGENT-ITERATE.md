@@ -1,6 +1,11 @@
 # 给 Agent 的手册：kit 自我迭代
 
-> 版本边界：kit 6.2；只迭代 kit，不在安装收尾附加其它工具流程。
+> **1.0.0 数据规则**：先定位 DSH 根目录与 profile，再解析 `data/<profile>/<instance>/`。日志、回答、计划、交接、快照、备份、保存方案与报告只写当前目标归档，不写公开 `setups/`。kit 自身记录在 `data/_kit/logs/`。旧数据只通过受控迁移，不能在安装时自动搬动。完整规则见 README；安装依据见 [INSTALL-SOURCES.md](INSTALL-SOURCES.md)。
+>
+> **版本与功能边界**：产品版本不是迁移条件。更新保留明确选择，不自动增加新可选项；Soul/技能来源缺失停止，旧官方预设快照仅在用户明确同意 `--allow-preset-snapshot` 后使用。Flash 是可选 Soul 适配预设，不是作者完整包。迭代不得通过改写产品版本伪造验证记录。
+
+
+> 版本边界：kit 1.0.0；只迭代 kit，不在安装收尾附加其它工具流程。
 
 用户要求“迭代 kit”时，按本手册完成：检查并同步 kit 自身仓库 → 收集插件上游变化 → 分析安装、更新、备份、迁移四流程 → 修正 kit → 验证 → 登记完成基线。交付包括实际修正和验证结论，不能停在一份更新摘要。
 
@@ -50,7 +55,7 @@ node install.mjs --kit-iterate
 
 - 本地已包含目标提交：保留本地额外提交和修改，继续生成插件上游报告。
 - 同源、位于目标发布分支、工作区干净且可以快进：保存新版快照和差异清单后快进更新。**旧进程到此结束；Agent 必须重新读取更新后的 `AGENT-ITERATE.md`，再运行一次 `--kit-iterate` 完成后续流程。** 不要把这次退出当成本轮迭代已经完成。
-- 有本地修改、未跟踪文件、历史分叉、不同 origin、非目标分支或没有 `.git` 的下载版：保留本地源码，在 `logs/kit-updates/`（或 `--out`）生成 `report.json`、`report.md` 和 `target/` 新版快照。Agent 对照实际差异，合入需要的功能与修正、保留本地方案并验证，不要求用户先清空工作区。
+- 有本地修改、未跟踪文件、历史分叉、不同 origin、非目标分支或没有 `.git` 的下载版：保留本地源码，在 `data/_kit/logs/kit-updates/`（或 `--out`）生成 `report.json`、`report.md` 和 `target/` 新版快照。Agent 对照实际差异，合入需要的功能与修正、保留本地方案并验证，不要求用户先清空工作区。
 
 需要合入时，结合本地 Git 历史和报告的固定提交判断每项修改；不要整目录覆盖，不执行 `reset --hard`、自动 stash、自动提交或推送。不把本地独有文件仅因新版不存在就删除。已有 `kit-iteration.json` 包含本轮之外的历史时保留其证据，不能用远端同名文件直接覆盖本地审查记录。若存在无法判断取舍的实际业务冲突，再向用户说明具体冲突。
 
@@ -85,7 +90,7 @@ node install.mjs --kit-iterate --skip-kit-update
 node install.mjs --kit-iterate --dry-run
 ```
 
-`--proxy` 沿用安装器的代理解析，作用于需要的 Git HTTPS 请求；`--out <目录>` 指定报告父目录，每次创建独立子目录。插件上游报告默认输出到 `logs/kit-iterations/`，包含：
+`--proxy` 沿用安装器的代理解析，作用于需要的 Git HTTPS 请求；`--out <目录>` 指定报告父目录，每次创建独立子目录。插件上游报告默认输出到 `data/_kit/logs/kit-iterations/`，包含：
 
 | 文件 | 用途 |
 |---|---|
@@ -101,7 +106,7 @@ node install.mjs --kit-iterate --dry-run
 
 当前 `--kit-iterate` 只自动对比 Soul，`--kit-accept` 也只登记该报告的 Soul 基线；不能给迭代命令套用 `--flash-ref` / `--flash-source`，也不能将 Soul 的完成登记说成 Flash 基线已自动推进。本 kit 支持 Flash，完整迭代还需单独完成以下核对：
 
-1. 从 `lib/flash-presets.mjs` 核对当前作者仓库身份，按公共只读规则准备干净的同级 Flash 仓库并获取作者更新；固定本轮完整提交。只允许正常获取与快进，不提交适配，不改作者文件。
+1. 从 `lib/presets/flash-presets.mjs` 核对当前作者仓库身份，按公共只读规则准备干净的同级 Flash 仓库并获取作者更新；固定本轮完整提交。只允许正常获取与快进，不提交适配，不改作者文件。
 2. 从上轮实际验证或完成证据中寻找 Flash 提交；不要把另一台电脑的安装记录当成本轮全局基线。找不到旧提交时明确写「无已知 Flash 审查基线」，全量核对当前目录，不能报告“无变化”。
 3. 以固定提交的 README、`package.json` 和实际 `presets/` 为依据，核对数量、id、名称、简介、配置结构、适配锚点、包名、旧会话引用与移除保护；不要写死 preset 名称或数量。
 4. 在 `result.json` 的 `summary`、`checks`、`limitations` 和对应流程 `evidence` 中记录 Flash 来源、旧/新提交、差异或全量核对结论、验证命令及证据位置。保留这些人工证据，不伪造 CLI 自动生成的 Flash 字段或基线。
@@ -122,7 +127,7 @@ git -C <Flash仓库目录> diff <旧提交>..<本轮提交> -- presets package.j
 
 先阅读变化涉及的上游说明、包清单和源码，再追踪它们在 kit 中的调用点。自动提示只识别已编码的契约：路径没有命中提示，不代表行为兼容；零文件差异也可能暴露 kit 的已有适配遗漏。
 
-已编码的契约包括必需文件、零件包名、`package.json` 关键字段，以及桌面端安装文件与依赖自洽（`lib/package-contract.mjs`，与安装器拷包前的检查同一份）：目标里新出现的「入口导入的文件不在实际安装集合里」记为 `package-integrity`，「用到 `@deepseek-ai/*` 却没声明 `peerDependencies`」记为 `package-peer`；基线已有的同类问题不重复列出，由安装器每次提示。不要把 npm 发布清单漏项当成桌面整目录安装缺文件。
+已编码的契约包括必需文件、零件包名、`package.json` 关键字段，以及桌面端安装文件与依赖自洽（`lib/source/package-contract.mjs`，与安装器拷包前的检查同一份）：目标里新出现的「入口导入的文件不在实际安装集合里」记为 `package-integrity`，「用到 `@deepseek-ai/*` 却没声明 `peerDependencies`」记为 `package-peer`；基线已有的同类问题不重复列出，由安装器每次提示。不要把 npm 发布清单漏项当成桌面整目录安装缺文件。
 
 | 流程 | 必须回答的问题 |
 |---|---|
@@ -152,7 +157,7 @@ kit 不维护或执行补丁，也不在安装或更新后引导其它工具。�
 
 ## 3. 完成 kit 修正
 
-修改前说明涉及的文件和计划，保持差异集中。按实际影响修改 `install.mjs`、`lib/`、模板、preset 快照或文档，并在隔离目录里重现问题、确认修好。
+修改前说明涉及的文件和计划，保持差异集中。按实际影响修改 `install.mjs`、`lib/`、模板、明确来源的资源或文档，并在隔离目录里重现问题、确认修好。
 
 - 改公共模板时区分 `assets/templates/` 与已有手写方案；不要把某个用户的人设复制进通用模板。
 - 需要改变插件选择时核对 `PARTS`、`PART_NAMES`、`ADDED_PARTS`、问题清单、默认值和安装记录的关联。
@@ -166,10 +171,12 @@ kit 不维护或执行补丁，也不在安装或更新后引导其它工具。�
 
 ```bash
 node --check install.mjs
-node --check lib/kit-iterate.mjs
-node --check lib/kit-update.mjs
-node --check lib/package-contract.mjs
-node --check lib/source-cache.mjs
+node --check lib/install/run.mjs
+node --check soul-fix.mjs
+node --check lib/iterate/kit-iterate.mjs
+node --check lib/iterate/kit-update.mjs
+node --check lib/source/package-contract.mjs
+node --check lib/source/source-cache.mjs
 git diff --check
 ```
 
@@ -178,7 +185,8 @@ git diff --check
 | 入口 | 覆盖与限制 |
 |---|---|
 | `node scripts/verify-source.mjs` | 临时 Git 远端的拉新、固定版本、来源保护和关键文档边界；不访问真实作者远端，不验证真实 DSH |
-| `node scripts/verify-setup.mjs` | 问答、默认值、前置条件与方案生成 |
+| `node scripts/verify-v1.mjs
+node scripts/verify-setup.mjs` | 问答、默认值、前置条件与方案生成 |
 | `node scripts/verify-flash.mjs <Soul固定源码> <Flash固定源码> [js-yaml目录]` | 动态 Flash 与隔离安装、更新、备份、恢复、卸载；核对作者源码内容未改。未指定 YAML 目录时会读取默认真实 profile 中的依赖位置，先核实；不会因此获得修改真实 profile 的授权 |
 
 脚本参数中的源码必须对应本轮固定提交。Git 来源保持干净；需要模拟作者改名、缺文件或未来版本时，在临时样本中改，不能修改真实作者仓库使测试通过。已有脚本未覆盖的行为再补最小针对性检查。其它历史脚本先核实是否仍适用于当前 kit，不把脚本存在当成可直接执行。
@@ -236,7 +244,7 @@ node install.mjs --kit-accept <本次报告目录>
 
 `VERIFIED` 仍表示最后经过端到端验证的上游版本；代码审查完成不能自动更新它。只有具备对应完整验收证据时才修改。交付时分别说明 kit 自身仓库的检查/同步结果、插件上游范围、四流程各自结论、改了哪些文件、验证结果和剩余限制；自身检查被跳过时明确写出，不能声称两个来源都已最新。
 
-上游新增或改动了只在某个系统上能用的代码（`powershell.exe`、命名管道、`.exe` 路径、`darwin` 分支等）时，同步 `lib/parts.mjs` 和 README 的兼容说明。通用扫描报告 Windows/macOS 个人路径、加载名与 client id、发布文件与依赖、preset 缺包、摘要模型路由和能静态识别的 schema 类型不符；结果都是待核对线索，不执行源码、不生成补丁。
+上游新增或改动了只在某个系统上能用的代码（`powershell.exe`、命名管道、`.exe` 路径、`darwin` 分支等）时，同步 `lib/install/parts.mjs` 和 README 的兼容说明。通用扫描报告 Windows/macOS 个人路径、加载名与 client id、发布文件与依赖、preset 缺包、摘要模型路由和能静态识别的 schema 类型不符；结果都是待核对线索，不执行源码、不生成补丁。
 
 ## 6. 中断恢复与最后交付
 
