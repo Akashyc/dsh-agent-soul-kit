@@ -5,7 +5,7 @@
 #   带参数：curl -fsSL https://raw.githubusercontent.com/Akashyc/dsh-agent-soul-kit/main/install.sh | bash -s -- --setup 大肥鱼
 #
 # 这里只做 bash 才方便做的三件事：找一个能用的 node、把安装包放到固定位置、在真终端里启动 install.mjs。
-# 选方案、一问一答、退出 DSH、安装、心跳、自检都在 install.mjs 里（Windows 的 install.ps1 交给的是同一份）。
+# 选方案、一问一答、退出确认、安装、心跳、自检都在 install.mjs 里（Windows 的 install.ps1 交给的是同一份）。
 #
 # 环境变量：DSH_KIT_DIR 安装包放哪（默认 ~/Documents/dsh-agent-soul-kit）；DSH_KIT_REF 安装包的分支（默认 main）；DSH_NODE 指定 node。
 set -eo pipefail
@@ -40,12 +40,9 @@ main() {
   [ -n "$node" ] || die "找不到 18 以上的 node。先装 DSH 并打开一次（用它自带的 node），或者 brew install node，或者设 DSH_NODE=<node 的路径> 再跑。"
   say "node：$node（$("$node" -v)）"
 
-  # 2. 安装包：已有就更新（能快进才更新，有本地改动就原样用），没有就 clone 或下载
-  if [ -d "$kit/.git" ] && has_git; then
-    if git -C "$kit" pull --ff-only --quiet 2>/dev/null; then say "安装包已是最新：$kit"
-    else say "安装包有本地改动或连不上 GitHub，照现有的用：$kit"; fi
-  elif [ -f "$kit/install.mjs" ]; then
-    say "用已有的安装包：$kit（想同步到最新版就跑 install.mjs --kit-update）"
+  # 2. 已有副本交给统一更新入口核对，不在自举中跳过 data/ 保护直接 pull
+  if [ -f "$kit/install.mjs" ]; then
+    say "用已有的安装包：$kit（同步前请跑 install.mjs --kit-update 核对）"
   else
     mkdir -p "$(dirname "$kit")"
     if has_git; then

@@ -1,3 +1,5 @@
+import { dataPaths, operationDir } from '../lib/core/data-paths.mjs'
+import { KIT_VERSION } from '../lib/core/version.mjs'
 // node scripts/verify-flash.mjs <Soul源码> <Flash源码> [js-yaml目录]
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -8,11 +10,11 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { FLASH_PRESET_ID, FLASH_ADAPTATION, readFlashPresets, adaptFlash, isFlashPresetId } from '../lib/flash-presets.mjs'
-import { presetSources, buildPresetBundle, buildShellBundle, findPresetSection } from '../lib/soul-presets.mjs'
-import { officialPresetFor, isSoulPresetId } from '../lib/uninstall.mjs'
-import { PART_NAMES } from '../lib/parts.mjs'
-import { applyNameMap } from '../lib/name-map.mjs'
+import { FLASH_PRESET_ID, FLASH_ADAPTATION, readFlashPresets, adaptFlash, isFlashPresetId } from '../lib/presets/flash-presets.mjs'
+import { presetSources, buildPresetBundle, buildShellBundle, findPresetSection } from '../lib/presets/soul-presets.mjs'
+import { officialPresetFor, isSoulPresetId } from '../lib/backup/uninstall.mjs'
+import { PART_NAMES } from '../lib/install/parts.mjs'
+import { applyNameMap } from '../lib/setup/name-map.mjs'
 
 assert.ok(process.argv[2] && process.argv[3], '传入 Soul 和 Flash 作者源码目录')
 const kit = fileURLToPath(new URL('../', import.meta.url))
@@ -24,7 +26,7 @@ const yaml = require(yamlDir)
 const schema = yaml.DEFAULT_SCHEMA.extend([new yaml.Type('tag:yaml.org,2002:js', { kind: 'scalar', construct: (text) => ({ js: text }) })])
 const parse = (text) => yaml.load(text, { schema })
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kit-flash-')))
-const evidence = path.join(kit, 'logs/verify-flash')
+const evidence = operationDir(path.join(kit, 'data/_kit/logs'), 'verify-flash')
 fs.mkdirSync(evidence, { recursive: true })
 const json = (file) => JSON.parse(fs.readFileSync(file, 'utf8'))
 const names = Object.fromEntries(['compaction', 'pruner', 'compact-region'].map((part) => [part, json(path.join(soul, 'plugins', part, 'package.json')).name]))
@@ -69,7 +71,7 @@ function home(name) {
 
 /** 运行隔离生命周期命令，保留失败日志和期望退出码。 */
 function run(label, target, args, code = 0) {
-  const command = [path.join(kit, 'install.mjs'), '--dsh-home', target, '--confirm-quit', '--no-input', ...args]
+  const command = [path.join(kit, 'install.mjs'), '--dsh-home', target, '--confirm-quit', '--no-input', '--allow-preset-snapshot', ...args]
   const result = spawnSync(process.execPath, command, {
     cwd: kit,
     env: { ...process.env, HOME: path.join(root, 'user'), USERPROFILE: path.join(root, 'user'), DSH_HOME: target },
@@ -124,7 +126,7 @@ try {
     }
     assert.deepEqual(after, before, '只适配身份、简介和压缩零件，其他上游配置原样保留')
   }
-  const source = presetSources(null, { upstreamDir: soul, flash: { dir: flash, presets: catalog, from: '验证源码', version: 'test', partNames: names } })
+  const source = presetSources(null, { allowSnapshot: true, upstreamDir: soul, flash: { dir: flash, presets: catalog, from: '验证源码', version: 'test', partNames: names } })
   const bundle = buildPresetBundle(source, ['soul', ...catalog.map((item) => item.id)])
   assert.equal(parse(bundle.text)[0].insert.length, catalog.length + 1)
   assert.equal(buildShellBundle(bundle.text).ids.length, catalog.length + 1)
@@ -158,6 +160,14 @@ try {
   fs.unlinkSync(extraFile)
   console.log(`Flash 源码适配通过：${catalog.length} 个上游 preset；覆盖改名、新增、折行简介、重复和结构错误`)
 
+  const brokenSoul = path.join(root, 'broken-soul')
+  fs.cpSync(soul, brokenSoul, { recursive: true, filter: (file) => !/(^|[\\/])(\.git|node_modules)([\\/]|$)/.test(path.relative(soul, file)) })
+  const brokenEntry = path.join(brokenSoul, 'plugins/compaction/index.js')
+  fs.writeFileSync(brokenEntry, "import './v1-missing.mjs'\n" + fs.readFileSync(brokenEntry, 'utf8'))
+  const blocked = run('blocked-install', home('阻断 样本'), ['--setup', '大肥鱼', '--source', brokenSoul])
+  assert.match(blocked, /启动验收停止/)
+  assert.doesNotMatch(blocked, /┌─ 贴进新会话的话/)
+
   const target = home('中文 空格')
   const soulSha = spawnSync('git', ['-C', soul, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()
   const flashSha = spawnSync('git', ['-C', flash, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()
@@ -174,8 +184,6 @@ try {
   const fullParts = ['--add-part', 'yantai,heartbeat,riji,model-statusbar,mobile-adapt,perf,chat,clawbot']
   const output = run('install', target, ['--setup', '大肥鱼', '--flash', 'on', ...fullParts, ...defaults, ...sourceArgs])
   let result = installed(target)
-  assert.match(output, /启动 DSH 前先处理安装完整性问题/)
-  assert.match(output, /不代表 DSH 实际无法启动/)
   assert.match(output, /┌─ 贴进新会话的话[\s\S]*node mo\.mjs add lead[\s\S]*└─/)
   assert.doesNotMatch(output, /安装流程到此停止|上游发布清单漏列|按发布清单装上/)
   for (const [part, file] of [['yantai', 'env-config.mjs'], ['heartbeat', 'heartbeat.mjs'], ['heartbeat', 'heartbeat-core.mjs'], ['heartbeat', 'activity.mjs']]) {
@@ -192,7 +200,13 @@ try {
   fs.writeFileSync(renamed, changed.replace('作者新名称', '作者又改了名称'))
   const diary = path.join(target, 'dsh-soul/soul/50-日记/验证.md')
   write(diary, '用户样本原文\n')
+  const legacyState = installed(target).state
+  legacyState.kitVersion = '6.2'; delete legacyState.format
+  write(path.join(target, 'dsh-soul/.install-state.json'), JSON.stringify(legacyState))
   run('update', target, ['--update', ...sourceArgs])
+  assert.equal(installed(target).state.kitVersion, KIT_VERSION)
+  assert.equal(installed(target).state.format, 2)
+  assert.deepEqual(installed(target).state.parts.slice().sort(), legacyState.parts.slice().sort(), '旧版本升级不额外补装可选零件')
   assert.equal(installed(target).state.flash.presets.length, catalog.length + 1)
   assert.ok(installed(target).presets.some((preset) => preset.config.name === '灵魂 · 作者又改了名称'))
   const beforeRepeat = installed(target).cfg
@@ -205,12 +219,19 @@ try {
   run('source-metadata-refresh', target, ['--update', ...sourceArgs])
   assert.ok(installed(target).state.flash.presets.some((preset) => preset.file.endsWith('作者再次改了文件名.yaml')))
   assert.equal(fs.readFileSync(diary, 'utf8'), '用户样本原文\n')
+  const local = dataPaths(kit, target, 'desktop')
+  write(local.issues, JSON.stringify({ format: 2, issues: { sample: { id: 'sample', state: 'patched', retiredAt: 'old', file: 'sample.js' } } }))
+  assert.ok(fs.existsSync(path.join(local.setups, '大肥鱼/setup.json')), '现成方案完整保存到本地归档')
   const out = path.join(root, 'backups')
   run('backup', target, ['--backup', '--out', out])
   const archive = path.join(out, fs.readdirSync(out).find((name) => name.endsWith('.tar.gz')))
   const restored = home('恢复 目标')
   run('restore', restored, ['--restore', archive, ...sourceArgs])
   assert.equal(installed(restored).state.flash.presets.length, catalog.length + 1)
+  const restoredData = dataPaths(kit, restored, 'desktop')
+  assert.equal(json(restoredData.issues).issues.sample.state, 'unknown')
+  assert.equal(json(restoredData.issues).issues.sample.retiredAt, undefined)
+  assert.ok(fs.existsSync(path.join(restoredData.setups, '大肥鱼/setup.json')))
   assert.equal(fs.readFileSync(path.join(restored, 'dsh-soul/soul/50-日记/验证.md'), 'utf8'), '用户样本原文\n')
 
   const session = path.join(target, 'sessions/future/session.v1.jsonl')

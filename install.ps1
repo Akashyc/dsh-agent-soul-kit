@@ -49,13 +49,10 @@
   if (-not $node) { Die 'No node >= 18 found. Install DSH and open it once (its bundled node is used), or install Node.js, or set $env:DSH_NODE to a node.exe, then run this again.' }
   Say "node: $node ($(& $node -v))"
 
-  # 2. kit folder: update it when git can fast-forward, keep local changes, otherwise clone or download
+  # 2. Existing copies use the guarded updater; never pull over private data here.
   $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
-  if ((Test-Path (Join-Path $kit '.git')) -and $hasGit) {
-    git -C $kit pull --ff-only --quiet
-    if ($LASTEXITCODE -eq 0) { Say "kit is up to date: $kit" } else { Say "kit has local changes or GitHub is unreachable; using it as is: $kit" }
-  } elseif (Test-Path (Join-Path $kit 'install.mjs')) {
-    Say "using existing kit: $kit (run install.mjs --kit-update to sync)"
+  if (Test-Path (Join-Path $kit 'install.mjs')) {
+    Say "using existing kit: $kit (review install.mjs --kit-update before syncing)"
   } else {
     $parent = Split-Path $kit
     New-Item -ItemType Directory -Force -Path $parent | Out-Null

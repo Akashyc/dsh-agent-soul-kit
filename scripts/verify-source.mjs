@@ -5,14 +5,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { cachedSource, localSource } from '../lib/source-cache.mjs'
+import { cachedSource, localSource } from '../lib/source/source-cache.mjs'
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kit-source-')))
 const remote = path.join(root, 'remote')
 const kit = path.join(root, 'kit')
 const repo = 'fixture/author'
 const origin = `https://github.com/${repo}.git`
-const moduleUrl = new URL('../lib/source-cache.mjs', import.meta.url).href
+const moduleUrl = new URL('../lib/source/source-cache.mjs', import.meta.url).href
 const oldEnv = { ...process.env }
 const steps = []
 

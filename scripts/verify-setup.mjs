@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { normalizeAnswers, buildSetupFiles, loadSetup, describeSetup, questionSheet } from '../lib/setup.mjs'
-import { chunk } from '../lib/popups.mjs'
-import { OPTIONAL_PARTS } from '../lib/parts.mjs'
+import { normalizeAnswers, buildSetupFiles, loadSetup, describeSetup, questionSheet } from '../lib/setup/setup.mjs'
+import { chunk } from '../lib/setup/popups.mjs'
+import { OPTIONAL_PARTS } from '../lib/install/parts.mjs'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-setup-'))
 const file = path.join(dir, '人设 完整.md')
