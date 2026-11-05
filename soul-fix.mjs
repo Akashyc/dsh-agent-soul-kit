@@ -1,4 +1,5 @@
-import { allFailures } from './lib/diagnose/evidence.mjs'
+import { scanFailures } from './lib/diagnose/evidence.mjs'
+import { KIT_VERSION } from './lib/core/version.mjs'
 import { dataPaths, saveContext, assertDataPath } from './lib/core/data-paths.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -60,6 +61,10 @@ async function main() {
   const args = parse(process.argv.slice(2))
   if (args['--help'] || args['-h']) return console.log(help)
   if (process.stdout.isTTY) throw new Error('这是给 agent 的接口：输出是 Markdown，验证靠两次运行的状态差分；请在会话里让 agent 调用')
+  if (args['--ref'] && !/^[a-f0-9]{40}$/.test(args['--ref'])) throw new Error('--ref 必须是完整提交号，不静默改用 HEAD')
+  if (args['--source'] && args['--update']) throw new Error('--source 是只读显式来源，不能与 --update 混用')
+  if (['--show', '--add', '--report'].filter((key) => args[key]).length > 1) throw new Error('--show、--add、--report 请分次执行')
+  if (args['--show'] && args['--write']) throw new Error('--show 只读，不与 --write 混用')
   const notes = []
   const context = readContext({
     home: args['--dsh-home'], profile: args['--profile'],
@@ -73,7 +78,6 @@ async function main() {
   const store = loadIssues(file)
   if (args['--no-write'] && args['--write']) throw new Error('--write 与 --no-write 不能同时使用')
   const write = Boolean(args['--write'] || args['--add']) && !args['--no-write']
-  if (write) saveContext(root, data)
   const at = new Date().toISOString()
 
   if (args['--show']) {
@@ -83,7 +87,7 @@ async function main() {
   if (args['--add']) {
     const { id, payload } = parseAdd(args['--add'])
     putIssue(store, id, payload, at)
-    if (write) saveIssues(file, store)
+    if (write) { saveContext(root, data); saveIssues(file, store) }
     return console.log('已登记：' + id + (write ? '' : '（--no-write：没有落盘）'))
   }
 
@@ -93,40 +97,39 @@ async function main() {
   })
 
   try {
-  // 每轮重算：清单条目逐条判定，状态写回条目里
-  for (const entry of Object.values(store.issues)) {
-    const verdict = judge(entry, context, author)
-    entry.state = verdict.state
-    entry.note = verdict.note || null
-  }
-  const retired = retireIssues(store, at, author.sha)
-  const pending = refreshCleanup(store, (entry) => hasLocalMarker(entry, context))
-  touchIssues(store, at)
-  store.kit = context.install?.kitVersion || null
-  if (write) saveIssues(file, store)
+    // 每轮重算：清单条目逐条判定，状态写回条目里
+    for (const entry of Object.values(store.issues)) {
+      const verdict = judge(entry, context, author)
+      entry.state = verdict.state
+      entry.note = verdict.note || null
+    }
+    retireIssues(store, at, author.sha)
+    refreshCleanup(store, (entry) => hasLocalMarker(entry, context))
+    touchIssues(store, at)
+    store.kit = KIT_VERSION
+    const scan = scanFailures(context.logs, context.home)
+    if (write) { saveContext(root, data); saveIssues(file, store) }
 
-  for (const note of notes) console.error(note)
+    for (const note of notes) console.error(note)
 
-  console.log(renderText({ context, author, issues: store, install: context.install, at }))
-  if (retired.length) console.error('本次退役：' + retired.map((row) => row.id).join('、'))
-  if (pending.length) console.error('本地旧补丁还挂着：' + pending.map((row) => row.id).join('、'))
+    console.log(renderText({ context, author, issues: store, scan }))
 
-  if (args['--report']) {
-    const evidence = allFailures(context.logs, context.home)
-    const wanted = Object.values(store.issues).filter((entry) => entry.state === 'open' && entry.sig && (evidence.get(entry.pkg) || []).some((row) => new RegExp(entry.sig).test(row.detail)))
-    const rendered = renderProblems({
-      items: wanted.filter((entry) => entry.state === 'open').map((entry) => ({ ...entry, entry })),
-      author, install: context.install, at, home: context.home, context,
-    })
-    const target = args['--report'] === true
-      ? path.join(data.reports, '问题清单-' + author.sha.slice(0, 7) + '-' + at.slice(0, 10) + '.md')
-      : path.resolve(args['--report'])
-    if (args['--report'] === true) assertDataPath(root, target)
-    fs.mkdirSync(path.dirname(target), { recursive: true })
-    fs.writeFileSync(target, rendered.markdown)
-    const where = target.startsWith(root + path.sep) ? path.relative(root, target) : target
-    console.log('\n反馈清单：' + where + '（' + rendered.issues.length + ' 条）')
-  }
+    if (args['--report']) {
+      const evidence = scan.failures
+      const wanted = Object.values(store.issues).filter((entry) => entry.state === 'open' && entry.sig && (evidence.get(entry.pkg) || []).some((row) => new RegExp(entry.sig).test(row.detail)))
+      const rendered = renderProblems({
+        items: wanted.map((entry) => ({ ...entry, entry })),
+        author, install: context.install, at, home: context.home, context,
+      })
+      const target = args['--report'] === true
+        ? path.join(data.reports, '问题清单-' + author.sha.slice(0, 7) + '-' + at.slice(0, 10) + '.md')
+        : path.resolve(args['--report'])
+      if (args['--report'] === true) assertDataPath(root, target)
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(target, rendered.markdown)
+      const where = target.startsWith(root + path.sep) ? path.relative(root, target) : target
+      console.log('\n反馈清单：' + where + '（' + rendered.issues.length + ' 条）')
+    }
   } finally { author.cleanup() }
 }
 
