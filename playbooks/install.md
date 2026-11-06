@@ -1,7 +1,7 @@
 # playbook · 安装
 
 - 对上游：`AGENT-INSTALL.md`（锚点见 §四，提交号以 `probe/upstream.mjs` 输出为准）
-- 前置：`probe/upstream.mjs` 已跑通，`probe/local.mjs` 已跑通
+- 前置：上游已同步到 `upstream/dsh-agent-soul`（`kit/sync-upstream.mjs`）；`probe/upstream.mjs` 与 `probe/local.mjs` 已跑通
 - 产物：`data/<profile>/<instance>/` 下的 answers / apply / meta / report
 
 ## 一、目标

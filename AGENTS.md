@@ -2,6 +2,13 @@
 
 你正在读的是 dsh-agent-soul 的安装工具包。动手前先看这一页。
 
+## 零、先同步上游
+
+- 任何操作之前，先把作者仓库同步到 `upstream/dsh-agent-soul`（`kit/sync-upstream.mjs`）。
+- 只做 clone / fetch / fast-forward。**不 force、不 reset、不 stash。**
+- 本地有改动或与上游分叉 → 停下报出来，不动它。
+- 后面所有判断都基于这份副本的提交号；读旧副本等于拿过期地图找路。
+
 ## 一、只读来源
 
 - 作者仓库（`upstream/`、`--source` 指定的目录）**只读**：只允许 fetch、读提交、读文件。

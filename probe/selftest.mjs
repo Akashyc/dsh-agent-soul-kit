@@ -450,7 +450,30 @@ try {
   assert.equal(saved.written, true)
   assert.ok(existsSync(reportOut))
   assert.ok(!fs.readFileSync(reportOut, 'utf8').includes(srcHome))
-  console.log('selftest 通过：local 13 / logs 8 / upstream 9 / references 5 / files 11 / diff 8 / applycheck 11 / patch 14 / backup 12 / diagnose 12 / report 8；含缺记录、坏日志行、无来源、无标识、缺一侧、改名、锚点变更十种边界（含坏计划、打不上、路径改写、脱敏）')
+
+  // 31. sync-upstream：不是 git 仓库就跳过，不覆盖不删
+  const syncScript = path.join(here, '..', 'kit', 'sync-upstream.mjs')
+  const notRepo = path.join(tmp, 'not-a-repo')
+  fs.mkdirSync(notRepo, { recursive: true })
+  fs.writeFileSync(path.join(notRepo, 'keep.txt'), 'do not delete')
+  const skipped = runRaw(syncScript, ['--dir', notRepo])
+  assert.equal(skipped.ok, false)
+  assert.equal(skipped.action, 'skip')
+  assert.ok(existsSync(path.join(notRepo, 'keep.txt')), '不是仓库的目录绝不能被清掉')
+
+  // 32. sync-upstream：本地有改动就停，不 stash 不 reset
+  const dirtyRepo = path.join(tmp, 'dirty-repo')
+  fs.mkdirSync(dirtyRepo, { recursive: true })
+  spawnSync('git', ['init', '-q'], { cwd: dirtyRepo })
+  fs.writeFileSync(path.join(dirtyRepo, 'a.txt'), 'base')
+  spawnSync('git', ['add', '-A'], { cwd: dirtyRepo })
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init'], { cwd: dirtyRepo })
+  fs.writeFileSync(path.join(dirtyRepo, 'a.txt'), 'changed by hand')
+  const blockedSync = runRaw(syncScript, ['--dir', dirtyRepo])
+  assert.equal(blockedSync.ok, false)
+  assert.equal(blockedSync.action, 'blocked')
+  assert.equal(fs.readFileSync(path.join(dirtyRepo, 'a.txt'), 'utf8'), 'changed by hand', '本地改动必须原样保留')
+  console.log('selftest 通过：local 13 / logs 8 / upstream 9 / references 5 / files 11 / diff 8 / applycheck 11 / patch 14 / backup 12 / diagnose 12 / report 8 / sync-upstream 6；含缺记录、坏日志行、无来源、无标识、缺一侧、改名、锚点变更十一种边界（含坏计划、打不上、路径改写、脱敏、脏上游）')
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true })
 }

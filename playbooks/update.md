@@ -1,7 +1,7 @@
 # playbook · 更新
 
 - 对上游：`AGENT-INSTALL.md`（同 install.md §四，锚点未变时不再逐节复核）
-- 前置：`probe/upstream.mjs` + `probe/local.mjs` + `probe/diff.mjs` + `probe/files.mjs` 已跑通
+- 前置：上游已同步（有更新就拉到最新，再动手）；`probe/upstream.mjs` + `probe/local.mjs` + `probe/diff.mjs` + `probe/files.mjs` 已跑通
 - 产物：更新后的 apply / meta / report，旧的那个不覆盖，按时间戳并存
 
 ## 一、目标

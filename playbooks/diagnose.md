@@ -1,7 +1,7 @@
 # playbook · 诊断
 
 - 工具：`probe/logs.mjs`（取证）+ `kit/patch.mjs plan`（补丁状态）+ `kit/diagnose.mjs`（渲染）
-- 前置：一次安装或更新刚做完，或用户说「哪里不对」
+- 前置：上游已同步；一次安装或更新刚做完，或用户说「哪里不对」
 - 产物：Markdown（给人看）+ `diagnose.json`（给补丁引擎）
 
 ## 一、目标

@@ -16,6 +16,7 @@
     "probe:diff": "node probe/diff.mjs",
     "probe:files": "node probe/files.mjs",
     "probe:applycheck": "node probe/applycheck.mjs",
+    "sync-upstream": "node kit/sync-upstream.mjs",
     "patch:list": "node kit/patch.mjs list",
     "patch:plan": "node kit/patch.mjs plan",
     "backup:plan": "node kit/backup.mjs plan",
