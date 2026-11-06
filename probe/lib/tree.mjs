@@ -41,6 +41,7 @@ export function scanParts(dir) {
     list.push({
       dir: entry.name,
       name: typeof pkg.name === 'string' ? pkg.name : null,
+      description: typeof pkg.description === 'string' ? pkg.description : null,
       version: typeof pkg.version === 'string' ? pkg.version : null,
       os: pkg.os || null,
       hasEntry: Boolean(pkg.main || pkg.exports),

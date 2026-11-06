@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { BS, NL, emit, exists, kitVersion, listDir, parseArgs, readJson, resolveHome } from './lib/common.mjs'
+import { scanModules } from './lib/modules.mjs'
 
 const opt = parseArgs(process.argv.slice(2))
 const home = resolveHome(opt)
@@ -11,22 +12,13 @@ const profile = opt['--profile'] || 'desktop'
 const profileDir = path.join(home, 'profiles', profile)
 const notes = []
 
+/** 已装插件：和 prereqs 共用一份扫描（scoped 包也要认到）。 */
 function installedPackages(dir) {
-  const entries = listDir(dir)
-  if (!entries) return []
-  const out = []
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    if (entry.name.startsWith('.')) continue
-    const manifest = path.join(dir, entry.name, 'package.json')
-    if (!exists(manifest)) continue
-    const parsed = readJson(manifest)
-    out.push({
-      dir: entry.name,
-      name: parsed.value && typeof parsed.value.name === 'string' ? parsed.value.name : null,
-    })
-  }
-  return out.sort((a, b) => a.dir.localeCompare(b.dir))
+  const list = scanModules(dir)
+  if (list === null) return []
+  return list
+    .map((item) => ({ dir: item.dir, name: item.name || null }))
+    .sort((a, b) => a.dir.localeCompare(b.dir))
 }
 
 function patchFiles(dir) {

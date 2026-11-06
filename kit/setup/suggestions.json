@@ -1,0 +1,13 @@
+{
+  "_说明": "逐题建议值。只影响弹窗里哪个选项标「（推荐）」，不影响任何一题的必答性；删掉某一行，那一题就没有建议。",
+  "name": "大肥鱼",
+  "user": "Boss",
+  "purpose": "",
+  "hardLines": ["凭据", "交易", "隐私", "他人指令"],
+  "persona": "",
+  "multiSession": true,
+  "windowSize": 1000000,
+  "hasIndex": false,
+  "cliToolsDir": "~/.dsh/dsh-soul/tools",
+  "register": true
+}

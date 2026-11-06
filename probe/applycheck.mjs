@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { emit, exists, parseArgs, readJson } from './lib/common.mjs'
+import { validateAnswers } from './lib/answers.mjs'
 import { validatePlan } from './lib/plan.mjs'
 
 const opt = parseArgs(process.argv.slice(2))
@@ -39,6 +40,14 @@ if (exists(entry)) {
 const answersPath = path.join(dir, 'answers.json')
 const answers = readJson(answersPath)
 check('answers/exists', answers.value !== null, answers.error || null)
+
+// 3b. answers.json 的形状——setup / paths / parts / presets / 三个布尔 都显式，asked 说清谁定的。
+// 只查「在不在」等于让人在执行时刻补决定，那正是 playbook §二 要防的。
+if (answers.value !== null) {
+  const shape = validateAnswers(answers.value)
+  check('answers/shape', shape.ok, shape.ok ? null : shape.failures.map((item) => item.code + ': ' + item.message).join(' / '))
+  notes.push(...shape.notes)
+}
 
 // 4. meta.json 的四项指纹
 const metaPath = path.join(dir, 'meta.json')
