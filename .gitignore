@@ -1,8 +1,5 @@
+node_modules/
 .DS_Store
-/data/
-TMP/
-archives/
-backups/
-docs/
-logs/
-/upstream
+data/
+upstream/
+*.log

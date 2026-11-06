@@ -1,0 +1,27 @@
+{
+  "name": "dsh-agent-soul-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent 作业指导书与只读取证工具：按作者上游现状生成本机安装与更新脚本",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "probe:local": "node probe/local.mjs",
+    "probe:logs": "node probe/logs.mjs",
+    "probe:upstream": "node probe/upstream.mjs",
+    "probe:references": "node probe/references.mjs",
+    "probe:diff": "node probe/diff.mjs",
+    "probe:files": "node probe/files.mjs",
+    "probe:applycheck": "node probe/applycheck.mjs",
+    "patch:list": "node kit/patch.mjs list",
+    "patch:plan": "node kit/patch.mjs plan",
+    "backup:plan": "node kit/backup.mjs plan",
+    "backup:verify": "node kit/backup.mjs verify",
+    "diagnose": "node kit/diagnose.mjs",
+    "report": "node kit/report.mjs",
+    "selftest": "node probe/selftest.mjs"
+  }
+}
