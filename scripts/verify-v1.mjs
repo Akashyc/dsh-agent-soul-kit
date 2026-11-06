@@ -22,7 +22,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-v1-'))
 const write = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
 const json = (file, value) => write(file, JSON.stringify(value))
 const fakeKit = path.join(root, 'kit'), home = path.join(root, 'DSH 空格')
-const context = { home, logs: path.join(home, 'logs'), install: { kitVersion: '6.2' } }
+const context = { profile: 'desktop', home, logs: path.join(home, 'logs'), install: { kitVersion: '6.2' } }
 const author = { dir: path.join(root, 'author'), sha: 'a'.repeat(40) }
 let scenarios = 0
 function check(label, fn) { fn(); scenarios++; console.log('✓ ' + label) }

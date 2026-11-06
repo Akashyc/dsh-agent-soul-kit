@@ -14,7 +14,7 @@ import { KIT_VERSION } from '../lib/core/version.mjs'
 
 const kit = fileURLToPath(new URL('../', import.meta.url))
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-diagnose-'))
-const context = { home: path.join(root, 'home'), logs: path.join(root, 'logs') }
+const context = { profile: 'desktop', home: path.join(root, 'home'), logs: path.join(root, 'logs') }
 const author = { sha: 'a'.repeat(40), dir: path.join(root, 'source') }
 const write = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
 const json = (file, value) => write(file, JSON.stringify(value))
@@ -25,7 +25,7 @@ const entry = {
 }
 const evidence = (pkg) => ({ pkg, file: 'one.jsonl', at: '2026-11-05 08:00:00', boots: 1, message: 'ERR_MODULE_NOT_FOUND', detail: 'missing' })
 const ready = { status: 'ready', files: [{ name: 'one.jsonl', rows: 1 }], unreadable: [], invalidRows: 0, unmatchedRows: 0 }
-const header = (live = 0, retired = 0, fresh = 0) => `**概览**：\`aaaaaaa\` · kit ${KIT_VERSION} · 要修 ${live} · 待退役 ${retired} · 新发现 ${fresh} · 范围：已读取 1 份 JSONL 日志；仅检查插件加载失败`
+const header = (live = 0, retired = 0, fresh = 0) => `**概览**：\`aaaaaaa\` · kit ${KIT_VERSION} · 要修 ${live} · 待退役 ${retired} · 新发现 ${fresh} · 范围：已读取 1 份 JSONL 日志（只看插件加载失败）；零件 0 个、preset skills 0 个做检测层检查（D1.1/D1.2/D2.1/D4.1/D5.1/D5.2/D5.6）`
 const render = (entries = [], failures = new Map(), coverage = ready) => renderText({ context, author, issues: { issues: Object.fromEntries(entries.map((e) => [e.id, e])) }, scan: { failures, coverage } })
 const checks = []
 function check(label, fn) { fn(); checks.push(label); console.log('✓ ' + label) }
