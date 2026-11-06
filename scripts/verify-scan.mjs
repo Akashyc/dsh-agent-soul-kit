@@ -27,6 +27,20 @@ put('node_modules/pkgs-win/run.js', [
 put('node_modules/pkgs-win/package.json', '{"name":"pkgs-win"}')
 
 put('node_modules/pkgs-good/index.js', 'export const ok = 1\n')
+// 本体只扫 kit/：命名管道算 D1.2；plugins/ 是零件副本、test-* 是测试，都不扫
+put('node_modules/dsh-agent-soul/kit/echo/svc.mjs', 'const PIPE = process.env.ECHO_PIPE || "\\\\\\\\.\\\\pipe\\\\echo-hub"\n')
+put('node_modules/dsh-agent-soul/kit/echo/test-self-check.mjs', 'const p = "C:\\\\x"\n')
+put('node_modules/dsh-agent-soul/plugins/x/index.js', 'execFileSync("powershell.exe")\n')
+// D2.3：拿 cwd 拼路径算，打印 cwd 和注释不算
+put('node_modules/pkgs-cwd/index.js', [
+  'const f = path.join(process.cwd(), "state.json")',
+  'log("cwd=" + process.cwd())',
+  '// 原来是 join(process.cwd(), "diary")',
+  'const cands = [env ? join(env, "a.json") : null,',
+  '  path.join(process.cwd(), "a.json"),',
+  ']',
+].join('\n'))
+put('node_modules/pkgs-cwd/package.json', '{"name":"pkgs-cwd"}')
 put('node_modules/pkgs-good/package.json', '{"name":"pkgs-good"}')
 
 // 噪声：测试目录 / 下划线脚本 / verify-*
@@ -70,7 +84,7 @@ writeFileSync(path.join(logsDir, 'x.jsonl'), [
 ].join('\n'), 'utf8')
 
 const install = {
-  parts: ['pkgs-bad', 'pkgs-win', 'pkgs-good', 'pkgs-absent', 'pkgs-broken-import'],
+  parts: ['pkgs-bad', 'pkgs-win', 'pkgs-good', 'pkgs-absent', 'pkgs-broken-import', 'pkgs-cwd', 'pkgs-gone'],
   presetIds: ['soul', 'soul-ptc'],
   presetSkills: { 'creation/SKILL.md': 'h1', 'ours-ok/SKILL.md': 'h2' },
 }
@@ -80,7 +94,7 @@ const has = (id, pkg) => of(id).some((f) => f.pkg === pkg)
 
 assert.equal(of('D1.1').length, 1, 'D1.1 应只命中真调用')
 assert.equal(of('D1.1')[0].line, 2, 'D1.1 应命中第 2 行')
-assert.equal(of('D1.2').length, 2, 'D1.2 应命中 2 行，实际 ' + of('D1.2').length)
+assert.equal(of('D1.2').filter((f) => f.pkg === 'pkgs-win').length, 2, 'D1.2 应命中 pkgs-win 2 行')
 assert.ok(!findings.some((f) => /test\/a\.spec|_check|verify-/.test(f.file)), '降噪失效')
 assert.ok(!findings.some((f) => f.pkg === 'pkgs-good'), '干净的包不该被报')
 
@@ -97,7 +111,11 @@ assert.equal(of('D5.6').length, 1, 'D5.6 只该报缺失的那个导入，实际
 assert.equal(of('D5.6')[0].pkg, 'pkgs-broken-import')
 assert.ok(of('D5.6')[0].snippet.includes('missing.mjs'))
 assert.deepEqual(of('D2.1').map((f) => f.snippet), [path.join(root, 'missing-dir')], 'D2.1 只该报不存在的绝对路径')
-assert.equal(coverage.packages, 4)
+assert.deepEqual(of('D2.3').map((f) => f.pkg + ':' + f.line), ['pkgs-cwd:1'], 'D2.3 只该报拿 cwd 拼路径那行，实际 ' + JSON.stringify(of('D2.3').map((f) => f.snippet)))
+assert.equal(of('D2.3')[0].severity, 'degraded')
+assert.deepEqual(of('D7.1').map((f) => f.pkg), ['pkgs-gone'], 'D7.1 只报未被 D5.1 报过的缺失零件，实际 ' + JSON.stringify(of('D7.1').map((f) => f.pkg)))
+assert.deepEqual(findings.filter((f) => f.pkg === 'dsh-agent-soul').map((f) => f.checkId + ' ' + path.basename(f.file)), ['D1.2 svc.mjs'], '本体只该报 kit/ 里的命名管道')
+assert.equal(coverage.packages, 5)
 assert.equal(coverage.skills, 2)
 
 const empty = scanStatic({ home: path.join(root, 'nope'), profile: 'desktop', install: { parts: [] } })
