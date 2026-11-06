@@ -16,7 +16,7 @@ import { chunk, questionPopups } from '../kit/setup/popups.mjs'
 import * as scaffold from '../kit/setup/scaffold.mjs'
 import * as replay from '../kit/setup/replay.mjs'
 import { composeAnswers } from '../kit/setup/compose.mjs'
-import { buildPlan, bundlePkgs, renderScript } from '../kit/setup/applygen.mjs'
+import { buildPlan, bundlePkgs, renderScript, soulRootUsers, prepareSoulRoot, presetAnchors } from '../kit/setup/applygen.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-probe-'))
@@ -412,6 +412,16 @@ try {
   assert.ok(pf.file.endsWith('65-声音/小鲸-声音.md'), '人设落在书房 65-声音/')
   assert.ok(pf.content.includes('话短、爱吐槽'))
 
+  // 人设也可以给文件路径：带「见」前缀、带引号都认；存在就原样复制，不存在就报错
+  const voiceSrc = path.join(tmp, 'voice.md')
+  fs.writeFileSync(voiceSrc, '# 声音原文' + NL + '话短。')
+  const copied = scaffold.personaFile({ name: '小鲸', persona: '见' + voiceSrc }, '/x')
+  assert.equal(copied.copiedFrom, voiceSrc, '路径型人设要认出来并复制')
+  assert.ok(copied.file.endsWith('65-声音/voice.md'), '复制时保留原文件名')
+  assert.ok(copied.content.includes('声音原文'))
+  const missingVoice = scaffold.personaFile({ name: '小鲸', persona: '/definitely/not/here.md' }, '/x')
+  assert.ok(missingVoice.error && missingVoice.error.includes('不存在'), '人设文件不存在要报错，不许把路径当正文写进去')
+
   const soulDir = path.join(tmp, 'soul-check')
   const memDir = path.join(tmp, 'mem-check')
   fs.mkdirSync(soulDir, { recursive: true })
@@ -517,6 +527,9 @@ try {
   assert.deepEqual(c1.errors, [], '完整答案不该报错')
   assert.equal(c1.answers.version, 2)
   assert.deepEqual(c1.answers.paths, { soul: '/s', memory: '/m' }, 'soulPath → paths.soul，映射只在这里')
+  const tildePaths = composeAnswers({ ...flat, soulPath: '~/soul', memoryPath: '~/mem', cliTools: '~/tools' }, { profile: 'desktop', mustInstall: [] })
+  assert.ok(tildePaths.answers.paths.soul.startsWith('/'), '★ ~ 必须展开：不展开会被当成相对路径，soul 文件就落到 cwd 下')
+  assert.ok(tildePaths.answers.cliTools.startsWith('/'), 'CLI 落点也要展开 ~')
   assert.deepEqual(c1.answers.parts.install.sort(), ['clock', 'compaction', 'echo'], '必装自动进 install 且去重')
   assert.deepEqual(c1.answers.parts.declined, ['splash'])
   assert.equal(c1.answers.setup.windowSize, 1000000, '数字就从字符串转成数字')
@@ -567,7 +580,9 @@ try {
   const genProfile = path.join(genHome, 'profiles', 'desktop')
   fs.mkdirSync(genProfile, { recursive: true })
   fs.writeFileSync(path.join(genProfile, 'package.json'), JSON.stringify({ name: 'dsh-profile-desktop', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] }, desktopNextDeselectedBundles: ['dsh-bundled'] } }))
-  fs.writeFileSync(path.join(genProfile, 'cordis.patch.yml'), ['- id: preset-standard', "  name: '@deepseek-ai/dsh-agent-preset'", '  config:', '    id: standard', ''].join(NL))
+  // 真实形状：preset 块长在 `- insert:` 列表里（缩进 4），不是顶格。
+  // 旧 fixture 用顶格 `- id: preset-standard`，把错误假设固化进了用例。
+  fs.writeFileSync(path.join(genProfile, 'cordis.patch.yml'), ['- insert:', "    - id: preset-standard", "      name: '@deepseek-ai/dsh-agent-preset'", '      config:', '        id: standard', ''].join(NL))
 
   const genAnswers = {
     version: 2, profile: 'desktop', paths: { soul: '/s', memory: '/m' },
@@ -579,7 +594,24 @@ try {
   }
   assert.deepEqual(bundlePkgs({ parts: { install: ['plain', 'bundled'] } }, genSrc), ['dsh-bundled'], '没有 dsh.bundle 的包不许进 bundles')
 
+  // 有零件 import 根包 → 必须把根包子集放进 node_modules，否则加载直接抛
+  fs.mkdirSync(path.join(genSrc, 'plugins', 'rooty', 'lib'), { recursive: true })
+  fs.writeFileSync(path.join(genSrc, 'plugins', 'rooty', 'package.json'), JSON.stringify({ name: 'dsh-rooty', version: '1.0.0' }))
+  fs.writeFileSync(path.join(genSrc, 'plugins', 'rooty', 'lib', 'index.js'), "import { x } from 'dsh-agent-soul/lib/paths.mjs'" + NL)
+  fs.mkdirSync(path.join(genSrc, 'lib'), { recursive: true })
+  fs.writeFileSync(path.join(genSrc, 'lib', 'paths.mjs'), 'export const x = 1' + NL)
+  fs.writeFileSync(path.join(genSrc, 'package.json'), JSON.stringify({ name: 'dsh-agent-soul', version: '9.9.9' }))
+  assert.deepEqual(soulRootUsers({ parts: { install: ['rooty'] } }, genSrc), ['rooty'], '要能扫出谁 import 了根包')
+  const vendor = prepareSoulRoot(path.join(tmp, 'gen-inst'), genSrc)
+  assert.ok(fs.existsSync(path.join(vendor, 'lib', 'paths.mjs')), '根包 vendor 要带 lib/')
+
+
   const genCtx = { source: genSrc, instance: path.join(tmp, 'gen-inst'), stamp: '2026-11-06', prereqs: null, dshHome: genHome, profile: 'desktop', profileDir: genProfile, packageManager: 'pnpm', kitVersion: '1.0.0' }
+
+  const withRoot = buildPlan({ ...genAnswers, parts: { install: ['rooty'], declined: [] } }, { parts: [{ dir: 'rooty', name: 'dsh-rooty' }], sha: 'a'.repeat(40) }, genCtx)
+  const rootStep = withRoot.plan.steps.find((s) => s.kind === 'copy' && s.to === 'node_modules/dsh-agent-soul')
+  assert.ok(rootStep, '计划里要有根包那一步')
+  assert.ok(rootStep.from.startsWith('/'), '根包来自 kit 备好的 vendor（绝对路径）')
   const built = buildPlan(genAnswers, { parts: [{ dir: 'plain', name: 'dsh-plain' }, { dir: 'bundled', name: 'dsh-bundled' }], sha: 'a'.repeat(40) }, genCtx)
   assert.deepEqual(built.errors, [], '正常答案不该生成不了计划')
   assert.equal(validatePlan(built.plan).ok, true, '生成的计划必须合契约')
@@ -836,7 +868,18 @@ try {
   assert.equal(blockedSync.ok, false)
   assert.equal(blockedSync.action, 'blocked')
   assert.equal(fs.readFileSync(path.join(dirtyRepo, 'a.txt'), 'utf8'), 'changed by hand', '本地改动必须原样保留')
-  console.log('selftest 通过：local 13 / logs 8 / upstream 9 + 文档解析 10 / 弹窗形状 5 / 上游工具接线 14 / 答案重放 16 / 组装 16 / 文档示例 3 / kit 指纹 5 / 前置 12 / 生成器 18 / references 5 / files 11 / diff 8 / applycheck 11 + answers 形状 9 / patch 14 / backup 12 / diagnose 12 / report 8 / sync-upstream 6；含缺记录、坏日志行、无来源、无标识、缺一侧、改名、锚点变更十一种边界（含坏计划、打不上、路径改写、脱敏、脏上游）')
+
+  // 33. 锚点判定：只在 `- insert:` 列表里数 preset，顶格同名配置块不算
+  //     2026-11-06：旧正则 (^- id: preset-) 只能匹配到 preset-visibility 这种顶格配置块，
+  //     于是「有真锚点」判成 0、「没锚点」判成 1 —— 后者让 soul-preset 把 body 插到文档顶层，
+  //     写出非法 YAML，桌面端下次启动直接 exit 1。
+  assert.equal(presetAnchors(''), 0)
+  assert.equal(presetAnchors(['- id: preset-visibility', '  name: dsh-presets-hidden', '  config:', '    hiddenIds:', '      - standard'].join(NL) + NL), 0)
+  assert.equal(presetAnchors(['- insert:', '    - id: preset-a', '      name: x', '    - id: preset-b'].join(NL) + NL), 2)
+  assert.equal(presetAnchors(['- insert:', '    - id: plain', '- id: preset-c'].join(NL) + NL), 0)
+  assert.equal(presetAnchors(['- insert:', '    - group: g', '      config:', '        - insert:', '          - id: preset-d'].join(NL) + NL) >= 1, true)
+
+    console.log('selftest 通过：local 13 / logs 8 / upstream 9 + 文档解析 10 / 弹窗形状 5 / 上游工具接线 14 / 答案重放 16 / 组装 16 / 文档示例 3 / kit 指纹 5 / 前置 12 / 生成器 22 / 锚点判定 5 / references 5 / files 11 / diff 8 / applycheck 11 + answers 形状 9 / patch 14 / backup 12 / diagnose 12 / report 8 / sync-upstream 6；含缺记录、坏日志行、无来源、无标识、缺一侧、改名、锚点变更十一种边界（含坏计划、打不上、路径改写、脱敏、脏上游）')
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true })
 }

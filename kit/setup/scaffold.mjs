@@ -60,12 +60,28 @@ export function selfCheckEnv(memoryPath) {
 /**
  * 人设文件：上游没有「人设文件」这层结构，但书房有 65-声音/ 这一格（"你说话的样子"）。
  * 空答案就不建文件 —— 不留空壳。
+ * 答案可以是多行文本，也可以是一行人设文件路径（可带「见」前缀、可带引号、可 ~ 开头）：
+ * 路径存在就原样复制（保留它自己的文件名），不存在就报错 —— 不静默写成一行路径。
  */
 export function personaFile(setup, soulPath) {
-  const text = String(setup && setup.persona ? setup.persona : '').trim()
-  if (!text) return null
-  const file = path.join(soulPath, '65-声音', (setup.name || 'agent') + '-声音.md')
-  return { file, content: '# ' + (setup.name || 'agent') + ' 的声音\n\n' + text + '\n' }
+  const NL = String.fromCharCode(10)
+  const raw = String(setup && setup.persona ? setup.persona : '').trim()
+  if (!raw) return null
+  const lines = raw.split(NL)
+  const first = lines[0].trim()
+  const unquoted = first.replace(/^见\s*[:：]?\s*/, '').replace(/^['"]|['"]$/g, '')
+  const isWindowsPath = /^[A-Za-z]$/.test(unquoted.slice(0, 1)) && unquoted.slice(1, 2) === ':' && (unquoted.slice(2, 3) === '/' || unquoted.slice(2, 3) === String.fromCharCode(92))
+  const looksPath = lines.length === 1 && (
+    unquoted.startsWith('/') || unquoted.startsWith('./') || unquoted.startsWith('../') ||
+    unquoted.startsWith('~') || isWindowsPath || /\.(md|txt)$/i.test(unquoted)
+  )
+  if (looksPath) {
+    const abs = unquoted.startsWith('~') ? path.join(process.env.HOME || '', unquoted.slice(1)) : unquoted
+    if (!fs.existsSync(abs)) return { error: '人设文件不存在：' + abs }
+    return { file: path.join(soulPath, '65-声音', path.basename(abs)), content: fs.readFileSync(abs, 'utf8'), copiedFrom: abs }
+  }
+  const file = path.join(soulPath, '65-声音', String(setup.name || 'agent').replace(/[\\/:*?"<>|]/g, '_') + '-声音.md')
+  return { file, content: '# ' + (setup.name || 'agent') + ' 的声音' + NL + NL + raw + NL }
 }
 
 /**
@@ -169,10 +185,11 @@ async function main() {
 
   const pf = personaFile(answers.setup, soulPath)
   let persona = { written: false }
-  if (pf) {
+  if (pf && pf.error) persona = { written: false, error: pf.error }
+  else if (pf) {
     fs.mkdirSync(path.dirname(pf.file), { recursive: true })
-    if (fs.existsSync(pf.file)) persona = { written: false, reason: '已存在，不覆盖' }
-    else { fs.writeFileSync(pf.file, pf.content, 'utf8'); persona = { written: true, file: pf.file } }
+    if (fs.existsSync(pf.file)) persona = { written: false, reason: '已存在，不覆盖', file: pf.file }
+    else { fs.writeFileSync(pf.file, pf.content, 'utf8'); persona = { written: true, file: pf.file, copiedFrom: pf.copiedFrom || null } }
   }
 
   const lines = (text) => (text || '').trim().split(String.fromCharCode(10)).slice(-6)

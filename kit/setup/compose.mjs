@@ -4,7 +4,17 @@
 // （paths.soul / setup.setupName）。让每个 agent 手拼，就会出现三种形状都叫「差不多能用」——
 // 而校验器只认一种。组装只做一次，映射写死在这里，错也只错一处。
 
+import path from 'node:path'
 import { BUILTIN_LINES } from './questions.mjs'
+
+/** 路径答案：'~' 展开成家目录；展开后还不是绝对路径就报错，不猜。 */
+function expandPath(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (raw === '~') return process.env.HOME || ''
+  if (raw.startsWith('~/')) return path.join(process.env.HOME || '', raw.slice(2))
+  return raw
+}
 
 const isBool = (v) => typeof v === 'boolean'
 const text = (v) => (v === undefined || v === null ? '' : String(v).trim())
@@ -73,10 +83,14 @@ export function composeAnswers(flat, ctx) {
   const defaultPreset = text(f.defaultPreset) || presets[0] || ''
   if (presets.length && !presets.includes(defaultPreset)) errors.push('defaultPreset：不在选中的 preset 里')
 
-  const soulPath = text(f.soulPath)
-  const memoryPath = text(f.memoryPath)
+  const soulPath = expandPath(f.soulPath)
+  const memoryPath = expandPath(f.memoryPath)
   if (!soulPath) errors.push('soulPath：书房根不能空（上游不猜）')
+  else if (!path.isAbsolute(soulPath)) errors.push('soulPath：必须是绝对路径（或 ~ 开头）：' + soulPath)
   if (!memoryPath) errors.push('memoryPath：记忆中枢根不能空（上游不猜）')
+  else if (!path.isAbsolute(memoryPath)) errors.push('memoryPath：必须是绝对路径（或 ~ 开头）：' + memoryPath)
+  const cliRoot = expandPath(f.cliTools)
+  if (cliRoot && !path.isAbsolute(cliRoot)) errors.push('cliTools：必须是绝对路径（或 ~ 开头）：' + cliRoot)
 
   const answers = {
     version: 2,
@@ -100,7 +114,7 @@ export function composeAnswers(flat, ctx) {
     register: isBool(f.register) ? f.register : true,
     skills: isBool(c.skills) ? c.skills : true,
     writeConfig: isBool(c.writeConfig) ? c.writeConfig : true,
-    cliTools: text(f.cliTools) || null,
+    cliTools: cliRoot || null,
     asked: Array.isArray(c.asked) ? c.asked : [],
   }
   return { answers, errors }

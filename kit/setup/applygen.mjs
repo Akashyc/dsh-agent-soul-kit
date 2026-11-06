@@ -38,6 +38,44 @@ function scanSkills(source) {
   } catch { return [] }
 }
 
+/** 哪些零件 import 了根包（dsh-agent-soul）——huanqi 就要 dsh-agent-soul/lib/paths.mjs。 */
+export function soulRootUsers(answers, source) {
+  const hits = new Set()
+  for (const dir of answers.parts.install) {
+    const stack = [path.join(source, 'plugins', dir)]
+    while (stack.length) {
+      const cur = stack.pop()
+      let entries
+      try { entries = fs.readdirSync(cur, { withFileTypes: true }) } catch { continue }
+      for (const entry of entries) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
+        const full = path.join(cur, entry.name)
+        if (entry.isDirectory()) { stack.push(full); continue }
+        if (!/\.(m?js)$/.test(entry.name)) continue
+        if (/['"]dsh-agent-soul(\/|['"])/.test(fs.readFileSync(full, 'utf8'))) hits.add(dir)
+      }
+    }
+  }
+  return [...hits].sort()
+}
+
+/** 根包只要这几样：exports 里被引用的入口 + lib。整仓拷会拖进 plugins/ 与 docs。 */
+export function prepareSoulRoot(instance, source) {
+  const dest = path.join(instance, 'vendor', 'dsh-agent-soul')
+  fs.mkdirSync(dest, { recursive: true })
+  // 根级文件全拷：index.js 里 import './install.js' 与 './kit-bridge.mjs'，
+  // 少一个 doctor 的 pkgintegrity 就报「入口 import 但文件不存在」。目录只拷 lib/。
+  const KEEP = ['.mjs', '.js', '.json', '.yml', '.ps1']
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (!entry.isFile()) continue
+    if (entry.name === 'package-lock.json') continue
+    if (!KEEP.some((ext) => entry.name.endsWith(ext))) continue
+    fs.copyFileSync(path.join(source, entry.name), path.join(dest, entry.name))
+  }
+  fs.cpSync(path.join(source, 'lib'), path.join(dest, 'lib'), { recursive: true })
+  return dest
+}
+
 /**
  * 答案 + 上游 + 本机 → 计划（契约版本 1）。
  * @param ctx source / dshHome / profile / instance / stamp / prereqs（可选）
@@ -62,6 +100,17 @@ export function buildPlan(answers, upstream, ctx) {
   }
   for (const dir of answers.parts.declined) {
     steps.push({ kind: 'skip', what: dir, why: '用户拒装（进 declined，下次更新不自动装回来）' })
+  }
+
+  // 1b) 根包：有零件 import 它就必须放进 node_modules，否则加载时直接抛「找不到模块」
+  const rootUsers = soulRootUsers(answers, source)
+  if (rootUsers.length) {
+    steps.push({
+      kind: 'copy',
+      from: at(path.join(instance, 'vendor', 'dsh-agent-soul')),
+      to: 'node_modules/dsh-agent-soul',
+      note: '根包（package.json + index.js + client.js + cordis.patch.yml + lib/）：' + rootUsers.join(', ') + ' 要 import 它',
+    })
   }
 
   // 2) 运行时依赖：只有真缺才装；没跑过 prereqs 就说清，不假装齐
@@ -117,9 +166,9 @@ export function buildPlan(answers, upstream, ctx) {
     // soul-preset build 要有锚点才能插入：profile 里一个 preset 块都没有时它会直接退出。
     // 这一步在计划阶段就说清，不留到执行时炸。
     const raw = fs.readFileSync(patchFile, 'utf8')
-    const anchors = (raw.match(/^- id: preset-/gm) || []).length
+    const anchors = presetAnchors(raw)
     if (anchors === 0) {
-      steps.push({ kind: 'skip', what: 'cordis.patch.yml', why: 'profile 里没有 preset 锚点：soul-preset build 无处插入，需要先手工搭一个 preset 骨架（作者 §4）' })
+      steps.push({ kind: 'skip', what: 'cordis.patch.yml', why: 'profile 的 `- insert:` 列表里没有 preset 块：soul-preset build 没有合法插入点，需要先手工搭一个 preset 骨架（作者 §4）' })
       risks.push('没有 preset 锚点：cordis.patch.yml 这次不会写入，picker 里不会出现任何模式')
     } else {
       steps.push({
@@ -178,6 +227,50 @@ export function buildMeta(answers, upstream, local, ctx) {
   }
 }
 
+
+/**
+ * profile 里「soul-preset build 能用的锚点」有几个。
+ * 锚点不是「顶格 `- id: preset-*`」——真正的 preset 块长在 `- insert:` 列表里（缩进 ≥1）。
+ * 旧判定用顶格正则，永远匹配不到真锚点，只能匹配到 `- id: preset-visibility` 这类顶格配置块，
+ * 结论正好反了：有锚点判成没有（该写的不写），没锚点判成有（soul-preset 的 lastEnd 落到文档顶层，
+ * 4 空格缩进的 preset body 跟在 mapping 后面 → patch 直接非法 YAML，下次启动即 exit 1）。
+ */
+export function presetAnchors(raw) {
+  let inInsert = false
+  let n = 0
+  for (const line of String(raw).split(/\r?\n/)) {
+    if (/^-\s+insert:\s*$/.test(line)) { inInsert = true; continue }
+    if (/^\S/.test(line)) { inInsert = false; continue }
+    if (inInsert && /^\s+-\s+id:\s*preset-[\w.-]+\s*$/.test(line)) n++
+  }
+  return n
+}
+
+/** 生成脚本里调 registry.mjs 的那几行（正则留在 kit 里，不塞进两层字符串）。 */
+const REGISTRY_RUNNER = [
+  'function setRegistryViaKit(file) {',
+  '  if (!CTX.registryScript) return "not-configured"',
+  '  const r = spawnSync(process.execPath, [CTX.registryScript, file, CTX.defaultPresetId], { encoding: "utf8" })',
+  '  if (r.status !== 0) throw new Error("registry 改写失败：" + ((r.stderr || r.stdout || "").trim().split(NL).slice(-2).join(" / ")))',
+  '  return JSON.parse(r.stdout).changed',
+  '}',
+].join(NL)
+
+/** 写完 cordis.patch.yml 必须用「读它的那个人」的解析器验一遍：坏文件 = 桌面端下次启动直接 exit 1。
+ *  2026-11-06 就是这么炸的 —— build 把 preset 插到顶层、写出非法 YAML，而写回环节零校验。 */
+const PATCH_VERIFIER = [
+  'function verifyPatch(file) {',
+  '  let Y',
+  '  try { Y = requireFromProfile("js-yaml") } catch { return { ok: true, why: "profile 里没有 js-yaml，跳过真解析" } }',
+  '  const jsType = new Y.Type("tag:yaml.org,2002:js", { kind: "scalar", resolve: (d) => typeof d === "string", construct: (d) => ({ __jsExpr: d }) })',
+  '  try {',
+  '    const doc = Y.load(file, { schema: Y.JSON_SCHEMA.extend(jsType) })',
+  '    if (!Array.isArray(doc)) return { ok: false, why: "顶层不是数组" }',
+  '    return { ok: true }',
+  '  } catch (e) { return { ok: false, why: String(e).split(NL)[0].slice(0, 300) } }',
+  '}',
+].join(NL)
+
 /** 生成的 apply.mjs：计划内嵌，默认只打印；--execute 才动。 */
 export function renderScript(plan, ctx) {
   const L = []
@@ -189,6 +282,7 @@ export function renderScript(plan, ctx) {
   push("import fs from 'node:fs'")
   push("import path from 'node:path'")
   push("import { spawnSync } from 'node:child_process'")
+  push("import { createRequire } from 'node:module'")
   push('')
   push('const PLAN = ' + JSON.stringify(plan, null, 2))
   push('const CTX = ' + JSON.stringify({
@@ -199,6 +293,8 @@ export function renderScript(plan, ctx) {
     packageManager: ctx.packageManager || 'pnpm',
     bundlePkgs: ctx.bundlePkgs || [],
     presetBuild: at(path.join(ctx.source, 'tools', 'soul-preset.mjs')),
+    registryScript: at(path.join(ctx.kitRoot || path.join(kitRoot(), 'kit', 'setup'), 'registry.mjs')),
+    defaultPresetId: ctx.defaultPresetId || null,
   }, null, 2))
   push('const EXECUTE = process.argv.includes(String.fromCharCode(45, 45) + "execute")')
   push('const NL = String.fromCharCode(10)')
@@ -248,6 +344,12 @@ export function renderScript(plan, ctx) {
   push('  return { added: added.length, after: after.length }')
   push('}')
   push('')
+  push(REGISTRY_RUNNER)
+  push('')
+  push('const requireFromProfile = createRequire(path.join(CTX.profileDir, "noop.js"))')
+  push('')
+  push(PATCH_VERIFIER)
+  push('')
   push('function runPresetBuild() {')
   push("  const args = [CTX.presetBuild, 'build', '--profile', CTX.profile, '--from', path.join(CTX.source, 'presets'), '--write']")
   push('  const r = spawnSync(process.execPath, args, { encoding: "utf8", env: { ...process.env, DSH_HOME: CTX.dshHome } })')
@@ -257,7 +359,7 @@ export function renderScript(plan, ctx) {
   push('')
   push('for (const step of PLAN.steps) {')
   push("  if (step.kind === 'copy') {")
-  push('    const from = path.join(CTX.source, step.from)')
+  push("    const from = step.from.startsWith('/') ? step.from : path.join(CTX.source, step.from)")
   push("    const to = step.to.startsWith('/') ? step.to : path.join(CTX.profileDir, step.to)")
   push("    if (!fs.existsSync(from)) throw new Error('上游不存在：' + step.from)")
   push('    copyDir(from, to)')
@@ -272,7 +374,14 @@ export function renderScript(plan, ctx) {
   push("    if (path.basename(step.file) === 'package.json') {")
   push("      done.push('write-config package.json ' + JSON.stringify(editBundles(step.file)))")
   push("    } else if (path.basename(step.file) === 'cordis.patch.yml') {")
-  push("      done.push('write-config cordis.patch.yml ' + JSON.stringify(runPresetBuild()))")
+  push('      const buildOut = runPresetBuild()')
+  push('      const reg = setRegistryViaKit(step.file)')
+      push('      const check = verifyPatch(fs.readFileSync(step.file, "utf8"))')
+      push('      if (!check.ok) {')
+      push('        if (step.backup && fs.existsSync(step.backup)) fs.copyFileSync(step.backup, step.file)')
+      push("        throw new Error('cordis.patch.yml 写坏了（' + check.why + '），已从备份还原：' + step.backup)")
+      push('      }')
+  push("      done.push('write-config cordis.patch.yml ' + JSON.stringify({ build: buildOut, registry: reg }))")
   push('    } else {')
   push("      throw new Error('不认识的配置文件：' + step.file + '（契约只有这两种，多出来的要停下来改契约）')")
   push('    }')
@@ -326,6 +435,7 @@ function main() {
     profileDir: path.join(dshHome, 'profiles', answers.profile),
     packageManager: local.packageManager,
     bundlePkgs: bundlePkgs(answers, source),
+    defaultPresetId: String(answers.defaultPreset || '').replace(/^preset-/, '') || null,
     kitVersion: readJson(path.join(kitRoot(), 'package.json')).value.version,
   }
 
@@ -349,6 +459,8 @@ function main() {
 
   if (!dry) {
     fs.mkdirSync(instance, { recursive: true })
+    // 根包 vendor：脚本里那份是绝对路径，生成时就要把它备好
+    if (built.plan.steps.some((s) => s.kind === 'copy' && s.from.startsWith('/'))) prepareSoulRoot(instance, source)
     fs.writeFileSync(path.join(instance, 'apply.mjs'), script, 'utf8')
     fs.writeFileSync(path.join(instance, 'meta.json'), JSON.stringify(meta, null, 2) + NL, 'utf8')
     out.written = ['apply.mjs', 'meta.json']
