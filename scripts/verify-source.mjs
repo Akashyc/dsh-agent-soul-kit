@@ -1,4 +1,4 @@
-// node scripts/verify-source.mjs：临时 Git 远端验证缓存、版本固定和来源保护，不访问真实作者仓库。
+// node scripts/verify-source.mjs：临时 Git 远端验证「只读本地作者仓库 + 核对最新」，不访问真实作者仓库。
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -12,6 +12,7 @@ const remote = path.join(root, 'remote')
 const kit = path.join(root, 'kit')
 const repo = 'fixture/author'
 const origin = `https://github.com/${repo}.git`
+const cache = path.join(kit, 'upstream', 'author')
 const moduleUrl = new URL('../lib/source/source-cache.mjs', import.meta.url).href
 const oldEnv = { ...process.env }
 const steps = []
@@ -36,7 +37,7 @@ function context(ref = 'main') {
   return { kit, repo, ref, temp: fs.mkdtempSync(path.join(root, 'snapshot-')) }
 }
 
-/** 独立进程模拟下一轮操作，不能被进程内 fetch 复用掩盖。 */
+/** 独立进程模拟下一轮操作，不能被进程内状态复用掩盖。 */
 function nextRun(ref = 'main', code = 0) {
   const script = `import { cachedSource } from ${JSON.stringify(moduleUrl)}; console.log(JSON.stringify(cachedSource(${JSON.stringify(context(ref))})))`
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 20000 })
@@ -53,21 +54,28 @@ try {
   process.env.GIT_CONFIG_COUNT = String(count + 1)
   process.env[`GIT_CONFIG_KEY_${count}`] = `url.file://${remote}.insteadOf`
   process.env[`GIT_CONFIG_VALUE_${count}`] = origin
+
   const initial = cachedSource(context())
   assert.equal(initial.sha, first)
-  const cache = path.join(root, 'author')
   assert.equal(git(cache, ['remote', 'get-url', '--push', 'origin']), `file://${remote}`)
   assert.equal(fs.readFileSync(path.join(cache, '.git/config'), 'utf8').includes(origin), true)
   assert.equal(git(cache, ['status', '--porcelain']), '')
-  steps.push('首次克隆、来源身份核对、固定提交导出')
+  assert.equal(cache.startsWith(kit), true, '作者仓库落在 kit/upstream/ 下')
+  steps.push('首次克隆到 kit/upstream/、来源身份核对、固定提交导出')
 
   const second = commit('author-v2')
-  assert.equal(nextRun().sha, second)
+  assert.match(nextRun('main', 1), /本地作者仓库不是最新/)
+  assert.equal(git(cache, ['rev-parse', 'HEAD']), first, 'kit 不替用户拉代码')
+  git(cache, ['pull', '-q', '--ff-only'])
   assert.equal(git(cache, ['rev-parse', 'HEAD']), second)
+  assert.equal(nextRun().sha, second)
+  steps.push('本地落后就停止并给出拉取命令，拉好后照常导出')
+
   const pinned = nextRun(first)
   assert.equal(pinned.sha, first)
   assert.equal(git(cache, ['rev-parse', 'HEAD']), second, '旧版本只导出，不切换作者工作区')
-  steps.push('下一轮拉新、main 仅快进、已审阅旧提交不漂移')
+  assert.match(nextRun('0'.repeat(40), 1), /本地作者仓库里没有/)
+  steps.push('固定旧提交可导出；不存在的提交直接报错，不联网抓')
 
   const original = fs.readFileSync(path.join(cache, 'package.json'), 'utf8')
   fs.writeFileSync(path.join(cache, 'package.json'), 'local-edit')
@@ -90,17 +98,18 @@ try {
 
   const movedRemote = remote + '-offline'
   fs.renameSync(remote, movedRemote)
-  assert.match(nextRun('main', 1), /Git fetch 失败/)
+  const offlineHit = nextRun()
+  assert.equal(offlineHit.sha, second, '远端不可用也照本地 HEAD 导出，不拦着办事')
   fs.renameSync(movedRemote, remote)
-  steps.push('网络来源不可用时不静默使用旧缓存')
+  steps.push('远端不可用时按本地 HEAD 继续，并说明可能不是最新')
 
   fs.writeFileSync(path.join(cache, 'local.txt'), 'local commit')
   git(cache, ['add', 'local.txt'])
   git(cache, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'local commit'])
   const localCommit = git(cache, ['rev-parse', 'HEAD'])
-  assert.match(nextRun('main', 1), /本地提交或历史分叉/)
+  assert.match(nextRun('main', 1), /本地作者仓库不是最新/)
   assert.equal(git(cache, ['rev-parse', 'HEAD']), localCommit)
-  steps.push('已提交的本地改造也不能冒充作者最新版')
+  steps.push('已提交的本地改造冒充不了作者最新版')
 
   const plain = path.join(root, 'plain')
   fs.mkdirSync(plain)

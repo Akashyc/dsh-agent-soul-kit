@@ -30,6 +30,8 @@ try {
   assert.ok(retired.every((k) => !Object.hasOwn(sheet.answersExample, k)))
   assert.ok(sheet.questions.find((q) => q.id === 'parts').options.some((o) => o.value === 'heartbeat'))
   assert.ok(!sheet.questions.find((q) => q.id === 'parts').default.includes('heartbeat'))
+  assert.ok(sheet.questions.find((q) => q.id === 'parts').options.some((o) => o.value === 'dsh-aurabot-qq'), 'aurabot-qq 要出现在可选零件里')
+  assert.ok(!sheet.questions.find((q) => q.id === 'parts').default.includes('dsh-aurabot-qq'), 'aurabot-qq 默认不勾')
   const clean = voice('')
   const legacy = voice('', { heartbeat: { enabled: true, time: '不是时间' }, heartbeatTime: '不是时间' })
   assert.deepEqual(legacy, clean, '旧心跳回答即使格式无效也应安全忽略')
