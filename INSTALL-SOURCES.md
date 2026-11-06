@@ -1,6 +1,6 @@
 # 作者安装依据与 kit 适配边界
 
-本轮核对固定来源：Soul `95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10`；Flash `10f326cb930209af279fe7c6636fa50cc7a65b3d`。已从各自 origin 获取 main 并确认与本地 HEAD 一致；未修改作者源码。
+本轮核对固定来源：Soul `95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10`。已从 origin 获取 main 并确认与本地 HEAD 一致；未修改作者源码。
 
 ## 部署方式
 
@@ -21,8 +21,10 @@
 | `clock` | `dsh-agent-clock` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/clock/README.md) | profile bundles |
 | `compact-region` | `dsh-yanqing-compact-region` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/compact-region/README.md) | Soul preset 内组件 |
 | `compaction` | `dsh-yanqing-compaction` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/compaction/README.md) | Soul preset 内组件 |
+| `dsh-aurabot-qq` | `dsh-aurabot-qq` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/57c487da8d7239f6ed8309c2fce541d97126b1c5/plugins/dsh-aurabot-qq/README.md)；第三方 vendored（原仓 accomplish07zrh-eng/dsh-aurabot-qq），目录名即包名 | profile bundles（自带 aurabot-private / -long / -social 三套 preset） |
 | `echo` | `dsh-agent-echo` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/echo/README.md) | profile bundles |
-| `heartbeat` | `dsh-yanqing-heartbeat` | 无专用 README；核对包与总说明 | profile bundles |
+| `heartbeat` | `dsh-agent-heartbeat`（旧名 `dsh-yanqing-heartbeat`） | 无专用 README；核对包与总说明 | profile bundles |
+| `lead-waker` | `dsh-agent-lead-waker` | 无专用 README；事件层组件，心跳面板读它的 `/lead-waker/state` | profile bundles |
 | `huanqi` | `dsh-huanqi` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/huanqi/README.md) | profile bundles |
 | `huanqi-panel` | `dsh-agent-huanqi-panel` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/huanqi-panel/README.md) | profile bundles |
 | `mcp-hub` | `dsh-mcp-hub` | [README](https://github.com/cyanwell/dsh-agent-soul/blob/95dc0db4c5f21bdfc7b398dab81c302ed0ba7b10/plugins/mcp-hub/README.md) | profile bundles |
@@ -43,15 +45,6 @@
 - 依据作者 presets/ 与 tools/soul-preset.mjs 的配置组织，将选中 preset 放入 profile 的顶层 insert；skills 随所选作者来源部署到 profile/skills，因配置文件位置决定 customSkillDirs 相对路径。
 - 当前 DSH 官方基础 preset 优先从实际 app.asar 读取。没有来源则停止；只有显式 --allow-preset-snapshot 才采用包内旧官方快照，并记录其版本，不把它冒称当前宿主原文。Soul 预设和技能不再静默回退。
 - 书房权威源、人设、自我层和默认项属于 kit 个性化配置；更新保护用户数据，托管代码差异在替换前报告并进入授权快照。
-
-## Flash 的准确含义
-
-作者说明：[README](https://github.com/LarryE135/dsh-flash-presets/blob/10f326cb930209af279fe7c6636fa50cc7a65b3d/README.md)。作者完整包可经 GUI/CLI 插件入口安装，重复 add 更新，完整包还包括配置和可选组件行为。
-
-- kit 当前只提供从该来源动态生成的 Soul 适配预设，不声称按作者完整包生命周期安装。
-- 适配保留全部发现的预设、原始简介和参数，明确追加 Soul 改造说明；替换身份及门牌压缩/裁剪，增加范围压缩。
-- 不自动安装作者可选 plan-mode-ui，也不能因此宣称作者完整包所有依赖与附带组件已经部署。
-- 用户要作者原版完整包时，按作者支持入口单独规划，未纳入当前 kit 自动安装能力。
 
 ## 更新、备份、恢复与卸载
 

@@ -75,8 +75,6 @@
 
 桌面零件按作者说明完整复制并登记加载；压缩组件按作者预设引用。Soul 预设读取选定作者提交，不回退到旧 Soul/技能快照。读取不到当前 DSH 的官方基础预设时停止；只有明确审阅旧快照来源后才允许 `--allow-preset-snapshot`。
 
-Flash 当前提供的是**可选 Soul 适配预设**：发现作者全部预设，保留原简介并附改造说明，调整身份与门牌压缩。它不等于安装作者完整 Flash 包，不安装其可选 plan-mode-ui；需要原版包时按作者原版入口另行规划，不能冒称 kit 已支持原版包的生命周期。
-
 零件及兼容说明以安装问答完整清单为准，可选项不隐藏；chat 会自开网络端口，heartbeat 调度及本地模型服务需另行核实。当前只实现桌面 `desktop` 部署，不能把同一复制流程套给其它 profile。
 
 安装依据、作者文档冲突和 kit 自有适配见 [INSTALL-SOURCES.md](INSTALL-SOURCES.md)。作者仓库只读，所有改造只落在临时副本与安装目标。
@@ -141,7 +139,7 @@ node soul-fix.mjs --dsh-home <目录> --profile desktop
 node scripts/migrate-data.mjs --dsh-home <目录> --profile desktop
 ```
 
-正式安装沿用干跑输出的完整 Soul/Flash 提交号。回答文件、计划和交接记录由 Agent 放进输出的本次操作目录；授权内容不能由脚本替你推断。完整参数见各入口 `--help`，自举脚本 `install.sh` / `install.ps1` 仍使用同一安装入口；已有副本不直接 pull，更新交给带归档保护的 `--kit-update`。
+正式安装沿用干跑输出的完整 Soul 提交号。回答文件、计划和交接记录由 Agent 放进输出的本次操作目录；授权内容不能由脚本替你推断。完整参数见各入口 `--help`，自举脚本 `install.sh` / `install.ps1` 仍使用同一安装入口；已有副本不直接 pull，更新交给带归档保护的 `--kit-update`。
 
 </details>
 
