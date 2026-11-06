@@ -279,7 +279,7 @@ try {
     version: 2,
     profile: 'desktop',
     paths: { soul: '/tmp/soul', memory: '/tmp/mem' },
-    setup: { name: 'demo', user: 'boss', userNote: '', purpose: '', hardLines: [{ name: '凭据', rule: '不读' }], customHardLines: [], persona: '', multiSession: true, windowSize: null, hasIndex: false, setupName: 'demo' },
+    setup: { name: 'demo', user: 'boss', purpose: '', hardLines: [{ name: '凭据', rule: '不读' }], customHardLines: [], persona: '', multiSession: true, windowSize: null, hasIndex: false, setupName: 'demo' },
     parts: { install: ['demo'], declined: [] },
     presets: ['preset-demo'],
     defaultPreset: 'preset-demo',
@@ -376,7 +376,7 @@ try {
     version: 2,
     profile: 'desktop',
     paths: { soul: '/tmp/soul', memory: '/tmp/mem' },
-    setup: { name: 'demo', user: 'boss', userNote: '', purpose: '', hardLines: [{ name: '凭据', rule: '不读' }], customHardLines: [], persona: '', multiSession: true, windowSize: null, hasIndex: false, setupName: 'demo' },
+    setup: { name: 'demo', user: 'boss', purpose: '', hardLines: [{ name: '凭据', rule: '不读' }], customHardLines: [], persona: '', multiSession: true, windowSize: null, hasIndex: false, setupName: 'demo' },
     parts: { install: ['demo'], declined: [] },
     presets: ['preset-a'],
     defaultPreset: 'preset-b',
@@ -442,7 +442,7 @@ try {
   const baseAnswers = {
     version: 2, profile: 'desktop',
     paths: { soul: '/s', memory: '/m' },
-    setup: { name: 'a', user: 'b', hardLines: [{ name: '凭据', rule: 'x' }], multiSession: true, windowSize: 1000, hasIndex: false, persona: '', setupName: 'a', userNote: '', purpose: '', customHardLines: [] },
+    setup: { name: 'a', user: 'b', hardLines: [{ name: '凭据', rule: 'x' }], multiSession: true, windowSize: 1000, hasIndex: false, persona: '', setupName: 'a', purpose: '', customHardLines: [] },
     parts: { install: ['demo'], declined: [] },
     presets: ['preset-demo'], defaultPreset: 'preset-demo',
     register: true, skills: true, writeConfig: true,
@@ -507,7 +507,7 @@ try {
 
   // 16e2. 组装器：题干 id → 答案形状，映射只许有一处
   const flat = {
-    name: '小鲸', user: '老板', userNote: '', purpose: '写代码',
+    name: '小鲸', user: '老板', purpose: '写代码',
     hardLines: ['凭据', '隐私'], customHardLines: '[{"name":"删除","rule":"不删文件"}]',
     persona: '话短', multiSession: true, windowSize: '1000000', hasIndex: false,
     presets: ['preset-a', 'preset-b'], defaultPreset: 'preset-b', parts: ['clock', 'echo'],
